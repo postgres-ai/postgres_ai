@@ -1,0 +1,21 @@
+# Simple PGWatch Metrics for Prometheus - just queryid and calls
+metrics:
+  pg_stat_statements_calls:
+    description: "Simple queryid and calls metric"
+    sqls:
+      11: |-
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          queryid::text as tag_queryid,
+          calls
+        from pg_stat_statements
+        where queryid is not null
+        order by calls desc
+        limit 10
+    gauges:
+      - calls
+    master_only: false
+    is_instance_level: false
+    metric_storage_name: pgss_calls
+    node_status: primary
+    statement_timeout_seconds: 5
