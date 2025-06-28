@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # Target Database - The PostgreSQL database being monitored
+  target-db:
+    image: postgres:15
+    container_name: target-db
+    environment:
+      POSTGRES_DB: target_database
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - target_db_data:/var/lib/postgresql/data
+      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Postgres Sink - Storage for metrics in PostgreSQL format
+  sink-postgres:
+    image: postgres:15
+    container_name: sink-postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - sink_postgres_data:/var/lib/postgresql/data
+      - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Prometheus Sink - Storage for metrics in Prometheus format
+  sink-prometheus:
+    image: prom/prometheus:latest
+    container_name: sink-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  # PGWatch Instance 1 - Monitoring service (Postgres sink)
+  pgwatch-postgres:
+    image: cybertecpostgresql/pgwatch:latest
+    container_name: pgwatch-postgres
+    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - sink-postgres
+      - target-db
+    volumes:
+      - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
+      - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+
+  # PGWatch Instance 2 - Monitoring service (Prometheus sink)
+  pgwatch-prometheus:
+    image: cybertecpostgresql/pgwatch:latest
+    container_name: pgwatch-prometheus
+    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=prometheus://0.0.0.0:9091/pgwatch", "--web-addr=:8089"]
+    ports:
+      - "8089:8089"
+      - "9091:9091"
+    depends_on:
+      - sink-prometheus
+      - target-db
+    volumes:
+      - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
+      - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+
+  # Grafana with datasources - Visualization layer
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-with-datasources
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - sink-postgres
+      - sink-prometheus
+
+volumes:
+  target_db_data:
+  sink_postgres_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,21 @@
+apiVersion: 1
+
+datasources:
+  - name: PGWatch-PostgreSQL
+    type: postgres
+    access: proxy
+    url: sink-postgres:5432
+    database: measurements
+    user: pgwatch
+    secureJsonData:
+      password: pgwatchadmin
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+    isDefault: true
+
+  - name: PGWatch-Prometheus
+    type: prometheus
+    access: proxy
+    url: http://sink-prometheus:9090
+    isDefault: false 

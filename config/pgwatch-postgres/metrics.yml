@@ -1,0 +1,14 @@
+# Minimal PGWatch Metrics for PostgreSQL Sink - pg_stat_statements only
+metrics:
+  pgss_queryid_queries:
+    description: "Query ID calls and query text from pg_stat_statements for PostgreSQL storage"
+    sqls:
+      11: |-
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          queryid,
+          query
+        from pg_stat_statements
+        where queryid is not null
+    gauges:
+      - '*' 

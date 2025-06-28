@@ -1,0 +1,14 @@
+# PGWatch Sources Configuration - Prometheus Instance  
+# This instance exposes metrics in Prometheus format
+
+- name: target-database
+  conn_str: postgresql://pgwatch_monitor:monitor_pass@target-db:5432/target_database
+  kind: postgres
+  custom_metrics:
+    pg_stat_statements_calls: 30
+  custom_tags:
+    env: demo
+    cluster: local
+    sink_type: prometheus
+  is_enabled: true
+  stmt_timeout: 15
