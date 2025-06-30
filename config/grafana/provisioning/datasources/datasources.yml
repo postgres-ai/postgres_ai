@@ -4,6 +4,7 @@ datasources:
   - name: PGWatch-PostgreSQL
     type: postgres
     access: proxy
+    uid: P031DD592934B2F1F
     url: sink-postgres:5432
     database: measurements
     user: pgwatch
@@ -12,10 +13,16 @@ datasources:
     jsonData:
       sslmode: disable
       postgresVersion: 1500
-    isDefault: true
+    isDefault: false
 
   - name: PGWatch-Prometheus
     type: prometheus
     access: proxy
+    uid: P7A0D6631BB10B34F
     url: http://sink-prometheus:9090
-    isDefault: false 
+    isDefault: true
+    jsonData:
+      scrapeInterval: '5s'
+      queryTimeout: '5s'
+      timeInterval: '5s'
+      httpMethod: 'POST'

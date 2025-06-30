@@ -5,7 +5,24 @@
   conn_str: postgresql://pgwatch_monitor:monitor_pass@target-db:5432/target_database
   kind: postgres
   custom_metrics:
-    pg_stat_statements_calls: 30
+    pg_stat_statements_calls: 1
+    backends: 1
+    bgwriter: 1
+    checkpointer: 1
+    db_size: 1
+    db_stats: 1
+    locks_mode: 1
+    replication: 1
+    replication_slots: 1
+    settings: 1
+    sproc_stats: 1
+    stat_statements: 1
+    stat_statements_calls: 1
+    table_io_stats: 1
+    table_stats: 1
+    wait_events: 1
+    wal: 1
+    
   custom_tags:
     env: demo
     cluster: local
