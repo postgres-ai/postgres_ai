@@ -53,7 +53,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.5,
             "drawStyle": "bars",
-            "fillOpacity": 100,
+            "fillOpacity": 40,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -261,7 +261,7 @@
           "refId": "D"
         }
       ],
-      "title": "New panel",
+      "title": "Active session history",
       "type": "timeseries"
     },
     {
@@ -440,32 +440,6 @@
                 "value": {
                   "fixedColor": "red",
                   "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "active",
-                  "idle",
-                  "idle in transaction"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
                 }
               }
             ]
@@ -687,19 +661,9 @@
             ]
           },
           {
-            "__systemRef": "hideSeriesFrom",
             "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "active",
-                  "idle",
-                  "idle in transaction"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
+              "id": "byName",
+              "options": "Max connections"
             },
             "properties": [
               {
@@ -3986,19 +3950,18 @@
     }
   ],
   "preload": false,
-  "refresh": "auto",
   "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Database Overview",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 96
+  "version": 99
 }
