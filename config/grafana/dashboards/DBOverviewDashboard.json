@@ -22,7 +22,7 @@
   "links": [],
   "panels": [
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -35,12 +35,242 @@
       "type": "row"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.5,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Timeout"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#6f450c",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*CPU - .*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*- Lock"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*- LWLock"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*- IO"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*- Client"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 38,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{datname!=\"server_process\"})",
+          "hide": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{datname=\"server_process\", wait_event_type!~\".*- Activity.*\"})",
+          "hide": false,
+          "legendFormat": "Postgres - {{wait_event_type}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{datname=\"server_process\", wait_event_type=~\".*- Activity.*\"})",
+          "hide": false,
+          "legendFormat": "Idle Internal - {{wait_event_type}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "sum by (event_type) (irate(pgwatch_wait_events_sampling_total[$__rate_interval]))>0",
+          "hide": false,
+          "interval": "20",
+          "legendFormat": " {{event_type}}",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "New panel",
+      "type": "timeseries"
+    },
+    {
       "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1
+        "y": 19
       },
       "id": 2,
       "panels": [],
@@ -53,7 +283,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 2
+        "y": 20
       },
       "id": 3,
       "panels": [],
@@ -213,6 +443,32 @@
                 }
               }
             ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "active",
+                  "idle",
+                  "idle in transaction"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
           }
         ]
       },
@@ -220,7 +476,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 3
+        "y": 21
       },
       "id": 4,
       "options": {
@@ -247,67 +503,13 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_backends_idleintransaction",
-          "fullMetaSearch": false,
+          "editorMode": "code",
+          "expr": "sum by (state) (pgwatch_pg_stat_activity_count) > 0",
           "hide": false,
-          "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "Idle-in-transaction",
+          "legendFormat": "{{state}}",
           "range": true,
-          "refId": "B",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_backends_idle",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Idle",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_backends_active",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Active",
-          "range": true,
-          "refId": "C",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_backends_waiting ",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Waiting",
-          "range": true,
-          "refId": "F",
-          "useBackend": false
+          "refId": "A"
         },
         {
           "datasource": {
@@ -421,14 +623,6 @@
                   ],
                   "fill": "dash"
                 }
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
               }
             ]
           },
@@ -450,6 +644,21 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Idle"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#afafaf",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "Idle-in-transaction"
             },
             "properties": [
@@ -461,6 +670,47 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Waiting"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "active",
+                  "idle",
+                  "idle in transaction"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
           }
         ]
       },
@@ -468,9 +718,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 3
+        "y": 21
       },
-      "id": 5,
+      "id": 39,
       "options": {
         "legend": {
           "calcs": [
@@ -495,34 +745,13 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_backends_idleintransaction",
-          "fullMetaSearch": false,
+          "editorMode": "code",
+          "expr": "sum by (state) (pgwatch_pg_stat_activity_count{state!=\"idle\"}) > 0",
           "hide": false,
-          "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "Idle-in-transaction",
+          "legendFormat": "{{state}}",
           "range": true,
-          "refId": "B",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_backends_active",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "Active",
-          "range": true,
-          "refId": "C",
-          "useBackend": false
+          "refId": "A"
         },
         {
           "datasource": {
@@ -542,7 +771,7 @@
           "useBackend": false
         }
       ],
-      "title": "Non-Idle Sessions",
+      "title": "Non-idle Sessions",
       "type": "timeseries"
     },
     {
@@ -600,7 +829,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -608,7 +838,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 11
+        "y": 29
       },
       "id": 6,
       "options": {
@@ -631,15 +861,158 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
           "interval": "20",
           "legendFormat": "Calls",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Calls (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rollbacks"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Commits"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "builder",
+          "expr": "sum(irate(pgwatch_db_stats_xact_rollback[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Rollbacks",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_db_stats_xact_commit[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "Commits",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Calls (pg_stat_statements)",
+      "title": "Transactions",
       "type": "timeseries"
     },
     {
@@ -704,8 +1077,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 11
+        "x": 0,
+        "y": 37
       },
       "id": 9,
       "options": {
@@ -728,144 +1101,6 @@
         }
       ],
       "title": "TODO: Postgres logs",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Rollbacks"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Commits"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 19
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "builder",
-          "expr": "sum(irate(pgwatch_db_stats_xact_rollback[$__rate_interval]))",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "Rollbacks",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_db_stats_xact_commit[$__rate_interval]))",
-          "interval": "20",
-          "legendFormat": "Commits",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Transactions",
       "type": "timeseries"
     },
     {
@@ -933,7 +1168,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 37
       },
       "id": 8,
       "options": {
@@ -964,7 +1199,7 @@
           "refId": "A"
         }
       ],
-      "title": "Commit ration",
+      "title": "Commit ratio",
       "type": "timeseries"
     },
     {
@@ -1031,7 +1266,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 45
       },
       "id": 10,
       "options": {
@@ -1055,7 +1290,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_calls_total_time[$__rate_interval]))",
+          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total[$__rate_interval])))/1000",
           "interval": "20",
           "legendFormat": "Calls",
           "range": true,
@@ -1129,7 +1364,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 45
       },
       "id": 11,
       "options": {
@@ -1153,8 +1388,8 @@
       "targets": [
         {
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "sum(irate(pgwatch_stat_statements_calls_total_time[$__rate_interval])) / sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total[$__rate_interval]))) / sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1186,7 +1421,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 12,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1230,13 +1465,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 53
       },
       "id": 12,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1250,13 +1489,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "",
-          "legendFormat": "__auto",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_rows[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "No. of rows ",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "TODO: Total rows  (pg_stat_statements)",
+      "title": "Total rows  (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1278,7 +1518,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 12,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1322,13 +1562,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 35
+        "y": 53
       },
       "id": 13,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1342,13 +1586,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "",
-          "legendFormat": "__auto",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_rows[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "Rows per call",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "TODO: Rows per call  (pg_stat_statements)",
+      "title": "Rows per call  (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1415,7 +1660,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 61
       },
       "id": 14,
       "options": {
@@ -1439,7 +1684,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_blk_read_time[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "blk_read_time",
           "range": true,
@@ -1451,7 +1696,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_blk_write_time[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "blk_read_time",
@@ -1526,7 +1771,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 61
       },
       "id": 15,
       "options": {
@@ -1550,7 +1795,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_blk_read_time[$__rate_interval]))/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "blk_read_time",
           "range": true,
@@ -1562,7 +1807,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_blk_write_time[$__rate_interval]))/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "blk_read_time",
@@ -1637,7 +1882,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 69
       },
       "id": 16,
       "options": {
@@ -1662,7 +1907,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_shared_blks_hit[$__rate_interval])) * 8192",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1739,7 +1984,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 51
+        "y": 69
       },
       "id": 17,
       "options": {
@@ -1764,7 +2009,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_stat_statements_shared_blks_hit[$__rate_interval])) * 8192)/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1841,7 +2086,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 59
+        "y": 77
       },
       "id": 18,
       "options": {
@@ -1866,7 +2111,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_shared_blks_read[$__rate_interval])) * 8192",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1943,7 +2188,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 59
+        "y": 77
       },
       "id": 19,
       "options": {
@@ -1968,7 +2213,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_stat_statements_shared_blks_read[$__rate_interval])) * 8192)/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2045,7 +2290,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 67
+        "y": 85
       },
       "id": 20,
       "options": {
@@ -2070,7 +2315,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_shared_blks_written[$__rate_interval])) * 8192",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2147,7 +2392,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 67
+        "y": 85
       },
       "id": 21,
       "options": {
@@ -2172,7 +2417,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_stat_statements_shared_blks_written[$__rate_interval])) * 8192)/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2249,7 +2494,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 75
+        "y": 93
       },
       "id": 22,
       "options": {
@@ -2274,7 +2519,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_shared_blks_dirtied[$__rate_interval])) * 8192",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2351,7 +2596,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 75
+        "y": 93
       },
       "id": 23,
       "options": {
@@ -2376,7 +2621,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_stat_statements_shared_blks_dirtied[$__rate_interval])) * 8192)/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2454,7 +2699,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 83
+        "y": 101
       },
       "id": 24,
       "options": {
@@ -2474,9 +2719,9 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_shared_blks_hit[$__rate_interval]))/(sum(irate(pgwatch_stat_statements_shared_blks_hit[$__rate_interval])) + sum(irate(pgwatch_stat_statements_shared_blks_read[$__rate_interval]))) * 100",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))/(sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total[$__rate_interval]))) * 100",
           "interval": "20",
-          "legendFormat": "__auto",
+          "legendFormat": "shared_blks_read_ratio",
           "range": true,
           "refId": "A"
         }
@@ -2548,7 +2793,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 91
+        "y": 109
       },
       "id": 25,
       "options": {
@@ -2650,7 +2895,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 91
+        "y": 109
       },
       "id": 26,
       "options": {
@@ -2675,7 +2920,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_wal_xlog_location_b[$__rate_interval]))/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_wal_xlog_location_b[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2752,7 +2997,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 99
+        "y": 117
       },
       "id": 27,
       "options": {
@@ -2777,7 +3022,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(irate(pgwatch_stat_statements_wal_fpi[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2854,7 +3099,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 99
+        "y": 117
       },
       "id": 28,
       "options": {
@@ -2879,7 +3124,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_wal_fpi[$__rate_interval]))/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2956,7 +3201,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 107
+        "y": 125
       },
       "id": 29,
       "options": {
@@ -2981,7 +3226,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_temp_blks_read[$__rate_interval]))*8192",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2996,7 +3241,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_temp_blks_written[$__rate_interval]))*8192",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "Temp bytes written",
@@ -3071,7 +3316,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 107
+        "y": 125
       },
       "id": 31,
       "options": {
@@ -3096,7 +3341,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_temp_blks_read[$__rate_interval]))*8192/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -3111,7 +3356,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_stat_statements_temp_blks_written[$__rate_interval]))*8192/sum(irate(pgwatch_stat_statements_calls_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "Temp bytes written",
@@ -3119,7 +3364,7 @@
           "refId": "B"
         }
       ],
-      "title": "temp_bytes_read vs temp_bytes_written (pg_stat_statements)",
+      "title": "temp_bytes_read vs temp_bytes_written per call (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -3139,9 +3384,9 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 12,
+            "barWidthFactor": 0.5,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -3189,13 +3434,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 115
+        "y": 133
       },
       "id": 32,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3211,7 +3460,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(pgwatch_locks_mode_count[$__rate_interval]) * 60)  by (mode) > 0",
+          "expr": "sum by (lockmode) (rate(pgwatch_locks_mode_count[$__rate_interval]) * 60)",
           "fullMetaSearch": false,
           "groupBy": [
             {
@@ -3312,7 +3561,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "s"
         },
         "overrides": []
       },
@@ -3320,7 +3570,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 115
+        "y": 133
       },
       "id": 33,
       "options": {
@@ -3328,7 +3578,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "hideZeros": false,
@@ -3339,10 +3589,19 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "refId": "A"
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "pgwatch_pg_long_running_transactions_age_in_seconds",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "",
+          "legendFormat": "Longest trasaction's age in seconds",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
         }
       ],
-      "title": "TODO: Longest non-idle transaction age, > 1 min",
+      "title": "Longest non-idle transaction age, > 1 min",
       "type": "timeseries"
     },
     {
@@ -3408,13 +3667,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 123
+        "y": 141
       },
       "id": 34,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3427,10 +3690,14 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "editorMode": "code",
+          "expr": "pgwatch_pg_database_wraparound_age_datfrozenxid{datname!~\"template1|postgres\"}",
+          "legendFormat": "{{datname}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "TODO: Age of the oldest transaction ID that has not been frozen",
+      "title": "Age of the oldest transaction ID that has not been frozen",
       "type": "timeseries"
     },
     {
@@ -3496,13 +3763,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 123
+        "y": 141
       },
       "id": 35,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3515,10 +3786,14 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "editorMode": "code",
+          "expr": "pgwatch_pg_database_wraparound_age_datminmxid{datname!~\"template1|postgres\"}",
+          "legendFormat": "{{datname}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "TODO: Age of the oldest multi-transaction ID",
+      "title": "Age of the oldest multi-transaction ID",
       "type": "timeseries"
     },
     {
@@ -3570,10 +3845,6 @@
             "steps": [
               {
                 "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -3584,7 +3855,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 131
+        "y": 149
       },
       "id": 36,
       "options": {
@@ -3592,7 +3863,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "hideZeros": false,
@@ -3603,6 +3874,10 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "editorMode": "code",
+          "expr": "pgwatch_pg_archiver_pending_wal_count",
+          "legendFormat": "No of files",
+          "range": true,
           "refId": "A"
         }
       ],
@@ -3672,13 +3947,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 131
+        "y": 149
       },
       "id": 37,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3691,7 +3970,15 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "refId": "A"
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "pgwatch_pg_stuck_idle_in_transaction_queries",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "legendFormat": "No. of queries",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
         }
       ],
       "title": "TODO: Number of queries stuck in idle in transaction state (>10min)",
@@ -3699,18 +3986,19 @@
     }
   ],
   "preload": false,
+  "refresh": "auto",
   "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Database Overview",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 48
+  "version": 96
 }
