@@ -7,7 +7,7 @@ services:
     container_name: sources-generator
     working_dir: /app
     volumes:
-      - ./instances.yaml:/app/instances.yaml
+      - ./instances.yml:/app/instances.yaml
       - ./config:/app/config
     command: >
       sh -c "
