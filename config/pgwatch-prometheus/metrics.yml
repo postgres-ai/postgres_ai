@@ -4222,25 +4222,25 @@ metrics:
       providing insights into potential bottlenecks and resource contention issues.
     sqls:
       11: |-
-        SELECT datname as tag_datname, coalesce (wait_event, 'CPU*') || ' - ' || coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
+        SELECT datname as tag_datname, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
         FROM pg_stat_activity
         WHERE state = 'active'
-        GROUP BY tag_datname, tag_wait_event_type
+        GROUP BY tag_datname, tag_wait_event_type, tag_wait_event
         UNION
-        SELECT 'server_process' as tag_datname, coalesce (wait_event, 'CPU*') || ' - ' || coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
+        SELECT 'server_process' as tag_datname, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
         FROM pg_stat_activity
         WHERE state = 'active' AND datname IS NULL 
-        GROUP BY tag_datname, tag_wait_event_type
+        GROUP BY tag_datname, tag_wait_event_type, tag_wait_event
       14: |-
-        SELECT datname as tag_datname, query_id::text as tag_query_id, coalesce (wait_event, 'CPU*') || ' - ' || coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
+        SELECT datname as tag_datname, query_id::text as tag_query_id, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
         FROM pg_stat_activity
         WHERE state = 'active'
-        GROUP BY tag_datname, tag_query_id, tag_wait_event_type
+        GROUP BY tag_datname, tag_query_id, tag_wait_event_type, tag_wait_event
         UNION
-        SELECT 'server_process' as tag_datname, NULL as tag_query_id, coalesce (wait_event, 'CPU*') || ' - ' || coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
+        SELECT 'server_process' as tag_datname, NULL as tag_query_id, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
         FROM pg_stat_activity
         WHERE state = 'active' AND datname IS NULL 
-        GROUP BY tag_datname, tag_query_id, tag_wait_event_type
+        GROUP BY tag_datname, tag_query_id, tag_wait_event_type, tag_wait_event
     gauges:
       - total
     is_instance_level: true
