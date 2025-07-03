@@ -11,3 +11,9 @@ metrics:
         where queryid is not null
     gauges:
       - '*' 
+
+presets:
+  full:
+    description: "Full metrics for PostgreSQL storage"
+    metrics:
+      pgss_queryid_queries: 10

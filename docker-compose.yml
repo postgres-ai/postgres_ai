@@ -1,20 +1,39 @@
 version: '3.8'
 
 services:
-  # Target Database - The PostgreSQL database being monitored
-  target-db:
-    image: postgres:15
-    container_name: target-db
-    environment:
-      POSTGRES_DB: target_database
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
-    ports:
-      - "5432:5432"
+  # Sources Generator - Generates sources.yml files from instances.yaml template
+  sources-generator:
+    image: alpine:latest
+    container_name: sources-generator
+    working_dir: /app
     volumes:
-      - target_db_data:/var/lib/postgresql/data
-      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./instances.yaml:/app/instances.yaml
+      - ./config:/app/config
+    command: >
+      sh -c "
+      mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
+      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch-postgres/sources.yml &&
+      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch-postgres/sources.yml &&
+      echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
+      echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
+      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
+      echo 'Generated sources.yml files for both postgres and prometheus'
+      "
+
+  # Target Database - The PostgreSQL database being monitored
+  # target-db:
+  #   image: postgres:15
+  #   container_name: target-db
+  #   environment:
+  #     POSTGRES_DB: target_database
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - target_db_data:/var/lib/postgresql/data
+  #     - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
   sink-postgres:
@@ -55,8 +74,9 @@ services:
     ports:
       - "8080:8080"
     depends_on:
+      - sources-generator
       - sink-postgres
-      - target-db
+      # - target-db
     volumes:
       - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
       - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
@@ -70,8 +90,9 @@ services:
       - "8089:8089"
       - "9091:9091"
     depends_on:
+      - sources-generator
       - sink-prometheus
-      - target-db
+      # - target-db
     volumes:
       - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
       - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
@@ -93,7 +114,7 @@ services:
       - sink-prometheus
 
 volumes:
-  target_db_data:
+  # target_db_data:
   sink_postgres_data:
   prometheus_data:
   grafana_data:

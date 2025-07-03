@@ -1,4 +1,3 @@
-# PGWatch Sources Configuration - PostgreSQL Instance
 - unique_name: target-database
   conn_str: postgresql://pgwatch_monitor:monitor_pass@target-db:5432/target_database
   preset_metrics: full
@@ -8,4 +7,4 @@
   custom_tags:
     env: demo
     cluster: local
-    sink_type: postgresql
+    sink_type: ~sink_type~

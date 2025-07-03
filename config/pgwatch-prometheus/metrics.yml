@@ -4771,305 +4771,49 @@ metrics:
 
 
 presets:
-  aiven:
-    description: aiven database metrics
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats: 60
-      index_col_stats: 86400
-      index_stats: 900
-      locks: 60
-      locks_mode: 60
-      recommendations: 43200
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_activity: 60
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 300
-      table_stats: 300
-      wal: 60
-      wal_receiver: 120
-  aurora:
-    description: AWS Aurora doesn't expose all Postgres functions and there's no WAL
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats_aurora: 60
-      index_stats: 900
-      locks: 60
-      locks_mode: 60
-      replication: 120
-      replication_slots: 120
-      settings: 7200
-      sproc_stats: 180
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      table_stats: 300
-      wal_receiver: 120
-  azure:
-    description: similar to 'exhaustive' with stuff that's not accessible on Azure Database for PostgreSQL removed
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      kpi: 120
-      locks: 60
-      locks_mode: 60
-      replication: 60
-      replication_slots: 60
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_ssl: 60
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      wal: 60
-      wal_receiver: 60
-      wal_size: 300
-  basic:
-    description: only the most important metrics - WAL, DB-level statistics (size, tx and backend counts)
-    metrics:
-      instance_up: 60
-      db_size: 300
-      db_stats: 60
-      wal: 60
-  exhaustive:
-    description: all important metrics for a deeper performance understanding
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      cpu_load: 60
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      instance_up: 60
-      locks: 60
-      locks_mode: 60
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_activity: 30
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      table_stats: 300
-      wal: 60
-      wal_receiver: 120
-      wal_size: 300
   full:
     description: almost all available metrics for a even deeper performance understanding
     metrics:
-      archiver: 60
-      archiver_pending_count: 300
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      cpu_load: 60
-      datfrozenxid: 3600
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      instance_up: 60
-      kpi: 120
-      locks: 60
-      locks_mode: 60
-      logical_subscriptions: 120
-      postgres_role: 60
-      psutil_cpu: 120
-      psutil_disk: 120
-      psutil_disk_io_total: 120
-      psutil_mem: 120
-      recommendations: 43200
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      server_log_event_counts: 60
-      settings: 7200
-      sproc_stats: 180
-      stat_activity: 30
-      stat_ssl: 120
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      table_stats: 300
-      wal: 60
-      wal_receiver: 120
-      wal_size: 120
-  gce:
-    description: similar to 'exhaustive' with stuff not accessible on GCE managed PostgreSQL engine removed
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      locks: 60
-      locks_mode: 60
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      table_stats: 300
-      wal: 60
-      wal_receiver: 120
-  minimal:
-    description: single "Key Performance Indicators" query for fast cluster/db overview
-    metrics:
-      instance_up: 60
-      kpi: 60
-  pgbouncer:
-    description: pgbouncer stats
-    metrics:
-      pgbouncer_stats: 60
-      pgbouncer_clients: 60
-  pgpool:
-    description: pgpool stats
-    metrics:
-      pgpool_stats: 60
-      pgpool_processes: 60
-  prometheus-async:
-    description: Tuned for the Prometheus async scrapping
-    metrics:
-      backends: 30
-      bgwriter: 60
-      checkpointer: 60
-      db_size: 300
-      db_stats: 30
-      locks_mode: 30
-      replication: 120
-      replication_slots: 120
-      settings: 300
-      sproc_stats: 180
-      stat_statements_calls: 60
-      table_io_stats: 300
-      table_stats: 300
-      wait_events: 60
-      wal: 60
-  rds:
-    description: similar to 'exhaustive' with stuff that's not accessible on AWS RDS removed
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      locks: 60
-      locks_mode: 60
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_activity: 30
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      table_stats: 300
-      wal: 60
-      wal_receiver: 120
-  standard:
-    description: basic level + table, index, stat_statements stats
-    metrics:
-      cpu_load: 60
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      instance_up: 60
-      sequence_health: 3600
-      sproc_stats: 180
-      stat_statements: 180
-      table_stats: 300
-      wal: 60
-  exhaustive_no_python:
-    description: like exhaustive, but no PL/Python helpers
-    metrics:
-      archiver: 60
-      backends: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      instance_up: 60
-      locks: 60
-      locks_mode: 60
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_activity: 30
-      stat_statements: 180
-      stat_statements_calls: 60
-      table_bloat_approx_summary_sql: 7200
-      table_io_stats: 600
-      table_stats: 300
-      wal: 60
-      wal_receiver: 120
-      wal_size: 300
-  unprivileged:
-    description: no wrappers + only pg_stat_statements extension expected (developer mode)
-    metrics:
-      archiver: 60
-      bgwriter: 60
-      checkpointer: 60
-      change_events: 300
-      db_size: 300
-      db_stats: 60
-      index_stats: 900
-      instance_up: 60
-      locks: 60
-      locks_mode: 60
-      replication: 120
-      replication_slots: 120
-      sequence_health: 3600
-      settings: 7200
-      sproc_stats: 180
-      stat_statements_calls: 60
-      table_io_stats: 600
-      table_stats: 300
-      wal: 60
+      backends: 1
+      bgwriter: 1
+      checkpointer: 1
+      db_size: 1
+      db_stats: 1
+      locks_mode: 1
+      replication: 1
+      replication_slots: 1
+      settings: 1
+      sproc_stats: 1
+      table_io_stats: 1
+      table_stats: 1
+      wait_events: 1
+      wal: 1
+      pg_stat_activity: 1
+      pg_replication: 1
+      pg_stat_wal_receiver: 1
+      pg_archiver: 1
+      pg_postmaster: 1
+      pg_stat_user_tables: 1
+      pg_statio_user_tables: 1
+      pg_stat_user_indexes: 1
+      pg_statio_user_indexes: 1
+      pg_indexes_with_size: 1
+      pg_stat_statements: 1
+      pg_stat_kcache: 1
+      pg_total_relation_size: 1
+      pg_blocked: 1
+      pg_oldest_blocked: 1
+      pg_slow: 1
+      pg_long_running_transactions: 1
+      pg_stuck_idle_in_transaction: 1
+      pg_txid: 1
+      pg_database_wraparound: 1
+      pg_xlog_position: 1
+      pg_replication_slots: 1
+      pg_stat_ssl: 1
+      pg_integer_capacity: 1
+      pg_wait_sampling: 1
+      pg_wait_sampling_agg: 1
+      pg_stat_activity_autovacuum: 1
+      pg_stat_activity_autovacuum_active: 1
+      pg_gin_index: 1

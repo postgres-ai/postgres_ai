@@ -1,58 +1,12 @@
-# PGWatch Sources Configuration - Prometheus Instance  
-# This instance exposes metrics in Prometheus format
+# PGWatch Sources Configuration - Prometheus Instance
 
-- name: target-database
+- unique_name: target-database
   conn_str: postgresql://pgwatch_monitor:monitor_pass@target-db:5432/target_database
-  kind: postgres
+  preset_metrics: full
   custom_metrics:
-    backends: 1
-    bgwriter: 1
-    checkpointer: 1
-    db_size: 1
-    db_stats: 1
-    locks_mode: 1
-    replication: 1
-    replication_slots: 1
-    settings: 1
-    sproc_stats: 1
-    table_io_stats: 1
-    table_stats: 1
-    wait_events: 1
-    wal: 1
-    pg_stat_activity: 1
-    pg_replication: 1
-    pg_stat_wal_receiver: 1
-    pg_archiver: 1
-    pg_postmaster: 1
-    pg_stat_user_tables: 1
-    pg_statio_user_tables: 1
-    pg_stat_user_indexes: 1
-    pg_statio_user_indexes: 1
-    pg_indexes_with_size: 1
-    pg_stat_statements: 1
-    pg_stat_kcache: 1
-    pg_total_relation_size: 1
-    pg_blocked: 1
-    pg_oldest_blocked: 1
-    pg_slow: 1
-    pg_long_running_transactions: 1
-    pg_stuck_idle_in_transaction: 1
-    pg_txid: 1
-    pg_database_wraparound: 1
-    pg_xlog_position: 1
-    pg_replication_slots: 1
-    pg_stat_ssl: 1
-    pg_integer_capacity: 1
-    pg_wait_sampling: 1
-    pg_wait_sampling_agg: 1
-    pg_stat_activity_autovacuum: 1
-    pg_stat_activity_autovacuum_active: 1
-    pg_gin_index: 1
-
-    
+  is_enabled: true
+  group: default
   custom_tags:
     env: demo
     cluster: local
     sink_type: prometheus
-  is_enabled: true
-  stmt_timeout: 15
