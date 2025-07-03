@@ -89,9 +89,10 @@
                   "id": "links",
                   "value": [
                     {
+                      "oneClick": false,
                       "targetBlank": true,
                       "title": "Query Analysis",
-                      "url": "https://www.google.com/search?q=${__field.labels.queryid}"
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
                     }
                   ]
                 }
@@ -115,11 +116,13 @@
             ],
             "displayMode": "table",
             "placement": "bottom",
-            "showLegend": true
+            "showLegend": true,
+            "sortBy": "Max",
+            "sortDesc": true
           },
           "tooltip": {
             "hideZeros": false,
-            "mode": "single",
+            "mode": "multi",
             "sort": "none"
           }
         },
@@ -1554,8 +1557,8 @@
       "to": "now"
     },
     "timepicker": {},
-    "timezone": "browser",
+    "timezone": "utc",
     "title": "Aggregated Query Analysis",
     "uid": "3ceb2e98-639d-48df-8e1f-7686d2052170",
-    "version": 31
-}
+    "version": 36
+  }
