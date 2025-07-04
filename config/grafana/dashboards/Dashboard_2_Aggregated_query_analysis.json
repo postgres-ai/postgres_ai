@@ -123,7 +123,7 @@
           "tooltip": {
             "hideZeros": false,
             "mode": "multi",
-            "sort": "none"
+            "sort": "desc"
           }
         },
         "pluginVersion": "12.0.2",
@@ -198,7 +198,27 @@
             },
             "unit": "ms"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -296,7 +316,27 @@
             },
             "unit": "ms"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -314,12 +354,14 @@
             ],
             "displayMode": "table",
             "placement": "bottom",
-            "showLegend": true
+            "showLegend": true,
+            "sortBy": "Max",
+            "sortDesc": true
           },
           "tooltip": {
             "hideZeros": false,
             "mode": "single",
-            "sort": "none"
+            "sort": "desc"
           }
         },
         "pluginVersion": "12.0.2",
@@ -393,7 +435,27 @@
               ]
             }
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -411,12 +473,14 @@
             ],
             "displayMode": "table",
             "placement": "bottom",
-            "showLegend": true
+            "showLegend": true,
+            "sortBy": "Max",
+            "sortDesc": true
           },
           "tooltip": {
             "hideZeros": false,
             "mode": "single",
-            "sort": "none"
+            "sort": "desc"
           }
         },
         "pluginVersion": "12.0.2",
@@ -490,7 +554,27 @@
               ]
             }
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -508,12 +592,14 @@
             ],
             "displayMode": "table",
             "placement": "bottom",
-            "showLegend": true
+            "showLegend": true,
+            "sortBy": "Max",
+            "sortDesc": true
           },
           "tooltip": {
             "hideZeros": false,
             "mode": "single",
-            "sort": "none"
+            "sort": "desc"
           }
         },
         "pluginVersion": "12.0.2",
@@ -588,7 +674,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -686,7 +792,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -704,12 +830,14 @@
             ],
             "displayMode": "table",
             "placement": "bottom",
-            "showLegend": true
+            "showLegend": true,
+            "sortBy": "Max",
+            "sortDesc": true
           },
           "tooltip": {
             "hideZeros": false,
             "mode": "single",
-            "sort": "none"
+            "sort": "desc"
           }
         },
         "pluginVersion": "12.0.2",
@@ -784,7 +912,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -882,7 +1030,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -979,7 +1147,27 @@
               ]
             }
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -1076,7 +1264,27 @@
               ]
             }
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -1174,7 +1382,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -1272,7 +1500,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -1370,7 +1618,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -1468,7 +1736,27 @@
             },
             "unit": "bytes"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "oneClick": false,
+                      "targetBlank": true,
+                      "title": "Query Analysis",
+                      "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
