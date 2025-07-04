@@ -4045,7 +4045,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-  "title": "Database Overview",
+  "title": "1. Postgres node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
   "version": 22
 }
