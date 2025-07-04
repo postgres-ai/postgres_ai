@@ -119,6 +119,242 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.5,
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Timeout"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#6f450c",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "CPU.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Lock"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "LWLock"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "IO"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Client"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "CPU*",
+                  "Lock",
+                  "LWLock",
+                  "IO",
+                  "Timeout",
+                  "BufferPin",
+                  "Extension",
+                  "IPC"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 17,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{query_id=\"$query_id\"})",
+          "hide": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "sum by (event_type) (irate(pgwatch_wait_events_sampling_total[$__rate_interval]))>0",
+          "hide": false,
+          "interval": "20",
+          "legendFormat": " {{event_type}}",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Active session history",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
@@ -185,7 +421,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 35
       },
       "id": 2,
       "options": {
@@ -305,7 +541,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 47
       },
       "id": 3,
       "options": {
@@ -423,7 +659,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 47
       },
       "id": 4,
       "options": {
@@ -542,7 +778,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 38
+        "y": 55
       },
       "id": 6,
       "options": {
@@ -661,7 +897,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 38
+        "y": 55
       },
       "id": 7,
       "options": {
@@ -781,7 +1017,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 46
+        "y": 63
       },
       "id": 8,
       "options": {
@@ -899,7 +1135,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 46
+        "y": 63
       },
       "id": 9,
       "options": {
@@ -1019,7 +1255,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 71
       },
       "id": 10,
       "options": {
@@ -1137,7 +1373,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 71
       },
       "id": 13,
       "options": {
@@ -1254,7 +1490,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 79
       },
       "id": 11,
       "options": {
@@ -1371,7 +1607,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 79
       },
       "id": 14,
       "options": {
@@ -1489,7 +1725,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 70
+        "y": 87
       },
       "id": 12,
       "options": {
@@ -1607,7 +1843,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 70
+        "y": 87
       },
       "id": 15,
       "options": {
@@ -1725,7 +1961,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 78
+        "y": 95
       },
       "id": 16,
       "options": {
@@ -1843,7 +2079,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 78
+        "y": 95
       },
       "id": 17,
       "options": {
@@ -1885,29 +2121,29 @@
     "list": [
       {
         "current": {
-          "text": "-2041710038325373752",
-          "value": "-2041710038325373752"
+          "text": "",
+          "value": ""
         },
         "name": "query_id",
         "options": [
           {
             "selected": true,
-            "text": "-2041710038325373752",
-            "value": "-2041710038325373752"
+            "text": "",
+            "value": ""
           }
         ],
-        "query": "-2041710038325373752",
+        "query": "",
         "type": "textbox"
       }
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "3. Postgres single query performance analysis",
   "uid": "db52944d-b025-4e18-b70b-89c0af3e7e41",
-  "version": 24
+  "version": 26
 }
