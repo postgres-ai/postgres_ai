@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 9,
+  "id": 8,
   "links": [],
   "panels": [
     {
@@ -211,14 +211,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by calls (pg_stat_statements)",
+      "title": "Calls (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -329,14 +329,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_exec_time_total{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by execution time (pg_stat_statements)",
+      "title": "Execution time (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -449,7 +449,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_exec_time_total{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -568,14 +568,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_rows{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by rows (pg_stat_statements)",
+      "title": "Rows (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -687,14 +687,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_rows{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by rows per call (pg_stat_statements)",
+      "title": "Rows per call (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -805,14 +805,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by shared_blks_hit (in bytes) (pg_stat_statements)",
+      "title": "shared_blks_hit (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -925,14 +925,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by shared_blks_hit (in bytes) per call (pg_stat_statements)",
+      "title": "shared_blks_hit (in bytes) per call (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1043,14 +1043,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_wal_bytes{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by WAL bytes (pg_stat_statements)",
+      "title": "WAL bytes (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1161,14 +1161,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_wal_bytes{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by WAL bytes per call (pg_stat_statements)",
+      "title": "WAL bytes per call (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1278,14 +1278,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_wal_fpi{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by WAL fpi (in bytes) (pg_stat_statements)",
+      "title": "WAL fpi (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1395,14 +1395,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_wal_fpi{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by WAL fpi per call (pg_stat_statements)",
+      "title": "WAL fpi per call (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1513,14 +1513,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_temp_bytes_read{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by temp bytes read (pg_stat_statements)",
+      "title": "Temp bytes read (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1631,14 +1631,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_temp_bytes_read{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by temp bytes read per call (pg_stat_statements)",
+      "title": "Temp bytes read per call (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1749,14 +1749,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_temp_bytes_written{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by temp bytes written (pg_stat_statements)",
+      "title": "Temp bytes written (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1867,14 +1867,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "irate(pgwatch_pg_stat_statements_temp_bytes_written{queryid=\"$query_id\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{queryid=\"$query_id\"}[$__rate_interval])",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by temp bytes written per call (pg_stat_statements)",
+      "title": "Temp bytes written per call (pg_stat_statements)",
       "type": "timeseries"
     }
   ],
@@ -1885,18 +1885,18 @@
     "list": [
       {
         "current": {
-          "text": "",
-          "value": ""
+          "text": "-2041710038325373752",
+          "value": "-2041710038325373752"
         },
         "name": "query_id",
         "options": [
           {
             "selected": true,
-            "text": "",
-            "value": ""
+            "text": "-2041710038325373752",
+            "value": "-2041710038325373752"
           }
         ],
-        "query": "",
+        "query": "-2041710038325373752",
         "type": "textbox"
       }
     ]
@@ -1909,5 +1909,5 @@
   "timezone": "utc",
   "title": "3. Postgres single query performance analysis",
   "uid": "db52944d-b025-4e18-b70b-89c0af3e7e41",
-  "version": 2
+  "version": 24
 }
