@@ -1,9 +1,8 @@
 apiVersion: 1
 
 providers:
-  - name: 'PGWatch Dashboards'
+  - name: 'PostgresAI Dashboards'
     orgId: 1
-    folder: 'PGWatch'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
