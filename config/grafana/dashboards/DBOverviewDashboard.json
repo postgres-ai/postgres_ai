@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 2,
+  "id": 6,
   "links": [],
   "panels": [
     {
@@ -193,8 +193,13 @@
                 "mode": "exclude",
                 "names": [
                   "CPU*",
+                  "Lock",
+                  "LWLock",
                   "IO",
-                  "Timeout"
+                  "Timeout",
+                  "BufferPin",
+                  "Extension",
+                  "IPC"
                 ],
                 "prefix": "All except:",
                 "readOnly": true
@@ -233,8 +238,8 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "pluginVersion": "12.0.2",
@@ -4047,5 +4052,5 @@
   "timezone": "utc",
   "title": "1. Postgres node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 24
+  "version": 12
 }
