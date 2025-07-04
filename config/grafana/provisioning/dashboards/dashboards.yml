@@ -1,11 +1,12 @@
 apiVersion: 1
 
 providers:
-  - name: 'PoC'
+  - name: 'PGWatch Dashboards'
     orgId: 1
+    folder: 'PGWatch'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards/dash1.json 
+      path: /var/lib/grafana/dashboards 
