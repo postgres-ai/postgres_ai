@@ -1836,7 +1836,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-  "title": "2.Postgres aggregated query performance analysis",
+  "title": "2. Postgres aggregated query performance analysis",
   "uid": "3ceb2e98-639d-48df-8e1f-7686d2052170",
   "version": 41
 }
