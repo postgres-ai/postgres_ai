@@ -858,6 +858,8 @@ metrics:
             FROM pg_stat_activity        GROUP BY datname, tag_application_name, tag_state
           ) AS tmp2
         ON tmp.tag_state = tmp2.tag_state AND pg_database.datname = tmp2.datname
+        WHERE pg_database.datname = current_database()
+
     gauges:
       - count
       - max_tx_duration

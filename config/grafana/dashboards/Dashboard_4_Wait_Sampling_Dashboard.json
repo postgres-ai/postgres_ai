@@ -750,6 +750,60 @@
           "refresh": 1,
           "regex": "",
           "type": "query"
+        },
+        {
+          "current": {
+            "text": "local",
+            "value": "local"
+          },
+          "definition": "label_values(pgwatch_settings_max_connections,cluster)",
+          "label": "Cluster name",
+          "name": "cluster_name",
+          "options": [],
+          "query": {
+            "qryType": 1,
+            "query": "label_values(pgwatch_settings_max_connections,cluster)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "type": "query"
+        },
+        {
+          "current": {
+            "text": "node-01",
+            "value": "node-01"
+          },
+          "definition": "label_values(pgwatch_settings_max_connections{cluster=\"$cluster_name\"},node_name)",
+          "label": "Node name",
+          "name": "node_name",
+          "options": [],
+          "query": {
+            "qryType": 1,
+            "query": "label_values(pgwatch_settings_max_connections{cluster=\"$cluster_name\"},node_name)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "type": "query"
+        },
+        {
+          "current": {
+            "text": "target_database",
+            "value": "target_database"
+          },
+          "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+          "label": "DB name",
+          "name": "db_name",
+          "options": [],
+          "query": {
+            "qryType": 1,
+            "query": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+            "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          },
+          "refresh": 1,
+          "regex": "",
+          "type": "query"
         }
       ]
     },
