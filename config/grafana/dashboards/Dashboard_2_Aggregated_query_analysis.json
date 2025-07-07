@@ -92,7 +92,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -130,7 +130,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -248,7 +248,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -368,7 +368,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -487,7 +487,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -606,7 +606,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -724,7 +724,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -844,7 +844,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -962,7 +962,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1080,7 +1080,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1197,7 +1197,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1314,7 +1314,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1432,7 +1432,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1550,7 +1550,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1668,7 +1668,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1786,7 +1786,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "{{queryid}}",
           "range": true,
@@ -1800,7 +1800,6 @@
   "preload": false,
   "schemaVersion": 41,
   "tags": [],
-
   "templating": {
     "list": [
       {
@@ -1867,8 +1866,8 @@
       },
       {
         "current": {
-          "text": "target_database",
-          "value": "target_database"
+          "text": "postgres",
+          "value": "postgres"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -1893,5 +1892,5 @@
   "timezone": "utc",
   "title": "2. Postgres aggregated query performance analysis",
   "uid": "3ceb2e98-639d-48df-8e1f-7686d2052170",
-  "version": 41
+  "version": 20
 }

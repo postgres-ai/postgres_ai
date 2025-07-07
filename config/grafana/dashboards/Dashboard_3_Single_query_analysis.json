@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 8,
+  "id": 4,
   "links": [],
   "panels": [
     {
@@ -315,7 +315,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{query_id=\"$query_id\"})",
+          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", query_id=\"$query_id\"})",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -2199,5 +2199,5 @@
   "timezone": "utc",
   "title": "3. Postgres single query performance analysis",
   "uid": "db52944d-b025-4e18-b70b-89c0af3e7e41",
-  "version": 26
+  "version": 10
 }
