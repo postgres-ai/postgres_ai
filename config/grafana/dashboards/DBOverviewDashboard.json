@@ -246,7 +246,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{datname!=\"server_process\"})",
+          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
