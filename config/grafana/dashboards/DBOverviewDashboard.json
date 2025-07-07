@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 6,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -509,7 +509,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum by (state) (pgwatch_pg_stat_activity_count) > 0",
+          "expr": "sum by (state) (pgwatch_pg_stat_activity_count{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}) > 0",
           "hide": false,
           "instant": false,
           "legendFormat": "{{state}}",
@@ -741,7 +741,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum by (state) (pgwatch_pg_stat_activity_count{state!=\"idle\"}) > 0",
+          "expr": "sum by (state) (pgwatch_pg_stat_activity_count{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", state!=\"idle\"}) > 0",
           "hide": false,
           "instant": false,
           "legendFormat": "{{state}}",
@@ -858,7 +858,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -989,8 +989,8 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "editorMode": "builder",
-          "expr": "sum(irate(pgwatch_db_stats_xact_rollback[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "instant": false,
           "interval": "20",
@@ -1000,7 +1000,7 @@
         },
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_db_stats_xact_commit[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "Commits",
           "range": true,
@@ -1187,7 +1187,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_db_stats_xact_commit[$__rate_interval]))/(sum(irate(pgwatch_db_stats_xact_commit[$__rate_interval]))+sum(irate(pgwatch_db_stats_xact_rollback[$__rate_interval]))) * 100",
+          "expr": "sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))+sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
           "interval": "20",
           "legendFormat": "Commits",
           "range": true,
@@ -1285,7 +1285,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total[$__rate_interval])))/1000",
+          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])))/1000",
           "interval": "20",
           "legendFormat": "Statements total time",
           "range": true,
@@ -1384,7 +1384,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total[$__rate_interval]))) / sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) / sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1581,7 +1581,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_rows[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "Rows per call",
           "range": true,
@@ -1679,7 +1679,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "blk_read_time",
           "range": true,
@@ -1691,7 +1691,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "blk_read_time",
@@ -1790,7 +1790,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "interval": "20",
           "legendFormat": "blk_read_time",
           "range": true,
@@ -1802,7 +1802,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "blk_read_time",
@@ -1902,7 +1902,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2004,7 +2004,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2106,7 +2106,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2208,7 +2208,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2310,7 +2310,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2413,7 +2413,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2515,7 +2515,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2618,7 +2618,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2716,7 +2716,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval]))/(sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total[$__rate_interval]))) * 100",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
           "interval": "20",
           "legendFormat": "shared_blks_read_ratio",
           "range": true,
@@ -2815,7 +2815,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_wal_xlog_location_b[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_wal_xlog_location_b{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2917,7 +2917,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_wal_xlog_location_b[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_wal_xlog_location_b{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -3018,8 +3018,8 @@
       "targets": [
         {
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -3122,7 +3122,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -3224,7 +3224,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -3239,7 +3239,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "Temp bytes written",
@@ -3339,7 +3339,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -3354,7 +3354,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls[$__rate_interval]))",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "interval": "20",
           "legendFormat": "Temp bytes written",
@@ -3458,7 +3458,7 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (lockmode) (rate(pgwatch_locks_mode_count[$__rate_interval]) * 60)",
+          "expr": "sum by (lockmode) (rate(pgwatch_locks_mode_count{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]) * 60)",
           "fullMetaSearch": false,
           "groupBy": [
             {
@@ -3589,7 +3589,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "pgwatch_pg_long_running_transactions_age_in_seconds",
+          "expr": "pgwatch_pg_long_running_transactions_age_in_seconds{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "",
@@ -3689,7 +3689,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "pgwatch_pg_database_wraparound_age_datfrozenxid{datname!~\"template1|postgres\"}",
+          "expr": "pgwatch_pg_database_wraparound_age_datfrozenxid{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}",
           "legendFormat": "{{datname}}",
           "range": true,
           "refId": "A"
@@ -3785,7 +3785,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "pgwatch_pg_database_wraparound_age_datminmxid{datname!~\"template1|postgres\"}",
+          "expr": "pgwatch_pg_database_wraparound_age_datminmxid{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}",
           "legendFormat": "{{datname}}",
           "range": true,
           "refId": "A"
@@ -3873,7 +3873,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "pgwatch_pg_archiver_pending_wal_count",
+          "expr": "pgwatch_pg_archiver_pending_wal_count{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}",
           "legendFormat": "No of files",
           "range": true,
           "refId": "A"
@@ -3970,7 +3970,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "pgwatch_pg_stuck_idle_in_transaction_queries",
+          "expr": "pgwatch_pg_stuck_idle_in_transaction_queries{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "legendFormat": "No. of queries",
@@ -4026,8 +4026,8 @@
       },
       {
         "current": {
-          "text": "demo",
-          "value": "demo"
+          "text": "target_database",
+          "value": "target_database"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -4052,5 +4052,5 @@
   "timezone": "utc",
   "title": "1. Postgres node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 12
+  "version": 130
 }
