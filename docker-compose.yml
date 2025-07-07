@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Sources Generator - Generates sources.yml files from instances.yaml template
   sources-generator:
-    image: alpine:latest
+    image: alpine:3.22.0
     container_name: sources-generator
     working_dir: /app
     volumes:
@@ -51,7 +51,7 @@ services:
 
   # Prometheus Sink - Storage for metrics in Prometheus format
   sink-prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.4.2
     container_name: sink-prometheus
     ports:
       - "9090:9090"
@@ -68,7 +68,7 @@ services:
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
-    image: cybertecpostgresql/pgwatch:latest
+    image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-postgres
     command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
     ports:
@@ -83,7 +83,7 @@ services:
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
   pgwatch-prometheus:
-    image: cybertecpostgresql/pgwatch:latest
+    image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-prometheus
     command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=prometheus://0.0.0.0:9091/pgwatch", "--web-addr=:8089"]
     ports:
@@ -99,7 +99,7 @@ services:
 
   # Grafana with datasources - Visualization layer
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.0.2
     container_name: grafana-with-datasources
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin

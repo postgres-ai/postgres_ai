@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 5,
+  "id": 11,
   "links": [],
   "panels": [
     {
@@ -168,37 +168,6 @@
                 "value": {
                   "fixedColor": "super-light-yellow",
                   "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "CPU*",
-                  "Lock",
-                  "LWLock",
-                  "IO",
-                  "Timeout",
-                  "BufferPin",
-                  "Extension",
-                  "IPC"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
                 }
               }
             ]
@@ -505,7 +474,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.5,
             "drawStyle": "bars",
-            "fillOpacity": 40,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -636,6 +605,24 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.query_id}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
@@ -692,6 +679,7 @@
     }
   ],
   "preload": false,
+  "refresh": "5s",
   "schemaVersion": 41,
   "tags": [],
   "templating": {
@@ -779,8 +767,8 @@
       },
       {
         "current": {
-          "text": "postgres",
-          "value": "postgres"
+          "text": "demo",
+          "value": "demo"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -805,5 +793,5 @@
   "timezone": "browser",
   "title": "4. Wait sampling dashboard",
   "uid": "a222b233-acef-4bac-a451-1591023e4d4f",
-  "version": 5
+  "version": 13
 }
