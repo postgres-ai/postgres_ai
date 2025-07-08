@@ -1,4 +1,5 @@
-version: '3.8'
+name: postgres-ai-mon
+
 
 services:
   # Sources Generator - Generates sources.yml files from instances.yaml template
