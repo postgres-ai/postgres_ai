@@ -22,19 +22,19 @@ services:
       "
 
   # Target Database - The PostgreSQL database being monitored
-  # target-db:
-  #   image: postgres:15
-  #   container_name: target-db
-  #   environment:
-  #     POSTGRES_DB: target_database
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #   command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - target_db_data:/var/lib/postgresql/data
-  #     - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+  target-db:
+    image: postgres:15
+    container_name: target-db
+    environment:
+      POSTGRES_DB: target_database
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - target_db_data:/var/lib/postgresql/data
+      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
   sink-postgres:
@@ -77,7 +77,7 @@ services:
     depends_on:
       - sources-generator
       - sink-postgres
-      # - target-db
+      - target-db
     volumes:
       - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
       - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
@@ -93,7 +93,7 @@ services:
     depends_on:
       - sources-generator
       - sink-prometheus
-      # - target-db
+      - target-db
     volumes:
       - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
       - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
@@ -113,9 +113,21 @@ services:
     depends_on:
       - sink-postgres
       - sink-prometheus
+  flask-backend:
+    build:
+      context: ./flask-backend
+      dockerfile: Dockerfile
+    container_name: flask-pgss-api
+    environment:
+      - FLASK_ENV=production
+      - PROMETHEUS_URL=http://sink-prometheus:9090
+    depends_on:
+      - sink-prometheus
+    ports:
+      - "5000:5000"
 
 volumes:
-  # target_db_data:
+  target_db_data:
   sink_postgres_data:
   prometheus_data:
   grafana_data:
