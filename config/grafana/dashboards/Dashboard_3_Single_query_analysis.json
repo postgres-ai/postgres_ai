@@ -2140,13 +2140,13 @@
           "text": "local",
           "value": "local"
         },
-        "definition": "label_values(pgwatch_settings_max_connections,cluster)",
+        "definition": "label_values(pgwatch_settings_configured,cluster)",
         "label": "Cluster name",
         "name": "cluster_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_max_connections,cluster)",
+          "query": "label_values(pgwatch_settings_configured,cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2158,13 +2158,13 @@
           "text": "node-01",
           "value": "node-01"
         },
-        "definition": "label_values(pgwatch_settings_max_connections{cluster=\"$cluster_name\"},node_name)",
+        "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
         "name": "node_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_max_connections{cluster=\"$cluster_name\"},node_name)",
+          "query": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
