@@ -1,11 +1,11 @@
 apiVersion: 1
 
 providers:
-  - name: 'PoC'
+  - name: 'PostgresAI Dashboards'
     orgId: 1
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards/dash1.json 
+      path: /var/lib/grafana/dashboards 

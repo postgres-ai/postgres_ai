@@ -5,10 +5,15 @@ metrics:
     sqls:
       11: |-
         select /* pgwatch_generated */
-          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           queryid,
           query
         from pg_stat_statements
         where queryid is not null
     gauges:
       - '*' 
+
+presets:
+  full:
+    description: "Full metrics for PostgreSQL storage"
+    metrics:
+      pgss_queryid_queries: 10

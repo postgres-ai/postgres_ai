@@ -16,13 +16,13 @@ INSERT INTO sample_data (name) VALUES
     ('Sample Record 3');
 
 -- Create a user for PGWatch monitoring
-CREATE USER pgwatch_monitor WITH PASSWORD 'monitor_pass';
-GRANT CONNECT ON DATABASE target_database TO pgwatch_monitor;
-GRANT USAGE ON SCHEMA public TO pgwatch_monitor;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO pgwatch_monitor;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO pgwatch_monitor;
+CREATE USER monitor WITH PASSWORD 'monitor_pass';
+GRANT CONNECT ON DATABASE target_database TO monitor;
+GRANT USAGE ON SCHEMA public TO monitor;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO monitor;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO monitor;
 
 -- Grant access to monitoring views
-GRANT SELECT ON pg_stat_statements TO pgwatch_monitor;
-GRANT SELECT ON pg_stat_database TO pgwatch_monitor;
-GRANT SELECT ON pg_stat_user_tables TO pgwatch_monitor; 
+GRANT SELECT ON pg_stat_statements TO monitor;
+GRANT SELECT ON pg_stat_database TO monitor;
+GRANT SELECT ON pg_stat_user_tables TO monitor; 

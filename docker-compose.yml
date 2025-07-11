@@ -1,6 +1,26 @@
-version: '3.8'
+name: postgres-ai-mon
+
 
 services:
+  # Sources Generator - Generates sources.yml files from instances.yaml template
+  sources-generator:
+    image: alpine:3.22.0
+    container_name: sources-generator
+    working_dir: /app
+    volumes:
+      - ./instances.yml:/app/instances.yaml
+      - ./config:/app/config
+    command: >
+      sh -c "
+      mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
+      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch-postgres/sources.yml &&
+      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch-postgres/sources.yml &&
+      echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
+      echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
+      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
+      echo 'Generated sources.yml files for both postgres and prometheus'
+      "
+
   # Target Database - The PostgreSQL database being monitored
   target-db:
     image: postgres:15
@@ -32,7 +52,7 @@ services:
 
   # Prometheus Sink - Storage for metrics in Prometheus format
   sink-prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.4.2
     container_name: sink-prometheus
     ports:
       - "9090:9090"
@@ -49,12 +69,13 @@ services:
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
-    image: cybertecpostgresql/pgwatch:latest
+    image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-postgres
     command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
     ports:
       - "8080:8080"
     depends_on:
+      - sources-generator
       - sink-postgres
       - target-db
     volumes:
@@ -63,13 +84,14 @@ services:
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
   pgwatch-prometheus:
-    image: cybertecpostgresql/pgwatch:latest
+    image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-prometheus
     command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=prometheus://0.0.0.0:9091/pgwatch", "--web-addr=:8089"]
     ports:
       - "8089:8089"
       - "9091:9091"
     depends_on:
+      - sources-generator
       - sink-prometheus
       - target-db
     volumes:
@@ -78,7 +100,7 @@ services:
 
   # Grafana with datasources - Visualization layer
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.0.2
     container_name: grafana-with-datasources
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -91,6 +113,18 @@ services:
     depends_on:
       - sink-postgres
       - sink-prometheus
+  flask-backend:
+    build:
+      context: ./flask-backend
+      dockerfile: Dockerfile
+    container_name: flask-pgss-api
+    environment:
+      - FLASK_ENV=production
+      - PROMETHEUS_URL=http://sink-prometheus:9090
+    depends_on:
+      - sink-prometheus
+    ports:
+      - "5000:5000"
 
 volumes:
   target_db_data:
