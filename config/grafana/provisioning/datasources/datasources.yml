@@ -26,3 +26,12 @@ datasources:
       queryTimeout: '5s'
       timeInterval: '5s'
       httpMethod: 'POST'
+
+  - name: Infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    uid: aerffb0z8rjlsc
+    isDefault: false
+    jsonData:
+      auth_method: none
+      allowed_hosts: []
