@@ -70,6 +70,11 @@ show_help() {
     echo "  remove-instance <NAME>            Remove a PostgreSQL instance"
     echo "  test-instance <NAME>              Test connection to a PostgreSQL instance"
     echo ""
+    echo "API KEY MANAGEMENT:"
+    echo "  add-key <api_key>              Add PostgreSQL AI API key for report uploads"
+    echo "  show-key                       Show current API key (masked)"
+    echo "  remove-key                     Remove stored API key"
+    echo ""
     echo "  help                Show this help message"
     echo
     echo "EXAMPLES:"
@@ -106,6 +111,7 @@ show_help() {
     echo "  pgwatch-prometheus  PGWatch instance with Prometheus sink"
     echo "  grafana             Grafana dashboard interface"
     echo "  flask-backend       Flask API backend"
+    echo "  postgres-reports    PostgreSQL reports generator (runs every 24h)"
     echo "  target-db           Demo PostgreSQL database (--demo mode only)"
     echo
     echo "ACCESS URLS:"
@@ -165,6 +171,67 @@ is_demo_mode() {
     fi
     # Default to false if config file doesn't exist
     return 1
+}
+
+# API Key Management Functions
+
+# Add API key to configuration
+add_api_key() {
+    local api_key="$1"
+    
+    if [ -z "$api_key" ]; then
+        log_error "Please provide an API key"
+        echo "Usage: $0 add-key <api_key>"
+        exit 1
+    fi
+    
+    # Create config file if it doesn't exist
+    touch "$SCRIPT_DIR/.pgwatch-config"
+    
+    # Remove existing api_key line if present
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep -v "^api_key=" "$SCRIPT_DIR/.pgwatch-config" > "$SCRIPT_DIR/.pgwatch-config.tmp" || true
+        mv "$SCRIPT_DIR/.pgwatch-config.tmp" "$SCRIPT_DIR/.pgwatch-config"
+    fi
+    
+    # Add the new API key
+    echo "api_key=$api_key" >> "$SCRIPT_DIR/.pgwatch-config"
+    
+    log_success "API key added successfully"
+    log_info "The API key will be used for automatic report uploads"
+}
+
+# Show API key (masked for security)
+show_api_key() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        local api_key=$(grep "^api_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        if [ -n "$api_key" ]; then
+            local masked_key="${api_key:0:4}$( printf '%*s' $((${#api_key} - 8)) '' | tr ' ' '*' )${api_key: -4}"
+            log_info "Current API key: $masked_key"
+        else
+            log_warning "No API key configured"
+        fi
+    else
+        log_warning "No API key configured"
+    fi
+}
+
+# Remove API key from configuration
+remove_api_key() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep -v "^api_key=" "$SCRIPT_DIR/.pgwatch-config" > "$SCRIPT_DIR/.pgwatch-config.tmp" || true
+        mv "$SCRIPT_DIR/.pgwatch-config.tmp" "$SCRIPT_DIR/.pgwatch-config"
+        log_success "API key removed successfully"
+    else
+        log_warning "No API key configured"
+    fi
+}
+
+# Get API key from configuration
+get_api_key() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep "^api_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2
+    fi
 }
 
 # Detect project directory
@@ -261,6 +328,8 @@ install_project() {
         echo "demo_mode=false" > "$SCRIPT_DIR/.pgwatch-config"
         log_info "Production mode - only monitoring infrastructure will be started"
         log_warning "You'll need to add your own PostgreSQL instances to monitor"
+        
+
     fi
     
     log_success "Setup completed!"
@@ -306,10 +375,9 @@ start_services() {
         $compose_cmd -f "$COMPOSE_FILE" up -d
     else
         log_info "Starting PostgreSQL AI monitoring services (production mode)..."
+        log_info "Target demo database not included - add your own PostgreSQL instances to monitor"
         # Start all services except target-db
         $compose_cmd -f "$COMPOSE_FILE" up -d sources-generator sink-postgres sink-prometheus pgwatch-postgres pgwatch-prometheus grafana flask-backend
-        log_warning "Target demo database not started (production mode)"
-        log_info "Make sure you have added your own PostgreSQL instances to monitor"
     fi
     
     log_success "Services started!"
@@ -852,7 +920,7 @@ open_shell() {
     
     if [ -z "$service" ]; then
         log_error "Please specify a service name"
-        log_info "Available services: target-db, sink-postgres, sink-prometheus, pgwatch-postgres, pgwatch-prometheus, grafana, flask-backend"
+        log_info "Available services: target-db, sink-postgres, sink-prometheus, pgwatch-postgres, pgwatch-prometheus, grafana, flask-backend, postgres-reports"
         exit 1
     fi
     
@@ -882,6 +950,18 @@ show_access_info() {
     fi
     
     echo "  Sink Database:      postgresql://postgres:postgres@localhost:5433/postgres"
+    echo
+    
+    # Show reports information
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ] && grep -q "^api_key=" "$SCRIPT_DIR/.pgwatch-config"; then
+        log_info "PostgreSQL reports will be generated every 24 hours and uploaded to PostgreSQL AI"
+        local api_key=$(grep "^api_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        local masked_key="${api_key:0:4}$( printf '%*s' $((${#api_key} - 8)) '' | tr ' ' '*' )${api_key: -4}"
+        echo "  API Key:            $masked_key"
+    else
+        log_info "PostgreSQL reports will be generated every 24 hours (no API key configured for upload)"
+        log_info "Use '$0 add-key <api_key>' to enable automatic report uploads"
+    fi
     echo
     
     if ! is_demo_mode; then
@@ -940,6 +1020,15 @@ main() {
             ;;
         "test-instance")
             test_instance "$2"
+            ;;
+        "add-key")
+            add_api_key "$2"
+            ;;
+        "show-key")
+            show_api_key
+            ;;
+        "remove-key")
+            remove_api_key
             ;;
         "help"|"--help"|"-h")
             show_help
