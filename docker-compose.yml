@@ -125,6 +125,41 @@ services:
     ports:
       - "5000:5000"
 
+  # PostgreSQL Reports Generator - Runs reports after 1 hour
+  postgres-reports:
+    image: python:3.11-slim
+    container_name: postgres-reports
+    working_dir: /app
+    volumes:
+      - ./reporter/postgres_reports.py:/app/postgres_reports.py
+      - ./reporter/requirements.txt:/app/requirements.txt
+      - ./.pgwatch-config:/app/.pgwatch-config:ro
+    environment:
+      - PROMETHEUS_URL=http://sink-prometheus:9090
+    depends_on:
+      - sink-prometheus
+      - pgwatch-prometheus
+    command: >
+      sh -c "
+      echo 'Installing Python dependencies...' &&
+      pip install -r requirements.txt &&
+      echo 'Waiting 1 hour before generating reports...' &&
+      sleep 3600 &&
+      echo 'Starting PostgreSQL reports generation...' &&
+      while true; do
+        echo 'Generating PostgreSQL reports...' &&
+        if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
+          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2) &&
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --upload --token $$API_KEY --project postgres-ai-monitoring
+        else
+          echo 'No API key configured, generating reports without upload...' &&
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json
+        fi &&
+        echo 'Reports generated. Sleeping for 24 hours...' &&
+        sleep 86400
+      done
+      "
+
 volumes:
   target_db_data:
   sink_postgres_data:
