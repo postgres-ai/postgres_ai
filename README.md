@@ -8,13 +8,13 @@ A complete PostgreSQL monitoring solution with automated performance analysis an
 
 ```bash
 # Download the CLI
-curl -o postgres-ai-cli https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres-ai-cli && chmod +x postgres-ai-cli
+curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai && chmod +x postgres_ai
 
 # Complete setup with demo database
-./postgres-ai-cli quickstart --demo
+./postgres_ai quickstart --demo
 
 # Production setup with your API key
-./postgres-ai-cli quickstart --api-key=your_api_key
+./postgres_ai quickstart --api-key=your_api_key
 ```
 
 That's it! Everything is installed, configured, and running.
@@ -31,20 +31,20 @@ That's it! Everything is installed, configured, and running.
 
 **For Developers:**
 ```bash
-./postgres-ai-cli quickstart --demo
+./postgres_ai quickstart --demo
 ```
 Get a complete monitoring setup with demo data in under 2 minutes.
 
 **For Production:**
 ```bash
-./postgres-ai-cli quickstart --api-key=your_key
+./postgres_ai quickstart --api-key=your_key
 # Then add your databases
-./postgres-ai-cli add-instance "postgresql://user:pass@host:port/db"
+./postgres_ai add-instance "postgresql://user:pass@host:port/db"
 ```
 
 **For CI/CD:**
 ```bash
-./postgres-ai-cli quickstart --demo --api-key=$API_KEY
+./postgres_ai quickstart --demo --api-key=$API_KEY
 ```
 Fully automated setup with no interactive prompts.
 
@@ -52,17 +52,17 @@ Fully automated setup with no interactive prompts.
 
 ```bash
 # Instance management
-./postgres-ai-cli add-instance "postgresql://user:pass@host:port/db"
-./postgres-ai-cli list-instances
-./postgres-ai-cli test-instance my-db
+./postgres_ai add-instance "postgresql://user:pass@host:port/db"
+./postgres_ai list-instances
+./postgres_ai test-instance my-db
 
 # Service management  
-./postgres-ai-cli status
-./postgres-ai-cli logs
-./postgres-ai-cli restart
+./postgres_ai status
+./postgres_ai logs
+./postgres_ai restart
 
 # Health check
-./postgres-ai-cli health
+./postgres_ai health
 ```
 
 ## 🌐 Access Points
@@ -77,7 +77,7 @@ After running quickstart:
 ## 📖 Help
 
 ```bash
-./postgres-ai-cli help
+./postgres_ai help
 ```
 
 ## 🔑 API Key
