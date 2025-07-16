@@ -1,1 +1,0 @@
-{"checkId": "H001", "timestamptz": "2025-07-16T22:28:12.231467", "hosts": {"master": "node-01", "replicas": []}, "results": {"node-01": {"data": {"invalid_indexes": [], "total_count": 0, "total_size_bytes": 0, "total_size_pretty": "0 B"}}}}
