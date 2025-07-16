@@ -1,0 +1,1 @@
+{"checkId": "A002", "timestamptz": "2025-07-16T22:28:12.133631", "hosts": {"master": "node-01", "replicas": []}, "results": {"node-01": {"data": {"version": {"version": "15.13 (Debian 15.13-1.pgdg120+1)", "server_version_num": "150013", "server_major_ver": "15", "server_minor_ver": "13 (Debian 15.13-1.pgdg120+1)"}}}}}

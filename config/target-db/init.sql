@@ -26,3 +26,5 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO monitor;
 GRANT SELECT ON pg_stat_statements TO monitor;
 GRANT SELECT ON pg_stat_database TO monitor;
 GRANT SELECT ON pg_stat_user_tables TO monitor; 
+-- Grant pg_monitor role to monitor user for enhanced monitoring capabilities
+GRANT pg_monitor TO monitor;
