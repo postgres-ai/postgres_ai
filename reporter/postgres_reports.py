@@ -2,7 +2,7 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, H001, F005, F004)
+This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, H001, F005, F004, K001, K003)
 by querying Prometheus metrics using PromQL queries.
 """
 
@@ -428,6 +428,325 @@ class PostgresReportGenerator:
             "total_bloat_size_pretty": self.format_bytes(total_bloat_size)
         }, node_name)
 
+    def generate_k001_query_calls_report(self, cluster: str = "local", node_name: str = "node-01", 
+                                       time_range_minutes: int = 60) -> Dict[str, Any]:
+        """
+        Generate K001 Globally Aggregated Query Metrics report (sorted by calls).
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection
+            
+        Returns:
+            Dictionary containing query metrics sorted by calls
+        """
+        print("Generating K001 Globally Aggregated Query Metrics report...")
+        
+        # Calculate time range
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=time_range_minutes)
+        
+        # Get pg_stat_statements metrics using the same logic as CSV endpoint
+        query_metrics = self._get_pgss_metrics_data(cluster, node_name, start_time, end_time)
+        
+        # Sort by calls (descending)
+        sorted_metrics = sorted(query_metrics, key=lambda x: x.get('calls', 0), reverse=True)
+        
+        # Calculate totals
+        total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+        total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+        total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+        
+        return self.format_report_data("K001", {
+            "query_metrics": sorted_metrics,
+            "summary": {
+                "total_queries": len(sorted_metrics),
+                "total_calls": total_calls,
+                "total_time_ms": total_time,
+                "total_rows": total_rows,
+                "time_range_minutes": time_range_minutes,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat()
+            }
+        }, node_name)
+
+    def generate_k003_top_queries_report(self, cluster: str = "local", node_name: str = "node-01", 
+                                       time_range_minutes: int = 60, limit: int = 50) -> Dict[str, Any]:
+        """
+        Generate K003 Top-50 Queries by total_time report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection
+            limit: Number of top queries to return (default: 50)
+            
+        Returns:
+            Dictionary containing top queries sorted by total execution time
+        """
+        print("Generating K003 Top-50 Queries by total_time report...")
+        
+        # Calculate time range
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=time_range_minutes)
+        
+        # Get pg_stat_statements metrics using the same logic as CSV endpoint
+        query_metrics = self._get_pgss_metrics_data(cluster, node_name, start_time, end_time)
+        
+        # Sort by total_time (descending) and limit to top N
+        sorted_metrics = sorted(query_metrics, key=lambda x: x.get('total_time', 0), reverse=True)[:limit]
+        
+        # Calculate totals for the top queries
+        total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+        total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+        total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+        
+        return self.format_report_data("K003", {
+            "top_queries": sorted_metrics,
+            "summary": {
+                "queries_returned": len(sorted_metrics),
+                "total_calls": total_calls,
+                "total_time_ms": total_time,
+                "total_rows": total_rows,
+                "time_range_minutes": time_range_minutes,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "limit": limit
+            }
+        }, node_name)
+
+    def _get_pgss_metrics_data(self, cluster: str, node_name: str, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
+        """
+        Get pg_stat_statements metrics data between two time points.
+        Adapted from the logic in flask-backend/app.py get_pgss_metrics_csv().
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name  
+            start_time: Start datetime
+            end_time: End datetime
+            
+        Returns:
+            List of query metrics with calculated differences
+        """
+        # Metric name mapping for cleaner output
+        METRIC_NAME_MAPPING = {
+            'calls': 'calls',
+            'exec_time_total': 'total_time',
+            'rows': 'rows',
+            'shared_bytes_hit_total': 'shared_blks_hit',
+            'shared_bytes_read_total': 'shared_blks_read',
+            'shared_bytes_dirtied_total': 'shared_blks_dirtied', 
+            'shared_bytes_written_total': 'shared_blks_written',
+            'block_read_total': 'blk_read_time',
+            'block_write_total': 'blk_write_time'
+        }
+        
+        # Build filters
+        filters = [f'cluster="{cluster}"', f'node_name="{node_name}"']
+        filter_str = '{' + ','.join(filters) + '}'
+        
+        # Get all pg_stat_statements metrics
+        all_metrics = [
+            'pgwatch_pg_stat_statements_calls',
+            'pgwatch_pg_stat_statements_exec_time_total',
+            'pgwatch_pg_stat_statements_rows',
+            'pgwatch_pg_stat_statements_shared_bytes_hit_total',
+            'pgwatch_pg_stat_statements_shared_bytes_read_total',
+            'pgwatch_pg_stat_statements_shared_bytes_dirtied_total',
+            'pgwatch_pg_stat_statements_shared_bytes_written_total',
+            'pgwatch_pg_stat_statements_block_read_total',
+            'pgwatch_pg_stat_statements_block_write_total'
+        ]
+        
+        # Get metrics at start and end times
+        start_data = []
+        end_data = []
+        
+        for metric in all_metrics:
+            metric_with_filters = f'{metric}{filter_str}'
+            
+            try:
+                # Query metrics around start time - use instant queries at specific timestamps
+                start_result = self.query_range(metric_with_filters, start_time - timedelta(minutes=1), start_time + timedelta(minutes=1))
+                if start_result:
+                    start_data.extend(start_result)
+                
+                # Query metrics around end time  
+                end_result = self.query_range(metric_with_filters, end_time - timedelta(minutes=1), end_time + timedelta(minutes=1))
+                if end_result:
+                    end_data.extend(end_result)
+                    
+            except Exception as e:
+                print(f"Warning: Failed to query metric {metric}: {e}")
+                continue
+        
+        # Process the data to calculate differences
+        return self._process_pgss_data(start_data, end_data, start_time, end_time, METRIC_NAME_MAPPING)
+
+    def query_range(self, query: str, start_time: datetime, end_time: datetime, step: str = "30s") -> List[Dict[str, Any]]:
+        """
+        Execute a range PromQL query.
+        
+        Args:
+            query: PromQL query string
+            start_time: Start time
+            end_time: End time
+            step: Query step interval
+            
+        Returns:
+            List of query results
+        """
+        params = {
+            'query': query,
+            'start': start_time.timestamp(),
+            'end': end_time.timestamp(),
+            'step': step
+        }
+        
+        try:
+            response = requests.get(f"{self.base_url}/query_range", params=params)
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'success':
+                    return result.get('data', {}).get('result', [])
+            else:
+                print(f"Range query failed with status {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"Range query error: {e}")
+        
+        return []
+
+    def _process_pgss_data(self, start_data: List[Dict], end_data: List[Dict], 
+                          start_time: datetime, end_time: datetime, 
+                          metric_mapping: Dict[str, str]) -> List[Dict[str, Any]]:
+        """
+        Process pg_stat_statements data and calculate differences between start and end times.
+        Adapted from the logic in flask-backend/app.py process_pgss_data().
+        """
+        # Convert Prometheus data to dictionaries
+        start_metrics = self._prometheus_to_dict(start_data, start_time)
+        end_metrics = self._prometheus_to_dict(end_data, end_time)
+        
+        if not start_metrics and not end_metrics:
+            return []
+        
+        # Create a combined dictionary with all unique query identifiers
+        all_keys = set()
+        all_keys.update(start_metrics.keys())
+        all_keys.update(end_metrics.keys())
+        
+        result_rows = []
+        
+        # Calculate differences for each query
+        for key in all_keys:
+            start_metric = start_metrics.get(key, {})
+            end_metric = end_metrics.get(key, {})
+            
+            # Extract identifier components from key
+            db_name, query_id, user, instance = key
+            
+            # Calculate actual duration from metric timestamps
+            start_timestamp = start_metric.get('timestamp')
+            end_timestamp = end_metric.get('timestamp')
+            
+            if start_timestamp and end_timestamp:
+                start_dt = datetime.fromisoformat(start_timestamp)
+                end_dt = datetime.fromisoformat(end_timestamp)
+                actual_duration = (end_dt - start_dt).total_seconds()
+            else:
+                # Fallback to query parameter duration if timestamps are missing
+                actual_duration = (end_time - start_time).total_seconds()
+            
+            # Create result row
+            row = {
+                'queryid': query_id,
+                'database': db_name,
+                'user': user,
+                'duration_seconds': actual_duration
+            }
+            
+            # Numeric columns to calculate differences for (using original metric names)
+            numeric_cols = list(metric_mapping.keys())
+            
+            # Calculate differences and rates
+            for col in numeric_cols:
+                start_val = start_metric.get(col, 0)
+                end_val = end_metric.get(col, 0)
+                diff = end_val - start_val
+                
+                # Use simplified display name
+                display_name = metric_mapping[col]
+                
+                # Convert bytes to blocks for block-related metrics (PostgreSQL uses 8KB blocks)
+                if 'blks' in display_name and 'bytes' in col:
+                    diff = diff / 8192  # Convert bytes to 8KB blocks
+                
+                row[display_name] = diff
+                
+                # Calculate rates per second
+                if row['duration_seconds'] > 0:
+                    row[f'{display_name}_per_sec'] = diff / row['duration_seconds']
+                else:
+                    row[f'{display_name}_per_sec'] = 0
+                    
+                # Calculate per-call averages
+                calls_diff = row.get('calls', 0)
+                if calls_diff > 0:
+                    row[f'{display_name}_per_call'] = diff / calls_diff
+                else:
+                    row[f'{display_name}_per_call'] = 0
+            
+            result_rows.append(row)
+        
+        return result_rows
+
+    def _prometheus_to_dict(self, prom_data: List[Dict], timestamp: datetime) -> Dict:
+        """
+        Convert Prometheus API response to dictionary keyed by query identifiers.
+        Adapted from the logic in flask-backend/app.py prometheus_to_dict().
+        """
+        if not prom_data:
+            return {}
+        
+        metrics_dict = {}
+        
+        for metric_data in prom_data:
+            metric = metric_data.get('metric', {})
+            values = metric_data.get('values', [])
+            
+            if not values:
+                continue
+            
+            # Get the closest value to our timestamp
+            closest_value = min(values, key=lambda x: abs(float(x[0]) - timestamp.timestamp()))
+            
+            # Create unique key for this query
+            key = (
+                metric.get('datname', ''),
+                metric.get('queryid', ''),
+                metric.get('user', ''),
+                metric.get('instance', '')
+            )
+            
+            # Initialize metric dict if not exists
+            if key not in metrics_dict:
+                metrics_dict[key] = {
+                    'timestamp': datetime.fromtimestamp(float(closest_value[0])).isoformat(),
+                }
+            
+            # Add metric value
+            metric_name = metric.get('__name__', 'pgwatch_pg_stat_statements_calls')
+            clean_name = metric_name.replace('pgwatch_pg_stat_statements_', '')
+            
+            try:
+                metrics_dict[key][clean_name] = float(closest_value[1])
+            except (ValueError, IndexError):
+                metrics_dict[key][clean_name] = 0
+        
+        return metrics_dict
+
     def format_bytes(self, bytes_value: float) -> str:
         """Format bytes value for human readable display."""
         if bytes_value == 0:
@@ -619,6 +938,8 @@ class PostgresReportGenerator:
         reports['H001'] = self.generate_h001_invalid_indexes_report(cluster, node_name)
         reports['F005'] = self.generate_f005_btree_bloat_report(cluster, node_name)
         reports['F004'] = self.generate_f004_heap_bloat_report(cluster, node_name)
+        reports['K001'] = self.generate_k001_query_calls_report(cluster, node_name)
+        reports['K003'] = self.generate_k003_top_queries_report(cluster, node_name)
         
         return reports
     def create_report(self, api_url, token, project, epoch):
@@ -673,7 +994,7 @@ def main():
                        help='Cluster name (default: local)')
     parser.add_argument('--node-name', default='node-01',
                        help='Node name (default: node-01)')
-    parser.add_argument('--check-id', choices=['A002', 'A003', 'A004', 'A007', 'H001', 'F005', 'F004', 'ALL'],
+    parser.add_argument('--check-id', choices=['A002', 'A003', 'A004', 'A007', 'H001', 'F005', 'F004', 'K001', 'K003', 'ALL'],
                        help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                        help='Output file (default: stdout)')
@@ -704,7 +1025,6 @@ def main():
                 if not args.no_upload:
                     generator.upload_report_file(args.api_url, args.token, report_id, f"{report}.json")
             if args.output == '-':
-
                 pass
             else:
                 with open(args.output, 'w') as f:
@@ -726,6 +1046,10 @@ def main():
                 report = generator.generate_f005_btree_bloat_report(args.cluster, args.node_name)
             elif args.check_id == 'F004':
                 report = generator.generate_f004_heap_bloat_report(args.cluster, args.node_name)
+            elif args.check_id == 'K001':
+                report = generator.generate_k001_query_calls_report(args.cluster, args.node_name)
+            elif args.check_id == 'K003':
+                report = generator.generate_k003_top_queries_report(args.cluster, args.node_name)
             
             if args.output == '-':
                 print(json.dumps(report, indent=2))
