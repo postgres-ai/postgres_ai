@@ -2,7 +2,7 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007)
+This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, H001, F005, F004)
 by querying Prometheus metrics using PromQL queries.
 """
 
@@ -236,6 +236,219 @@ class PostgresReportGenerator:
             
             return self.format_report_data("A007", altered_settings, node_name)
     
+    def generate_h001_invalid_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate H001 Invalid Indexes report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing invalid indexes information
+        """
+        print("Generating H001 Invalid Indexes report...")
+        
+        # Query invalid indexes using the pgwatch_pg_invalid_indexes metric
+        invalid_indexes_query = f'pgwatch_pg_invalid_indexes{{cluster="{cluster}", node_name="{node_name}"}}'
+        result = self.query_instant(invalid_indexes_query)
+        
+        invalid_indexes = []
+        total_size = 0
+        
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                # Extract index information from labels and values
+                schema_name = item['metric'].get('schema_name', 'unknown')
+                table_name = item['metric'].get('table_name', 'unknown')
+                index_name = item['metric'].get('index_name', 'unknown')
+                relation_name = item['metric'].get('relation_name', f"{schema_name}.{table_name}")
+                
+                # Get index size from the metric value
+                index_size_bytes = float(item['value'][1]) if item.get('value') else 0
+                supports_fk = item['metric'].get('supports_fk', '0')
+                
+                invalid_index = {
+                    "schema_name": schema_name,
+                    "table_name": table_name,
+                    "index_name": index_name,
+                    "relation_name": relation_name,
+                    "index_size_bytes": index_size_bytes,
+                    "index_size_pretty": self.format_bytes(index_size_bytes),
+                    "supports_fk": bool(int(supports_fk))
+                }
+                
+                invalid_indexes.append(invalid_index)
+                total_size += index_size_bytes
+        
+        return self.format_report_data("H001", {
+            "invalid_indexes": invalid_indexes,
+            "total_count": len(invalid_indexes),
+            "total_size_bytes": total_size,
+            "total_size_pretty": self.format_bytes(total_size)
+        }, node_name)
+    
+    def generate_f005_btree_bloat_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate F005 Autovacuum: Btree Index Bloat (Estimated) report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing btree index bloat information
+        """
+        print("Generating F005 Autovacuum: Btree Index Bloat (Estimated) report...")
+        
+        # Query btree bloat using multiple metrics
+        bloat_queries = {
+            'extra_size': f'pgwatch_pg_btree_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}"}}',
+            'extra_pct': f'pgwatch_pg_btree_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}"}}',
+            'bloat_size': f'pgwatch_pg_btree_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}"}}',
+            'bloat_pct': f'pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}"}}',
+        }
+        
+        bloated_indexes = {}
+        
+        for metric_type, query in bloat_queries.items():
+            result = self.query_instant(query)
+            if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                for item in result['data']['result']:
+                    print(item)
+                    schema_name = item['metric'].get('schemaname', 'unknown')
+                    table_name = item['metric'].get('tblname', 'unknown')
+                    index_name = item['metric'].get('idxname', 'unknown')
+                    
+                    index_key = f"{schema_name}.{table_name}.{index_name}"
+                    
+                    if index_key not in bloated_indexes:
+                        bloated_indexes[index_key] = {
+                            "schema_name": schema_name,
+                            "table_name": table_name,
+                            "index_name": index_name,
+                            "extra_size": 0,
+                            "extra_pct": 0,
+                            "bloat_size": 0,
+                            "bloat_pct": 0,
+                        }
+                    
+                    value = float(item['value'][1]) if item.get('value') else 0
+                    bloated_indexes[index_key][metric_type] = value
+        
+        # Convert to list and add pretty formatting
+        bloated_indexes_list = []
+        total_bloat_size = 0
+        
+        for index_data in bloated_indexes.values():
+            # Skip indexes with minimal bloat
+            if index_data['bloat_pct'] >= 10:  # Only report indexes with >= 10% bloat
+                index_data['extra_size_pretty'] = self.format_bytes(index_data['extra_size'])
+                index_data['bloat_size_pretty'] = self.format_bytes(index_data['bloat_size'])
+                
+                bloated_indexes_list.append(index_data)
+                total_bloat_size += index_data['bloat_size']
+        
+        # Sort by bloat percentage descending
+        bloated_indexes_list.sort(key=lambda x: x['bloat_pct'], reverse=True)
+        
+        return self.format_report_data("F005", {
+            "bloated_indexes": bloated_indexes_list,
+            "total_count": len(bloated_indexes_list),
+            "total_bloat_size_bytes": total_bloat_size,
+            "total_bloat_size_pretty": self.format_bytes(total_bloat_size)
+        }, node_name)
+    
+    def generate_f004_heap_bloat_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate F004 Autovacuum: Heap Bloat (Estimated) report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing heap bloat information
+        """
+        print("Generating F004 Autovacuum: Heap Bloat (Estimated) report...")
+        
+        # Query table bloat using multiple metrics
+        bloat_queries = {
+            'real_size': f'pgwatch_pg_table_bloat_real_size{{cluster="{cluster}", node_name="{node_name}"}}',
+            'extra_size': f'pgwatch_pg_table_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}"}}',
+            'extra_pct': f'pgwatch_pg_table_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}"}}',
+            'bloat_size': f'pgwatch_pg_table_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}"}}',
+            'bloat_pct': f'pgwatch_pg_table_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}"}}',
+        }
+        
+        bloated_tables = {}
+        for metric_type, query in bloat_queries.items():
+            result = self.query_instant(query)
+            if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                for item in result['data']['result']:
+                    schema_name = item['metric'].get('schemaname', 'unknown')
+                    table_name = item['metric'].get('tblname', 'unknown')
+                    
+                    table_key = f"{schema_name}.{table_name}"
+                    
+                    if table_key not in bloated_tables:
+                        bloated_tables[table_key] = {
+                            "schema_name": schema_name,
+                            "table_name": table_name,
+                            "real_size": 0,
+                            "extra_size": 0,
+                            "extra_pct": 0,
+                            "bloat_size": 0,
+                            "bloat_pct": 0,
+                        }
+                    
+                    value = float(item['value'][1]) if item.get('value') else 0
+                    bloated_tables[table_key][metric_type] = value
+        
+        # Convert to list and add pretty formatting
+        bloated_tables_list = []
+        total_bloat_size = 0
+        
+        for table_data in bloated_tables.values():
+            # Skip tables with minimal bloat
+            if table_data['bloat_pct'] >= 10:  # Only report tables with >= 10% bloat
+                table_data['real_size_pretty'] = self.format_bytes(table_data['real_size'])
+                table_data['extra_size_pretty'] = self.format_bytes(table_data['extra_size'])
+                table_data['bloat_size_pretty'] = self.format_bytes(table_data['bloat_size'])
+                
+                bloated_tables_list.append(table_data)
+                total_bloat_size += table_data['bloat_size']
+        
+        # Sort by bloat percentage descending
+        bloated_tables_list.sort(key=lambda x: x['bloat_pct'], reverse=True)
+        
+        return self.format_report_data("F004", {
+            "bloated_tables": bloated_tables_list,
+            "total_count": len(bloated_tables_list),
+            "total_bloat_size_bytes": total_bloat_size,
+            "total_bloat_size_pretty": self.format_bytes(total_bloat_size)
+        }, node_name)
+
+    def format_bytes(self, bytes_value: float) -> str:
+        """Format bytes value for human readable display."""
+        if bytes_value == 0:
+            return "0 B"
+        
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        unit_index = 0
+        value = float(bytes_value)
+        
+        while value >= 1024 and unit_index < len(units) - 1:
+            value /= 1024
+            unit_index += 1
+        
+        if value >= 100:
+            return f"{value:.0f} {units[unit_index]}"
+        elif value >= 10:
+            return f"{value:.1f} {units[unit_index]}"
+        else:
+            return f"{value:.2f} {units[unit_index]}"
+
     def format_report_data(self, check_id: str, data: Dict[str, Any], host: str = "target-database") -> Dict[str, Any]:
         """
         Format data to match template structure.
@@ -388,7 +601,7 @@ class PostgresReportGenerator:
     
     def generate_all_reports(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
-        Generate all four reports.
+        Generate all reports.
         
         Args:
             cluster: Cluster name
@@ -404,6 +617,9 @@ class PostgresReportGenerator:
         reports['A003'] = self.generate_a003_settings_report(cluster, node_name)
         reports['A004'] = self.generate_a004_cluster_report(cluster, node_name)
         reports['A007'] = self.generate_a007_altered_settings_report(cluster, node_name)
+        reports['H001'] = self.generate_h001_invalid_indexes_report(cluster, node_name)
+        reports['F005'] = self.generate_f005_btree_bloat_report(cluster, node_name)
+        reports['F004'] = self.generate_f004_heap_bloat_report(cluster, node_name)
         
         return reports
     def create_report(self, api_url, token, project, epoch):
@@ -458,7 +674,7 @@ def main():
                        help='Cluster name (default: local)')
     parser.add_argument('--node-name', default='node-01',
                        help='Node name (default: node-01)')
-    parser.add_argument('--check-id', choices=['A002', 'A003', 'A004', 'A007', 'ALL'],
+    parser.add_argument('--check-id', choices=['A002', 'A003', 'A004', 'A007', 'H001', 'F005', 'F004', 'ALL'],
                        help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                        help='Output file (default: stdout)')
@@ -466,6 +682,8 @@ def main():
     parser.add_argument('--token', default='')
     parser.add_argument('--project', default='project-name')
     parser.add_argument('--epoch', default='1')
+    parser.add_argument('--no-upload', action='store_true', default=False,
+                       help='Do not upload reports to the API')
     
     args = parser.parse_args()
     
@@ -479,13 +697,16 @@ def main():
     try:
         if args.check_id == 'ALL' or args.check_id is None:
             # Generate all reports
+            if not args.no_upload:
+                report_id = generator.create_report(args.api_url, args.token, args.project, args.epoch)
             reports = generator.generate_all_reports(args.cluster, args.node_name)
-            report_id = generator.create_report(args.api_url, args.token, args.project, args.epoch)
             for report in reports:
-                json_report = json.dump(reports[report], open(f"{report}.json", "w"))
-                generator.upload_report_file(args.api_url, args.token, report_id, f"{report}.json")
+                json.dump(reports[report], open(f"{report}.json", "w"))
+                if not args.no_upload:
+                    generator.upload_report_file(args.api_url, args.token, report_id, f"{report}.json")
             if args.output == '-':
-                print(json.dumps(reports, indent=2))
+
+                pass
             else:
                 with open(args.output, 'w') as f:
                     json.dump(reports, f, indent=2)
@@ -500,13 +721,20 @@ def main():
                 report = generator.generate_a004_cluster_report(args.cluster, args.node_name)
             elif args.check_id == 'A007':
                 report = generator.generate_a007_altered_settings_report(args.cluster, args.node_name)
+            elif args.check_id == 'H001':
+                report = generator.generate_h001_invalid_indexes_report(args.cluster, args.node_name)
+            elif args.check_id == 'F005':
+                report = generator.generate_f005_btree_bloat_report(args.cluster, args.node_name)
+            elif args.check_id == 'F004':
+                report = generator.generate_f004_heap_bloat_report(args.cluster, args.node_name)
             
             if args.output == '-':
                 print(json.dumps(report, indent=2))
             else:
                 with open(args.output, 'w') as f:
                     json.dump(report, f, indent=2)
-                generator.upload_report_file(args.api_url, args.token, args.project, args.epoch, args.output)
+                if not args.no_upload:
+                    generator.upload_report_file(args.api_url, args.token, args.project, args.epoch, args.output)
     except Exception as e:
         print(f"Error generating reports: {e}")
         raise e
