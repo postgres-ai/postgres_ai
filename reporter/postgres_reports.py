@@ -315,7 +315,6 @@ class PostgresReportGenerator:
             result = self.query_instant(query)
             if result.get('status') == 'success' and result.get('data', {}).get('result'):
                 for item in result['data']['result']:
-                    print(item)
                     schema_name = item['metric'].get('schemaname', 'unknown')
                     table_name = item['metric'].get('tblname', 'unknown')
                     index_name = item['metric'].get('idxname', 'unknown')
