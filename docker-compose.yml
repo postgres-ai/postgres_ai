@@ -20,7 +20,7 @@ services:
 
   # Target Database - The PostgreSQL database being monitored
   target-db:
-    image: postgres:15
+    image: postgres:17
     container_name: target-db
     environment:
       POSTGRES_DB: target_database
@@ -35,7 +35,7 @@ services:
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
   sink-postgres:
-    image: postgres:15
+    image: postgres:17
     container_name: sink-postgres
     environment:
       POSTGRES_DB: postgres
