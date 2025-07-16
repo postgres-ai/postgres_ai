@@ -1226,7 +1226,7 @@ show_config() {
 
 # Update configuration
 update_config() {
-    precheck_for_services
+    check_project_setup
     
     log_info "Updating configuration files..."
     
@@ -1234,8 +1234,24 @@ update_config() {
     local compose_cmd=$(get_compose_cmd)
     cd "$SCRIPT_DIR"
     $compose_cmd -f "$COMPOSE_FILE" run --rm sources-generator
-    $compose_cmd -f "$COMPOSE_FILE" restart pgwatch-postgres
-    $compose_cmd -f "$COMPOSE_FILE" restart pgwatch-prometheus
+    
+    # Check if containers are running before trying to restart them
+    local running_containers
+    running_containers=$($compose_cmd -f "$COMPOSE_FILE" ps --services --filter "status=running" 2>/dev/null || true)
+    
+    if echo "$running_containers" | grep -q "pgwatch-postgres"; then
+        log_info "Restarting pgwatch-postgres to apply new configuration..."
+        $compose_cmd -f "$COMPOSE_FILE" restart pgwatch-postgres
+    else
+        log_info "pgwatch-postgres not running - configuration will be applied when it starts"
+    fi
+    
+    if echo "$running_containers" | grep -q "pgwatch-prometheus"; then
+        log_info "Restarting pgwatch-prometheus to apply new configuration..."
+        $compose_cmd -f "$COMPOSE_FILE" restart pgwatch-prometheus
+    else
+        log_info "pgwatch-prometheus not running - configuration will be applied when it starts"
+    fi
     
     log_success "Configuration updated"
 }
