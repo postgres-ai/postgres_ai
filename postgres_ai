@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# PostgreSQL AI CLI
+# Postgres AI CLI
 # A CLI tool for managing the PostgreSQL monitoring system with Docker Compose
 
 set -e
@@ -40,7 +40,7 @@ log_error() {
 print_banner() {
     echo -e "${BLUE}"
     echo "=================================="
-    echo "  PostgreSQL AI CLI"
+    echo "  Postgres AI CLI"
     echo "=================================="
     echo -e "${NC}"
 }
@@ -64,6 +64,7 @@ show_help() {
     echo "  reset               Stop services and remove all data"
     echo "  clean               Clean up temporary files and unused Docker resources"
     echo "  shell [SERVICE]     Open shell in specified service container"
+    echo "  check               Verify system prerequisites and readiness"
     echo ""
     echo "INSTANCE MANAGEMENT:"
     echo "  list-instances                    List all configured PostgreSQL instances"
@@ -72,7 +73,7 @@ show_help() {
     echo "  test-instance <NAME>              Test connection to a PostgreSQL instance"
     echo ""
     echo "API KEY MANAGEMENT:"
-    echo "  add-key <api_key>              Add PostgreSQL AI API key for report uploads"
+    echo "  add-key <api_key>              Add Postgres AI API key for report uploads"
     echo "  show-key                       Show current API key (masked)"
     echo "  remove-key                     Remove stored API key"
     echo ""
@@ -89,6 +90,7 @@ show_help() {
     echo "  $0 logs pgwatch-postgres     # Show logs for postgres pgwatch instance"
     echo "  $0 health                    # Check if all services are healthy"
     echo "  $0 shell target-db           # Open shell in target database (demo mode only)"
+    echo "  $0 check                     # Verify system prerequisites and readiness"
     echo ""
     echo "INSTANCE MANAGEMENT EXAMPLES:"
     echo "  $0 list-instances            # Show all configured instances"
@@ -113,7 +115,7 @@ show_help() {
     echo "      2. Start all services: '$0 start'"
     echo "      3. Access demo database at localhost:5432"
     echo ""
-    echo "  The CLI auto-detects project directory from any location"
+    echo "  The CLI auto-detects the project directory and should be run from outside it"
     echo
     echo "SERVICES:"
     echo "  sink-postgres       PostgreSQL sink for storing metrics"
@@ -135,7 +137,7 @@ show_help() {
     echo "  Demo DB:           postgresql://postgres:postgres@localhost:5432/target_database (--demo mode only)"
 }
 
-# Check prerequisites
+# Check basic prerequisites (software installation)
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
@@ -156,6 +158,11 @@ check_prerequisites() {
         missing_deps+=("docker-compose")
     fi
     
+    # Check curl for health checks
+    if ! command -v curl &> /dev/null; then
+        missing_deps+=("curl")
+    fi
+    
     # Future: Check Python when reports functionality is added
     # if ! command -v python3 &> /dev/null; then
     #     missing_deps+=("python3")
@@ -165,13 +172,195 @@ check_prerequisites() {
         log_error "Missing dependencies: ${missing_deps[*]}"
         echo
         echo "Please install the missing dependencies:"
-        echo "  macOS: brew install git docker docker-compose"
-        echo "  Ubuntu/Debian: apt-get install git docker.io docker-compose"
-        echo "  CentOS/RHEL: yum install git docker docker-compose"
+        echo "  macOS: brew install git docker docker-compose curl"
+        echo "  Ubuntu/Debian: apt-get install git docker.io docker-compose curl"
+        echo "  CentOS/RHEL: yum install git docker docker-compose curl"
         exit 1
     fi
     
     log_success "All prerequisites are installed"
+}
+
+# Check if Docker daemon is running
+check_docker_running() {
+    log_info "Checking Docker daemon status..."
+    
+    if ! docker info &> /dev/null; then
+        log_error "Docker daemon is not running"
+        echo
+        echo "Please start Docker:"
+        echo "  macOS: Start Docker Desktop application"
+        echo "  Linux: sudo systemctl start docker"
+        echo "  Windows: Start Docker Desktop application"
+        exit 1
+    fi
+    
+    log_success "Docker daemon is running"
+}
+
+# Check system resources
+check_system_resources() {
+    log_info "Checking system resources..."
+    
+    # Check available disk space (need at least 2GB)
+    local available_space
+    if command -v df &> /dev/null; then
+        available_space=$(df "$SCRIPT_DIR" | awk 'NR==2 {print $4}')
+        local min_space_kb=$((2 * 1024 * 1024)) # 2GB in KB
+        
+        if [ "$available_space" -lt "$min_space_kb" ]; then
+            log_warning "Low disk space detected. Available: $((available_space / 1024))MB, Recommended: 2GB+"
+        fi
+    fi
+    
+    # Check if required ports are available
+    local required_ports=(3000 5000 5432 5433 8080 8089 9090)
+    local ports_in_use=()
+    
+    for port in "${required_ports[@]}"; do
+        if command -v lsof &> /dev/null; then
+            if lsof -i ":$port" &> /dev/null; then
+                ports_in_use+=("$port")
+            fi
+        elif command -v netstat &> /dev/null; then
+            if netstat -ln | grep ":$port " &> /dev/null; then
+                ports_in_use+=("$port")
+            fi
+        fi
+    done
+    
+    if [ ${#ports_in_use[@]} -ne 0 ]; then
+        log_warning "The following ports are already in use: ${ports_in_use[*]}"
+        log_warning "This may cause conflicts when starting services"
+        echo "Required ports: 3000 (Grafana), 5000 (Flask), 5432 (Target DB), 5433 (Sink DB),"
+        echo "               8080 (PGWatch), 8089 (PGWatch Prometheus), 9090 (Prometheus)"
+    fi
+    
+    log_success "System resources check completed"
+}
+
+# Check if project is properly initialized
+check_project_setup() {
+    if ! detect_project_dir; then
+        log_error "Project files not found in current directory"
+        log_info "Please run one of the following:"
+        echo "  • $0 quickstart    # Complete setup (recommended)"
+        echo "  • $0 install       # Setup project only"
+        exit 1
+    fi
+    
+    # Check if essential files exist
+    local required_files=("docker-compose.yml" "instances.yml")
+    local missing_files=()
+    
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$SCRIPT_DIR/$file" ]; then
+            missing_files+=("$file")
+        fi
+    done
+    
+    if [ ${#missing_files[@]} -ne 0 ]; then
+        log_error "Missing required files: ${missing_files[*]}"
+        log_info "Please run: $0 install"
+        exit 1
+    fi
+}
+
+# Check if services are running (for commands that require them)
+check_services_running() {
+    log_info "Checking if monitoring services are running..."
+    
+    local compose_cmd=$(get_compose_cmd)
+    cd "$SCRIPT_DIR"
+    
+    # Get list of running containers
+    local running_services
+    running_services=$($compose_cmd -f "$COMPOSE_FILE" ps --services --filter "status=running" 2>/dev/null)
+    
+    if [ -z "$running_services" ]; then
+        log_error "No monitoring services are currently running"
+        log_info "Please start services first: $0 start"
+        exit 1
+    fi
+    
+    log_success "Monitoring services are running"
+}
+
+# Comprehensive precheck for installation commands
+precheck_for_install() {
+    check_prerequisites
+    check_docker_running
+    check_system_resources
+}
+
+# Precheck for service management commands
+precheck_for_services() {
+    check_prerequisites
+    check_docker_running
+    check_project_setup
+}
+
+# Precheck for commands that need running services
+precheck_for_running_services() {
+    check_prerequisites
+    check_docker_running
+    check_project_setup
+    check_services_running
+}
+
+# System readiness check command
+system_check() {
+    print_banner
+    log_info "Performing comprehensive system check..."
+    echo
+    
+    # Basic prerequisites
+    check_prerequisites
+    check_docker_running
+    check_system_resources
+    
+    # Project setup (optional)
+    echo
+    log_info "Checking project setup..."
+    if detect_project_dir; then
+        log_success "Project files found in: $SCRIPT_DIR"
+        check_project_setup
+        
+        # Check if services are running (optional)
+        echo
+        log_info "Checking service status..."
+        local compose_cmd=$(get_compose_cmd)
+        cd "$SCRIPT_DIR"
+        
+        local running_services
+        running_services=$($compose_cmd -f "$COMPOSE_FILE" ps --services --filter "status=running" 2>/dev/null)
+        
+        if [ -n "$running_services" ]; then
+            log_success "Services are running:"
+            echo "$running_services" | sed 's/^/  ✅ /'
+        else
+            log_info "No services are currently running"
+            log_info "Use '$0 start' to start monitoring services"
+        fi
+        
+        # Show API key status
+        echo
+        log_info "API key configuration:"
+        if [ -f "$SCRIPT_DIR/.pgwatch-config" ] && grep -q "^api_key=" "$SCRIPT_DIR/.pgwatch-config"; then
+            local api_key=$(grep "^api_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+            local masked_key="${api_key:0:4}$( printf '%*s' $((${#api_key} - 8)) '' | tr ' ' '*' )${api_key: -4}"
+            log_success "API key configured: $masked_key"
+        else
+            log_info "No API key configured (reports will be local only)"
+        fi
+        
+    else
+        log_warning "Project not found in current directory"
+        log_info "Run '$0 quickstart' to set up the monitoring system"
+    fi
+    
+    echo
+    log_success "System check completed!"
 }
 
 # Check if demo mode is enabled
@@ -252,9 +441,9 @@ detect_project_dir() {
         return 0
     fi
     
-    # Check if postgres_ai directory exists in current location
-    if [ -d "$SCRIPT_DIR/postgres_ai" ] && [ -f "$SCRIPT_DIR/postgres_ai/docker-compose.yml" ]; then
-        SCRIPT_DIR="$SCRIPT_DIR/postgres_ai"
+    # Check if postgres_ai_configs directory exists in current location
+    if [ -d "$SCRIPT_DIR/postgres_ai_configs" ] && [ -f "$SCRIPT_DIR/postgres_ai_configs/docker-compose.yml" ]; then
+        SCRIPT_DIR="$SCRIPT_DIR/postgres_ai_configs"
         COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
         PYTHON_REQUIREMENTS="$SCRIPT_DIR/requirements.txt"
         INSTANCES_FILE="$SCRIPT_DIR/instances.yml"
@@ -273,7 +462,7 @@ install_dependencies() {
 # Clone repository if needed
 clone_repository() {
     local repo_url="https://gitlab.com/postgres-ai/postgres_ai.git"
-    local project_dir="postgres_ai"
+    local project_dir="postgres_ai_configs"
     
     # Check if we're already in the project directory
     if [ -f "$SCRIPT_DIR/docker-compose.yml" ] && [ -f "$SCRIPT_DIR/instances.yml" ]; then
@@ -295,7 +484,7 @@ clone_repository() {
         fi
     fi
     
-    log_info "Cloning PostgreSQL AI project from GitLab..."
+    log_info "Cloning Postgres AI project from GitLab..."
     if git clone "$repo_url" "$project_dir"; then
         log_success "Repository cloned successfully"
         cd "$project_dir" || exit 1
@@ -321,9 +510,13 @@ install_project() {
     fi
     
     print_banner
-    log_info "Setting up PostgreSQL AI monitoring project..."
+    log_info "Setting up Postgres AI monitoring project..."
     
-    check_prerequisites
+    # Only run full precheck if not called from quickstart (to avoid duplicate checks)
+    if [ "${CALLED_FROM_QUICKSTART:-false}" != "true" ]; then
+        precheck_for_install
+    fi
+    
     clone_repository
     install_dependencies
     
@@ -355,10 +548,7 @@ install_project() {
         echo "  2. Start monitoring services: $0 start"
     fi
     
-    echo
-    log_info "To use the CLI from the project directory:"
-    echo "  cd $(basename "$SCRIPT_DIR")"
-    echo "  ../postgres-ai-cli start"
+
 }
 
 # Quickstart - unified setup process
@@ -379,18 +569,22 @@ quickstart_setup() {
     done
     
     print_banner
-    log_info "PostgreSQL AI Monitoring - Quickstart Setup"
+    log_info "Postgres AI Monitoring - Quickstart Setup"
     log_info "This will install, configure, and start the monitoring system"
     echo
     
+    # Perform comprehensive prechecks first
+    log_info "Performing system prechecks..."
+    precheck_for_install
+    
     # Step 1: Install project
-    log_info "Step 1: Installing PostgreSQL AI monitoring project..."
-    install_project "$1"
+    log_info "Step 1: Installing Postgres AI monitoring project..."
+    CALLED_FROM_QUICKSTART=true install_project "$1"
     
     # Step 2: Add API key (optional)
     echo
-    log_info "Step 2: PostgreSQL AI API Configuration (Optional)"
-    log_info "An API key enables automatic upload of PostgreSQL reports to PostgreSQL AI"
+    log_info "Step 2: Postgres AI API Configuration (Optional)"
+    log_info "An API key enables automatic upload of PostgreSQL reports to Postgres AI"
     
     if [ -n "$api_key" ]; then
         # API key provided via command line
@@ -398,11 +592,11 @@ quickstart_setup() {
         add_api_key "$api_key"
     else
         # Interactive API key setup
-        read -p "Do you have a PostgreSQL AI API key? (y/N): " -n 1 -r
+        read -p "Do you have a Postgres AI API key? (y/N): " -n 1 -r
         echo
         
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            read -p "Enter your PostgreSQL AI API key: " input_api_key
+            read -p "Enter your Postgres AI API key: " input_api_key
             if [ -n "$input_api_key" ]; then
                 add_api_key "$input_api_key"
             else
@@ -507,20 +701,17 @@ get_compose_cmd() {
 
 # Start services
 start_services() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_services
     
     local compose_cmd=$(get_compose_cmd)
     
     cd "$SCRIPT_DIR"
     
     if is_demo_mode; then
-        log_info "Starting PostgreSQL AI services (demo mode - including target database)..."
+        log_info "Starting Postgres AI services (demo mode - including target database)..."
         $compose_cmd -f "$COMPOSE_FILE" up -d
     else
-        log_info "Starting PostgreSQL AI monitoring services (production mode)..."
+        log_info "Starting Postgres AI monitoring services (production mode)..."
         log_info "Target demo database not included - add your own PostgreSQL instances to monitor"
         # Start all services except target-db
         $compose_cmd -f "$COMPOSE_FILE" up -d sources-generator sink-postgres sink-prometheus pgwatch-postgres pgwatch-prometheus grafana flask-backend
@@ -535,13 +726,10 @@ start_services() {
 
 # Stop services
 stop_services() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_services
     
     local compose_cmd=$(get_compose_cmd)
-    log_info "Stopping PostgreSQL AI services..."
+    log_info "Stopping Postgres AI services..."
     
     cd "$SCRIPT_DIR"
     $compose_cmd -f "$COMPOSE_FILE" down
@@ -558,13 +746,10 @@ restart_services() {
 
 # Show service status
 show_status() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_services
     
     local compose_cmd=$(get_compose_cmd)
-    log_info "PostgreSQL AI Monitoring service status:"
+    log_info "Postgres AI Monitoring service status:"
     echo
     
     cd "$SCRIPT_DIR"
@@ -573,10 +758,7 @@ show_status() {
 
 # Show logs
 show_logs() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_services
     
     local compose_cmd=$(get_compose_cmd)
     local service="$1"
@@ -593,10 +775,7 @@ show_logs() {
 
 # Health check
 health_check() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_running_services
     
     log_info "Performing health checks..."
     
@@ -637,10 +816,7 @@ health_check() {
 
 # List all configured instances
 list_instances() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    check_project_setup
     
     if [ ! -f "$INSTANCES_FILE" ]; then
         log_warning "No instances file found at $INSTANCES_FILE"
@@ -730,10 +906,7 @@ parse_connection_string() {
 
 # Add a new PostgreSQL instance
 add_instance() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    check_project_setup
     
     local conn_str="$1"
     local instance_name="$2"
@@ -860,10 +1033,7 @@ add_instance() {
 
 # Remove a PostgreSQL instance
 remove_instance() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    check_project_setup
     
     local instance_name="$1"
     
@@ -911,10 +1081,7 @@ remove_instance() {
 
 # Test connection to a PostgreSQL instance
 test_instance() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    check_project_setup
     
     local instance_name="$1"
     
@@ -974,10 +1141,7 @@ test_instance() {
 
 # Show configuration
 show_config() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    check_project_setup
     
     log_info "Current configuration:"
     echo
@@ -996,10 +1160,7 @@ show_config() {
 
 # Update configuration
 update_config() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_services
     
     log_info "Updating configuration files..."
     
@@ -1015,10 +1176,7 @@ update_config() {
 
 # Reset environment
 reset_environment() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_services
     
     log_warning "This will stop all services and remove all data!"
     read -p "Are you sure? (y/N): " -n 1 -r
@@ -1057,10 +1215,7 @@ cleanup() {
 
 # Open shell in container
 open_shell() {
-    if ! detect_project_dir; then
-        log_error "Project files not found. Please run: $0 install"
-        exit 1
-    fi
+    precheck_for_running_services
     
     local service="$1"
     
@@ -1100,7 +1255,7 @@ show_access_info() {
     
     # Show reports information
     if [ -f "$SCRIPT_DIR/.pgwatch-config" ] && grep -q "^api_key=" "$SCRIPT_DIR/.pgwatch-config"; then
-        log_info "PostgreSQL reports will be generated every 24 hours and uploaded to PostgreSQL AI"
+        log_info "PostgreSQL reports will be generated every 24 hours and uploaded to Postgres AI"
         local api_key=$(grep "^api_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
         local masked_key="${api_key:0:4}$( printf '%*s' $((${#api_key} - 8)) '' | tr ' ' '*' )${api_key: -4}"
         echo "  API Key:            $masked_key"
@@ -1158,6 +1313,9 @@ main() {
             ;;
         "shell")
             open_shell "$2"
+            ;;
+        "check")
+            system_check
             ;;
         "list-instances")
             list_instances

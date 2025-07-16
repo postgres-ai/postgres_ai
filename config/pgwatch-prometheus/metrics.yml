@@ -1496,56 +1496,56 @@ metrics:
     sqls:
       11: |
         with fk_indexes as (
-        select
-          schemaname as schema_name,
-          (indexrelid::regclass)::text as index_name,
-          (relid::regclass)::text as table_name,
-          (confrelid::regclass)::text as fk_table_ref,
-          array_to_string(indclass, ', ') as opclasses
-        from
-          pg_stat_user_indexes
-        join pg_index using (indexrelid)
-        left join pg_constraint
-          on array_to_string(indkey, ',') = array_to_string(conkey, ',')
-            and schemaname = (connamespace::regnamespace)::text
-            and conrelid = relid
-            and contype = 'f'
-        where idx_scan = 0
-          and indisunique is false
-          and conkey is not null --conkey is not null then true else false end as is_fk_idx
-      ), data as (
-        select
-          pci.relname as index_name,
-          pn.nspname as schema_name,
-          pct.relname as table_name,
-          quote_ident(pn.nspname) as tag_schema_name,
-          quote_ident(pci.relname) as tag_index_name,
-          quote_ident(pct.relname) as tag_table_name,
-          coalesce(nullif(quote_ident(pn.nspname), 'public') || '.', '') || quote_ident(pct.relname) as tag_relation_name,
-          pg_relation_size(pidx.indexrelid) index_size_bytes,
-          ((
-            select count(1)
-            from fk_indexes fi
-            where
-              fi.fk_table_ref = pct.relname
-              and fi.opclasses like (array_to_string(pidx.indclass, ', ') || '%')
-          ) > 0)::int as supports_fk
-        from pg_index pidx
-        join pg_class as pci on pci.oid = pidx.indexrelid
-        join pg_class as pct on pct.oid = pidx.indrelid
-        left join pg_namespace pn on pn.oid = pct.relnamespace
-        where pidx.indisvalid = false
-      ), data_total as (
           select
-            sum(index_size_bytes) as index_size_bytes_sum
+            schemaname as schema_name,
+            (indexrelid::regclass)::text as index_name,
+            (relid::regclass)::text as table_name,
+            (confrelid::regclass)::text as fk_table_ref,
+            array_to_string(indclass, ', ') as opclasses
+          from
+            pg_stat_user_indexes
+          join pg_index using (indexrelid)
+          left join pg_constraint
+            on array_to_string(indkey, ',') = array_to_string(conkey, ',')
+              and schemaname = (connamespace::regnamespace)::text
+              and conrelid = relid
+              and contype = 'f'
+          where idx_scan = 0
+            and indisunique is false
+            and conkey is not null --conkey is not null then true else false end as is_fk_idx
+        ), data as (
+          select
+            pci.relname as index_name,
+            pn.nspname as schema_name,
+            pct.relname as table_name,
+            quote_ident(pn.nspname) as tag_schema_name,
+            quote_ident(pci.relname) as tag_index_name,
+            quote_ident(pct.relname) as tag_table_name,
+            coalesce(nullif(quote_ident(pn.nspname), 'public') || '.', '') || quote_ident(pct.relname) as tag_relation_name,
+            pg_relation_size(pidx.indexrelid) index_size_bytes,
+            ((
+              select count(1)
+              from fk_indexes fi
+              where
+                fi.fk_table_ref = pct.relname
+                and fi.opclasses like (array_to_string(pidx.indclass, ', ') || '%')
+            ) > 0)::int as supports_fk
+          from pg_index pidx
+          join pg_class as pci on pci.oid = pidx.indexrelid
+          join pg_class as pct on pct.oid = pidx.indrelid
+          left join pg_namespace pn on pn.oid = pct.relnamespace
+          where pidx.indisvalid = false
+        ), data_total as (
+            select
+              sum(index_size_bytes) as index_size_bytes_sum
+            from data
+        ), num_data as (
+          select
+            row_number() over () num,
+            data.*
           from data
-      ), num_data as (
-        select
-          row_number() over () num,
-          data.*
-        from data
-      )
-      select * from num_data;
+        )
+        select * from num_data;
     gauges:
       - '*'
 
