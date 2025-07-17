@@ -25,7 +25,8 @@ grant select on pg_stat_user_tables to postgres_ai_mon;
 
 ```bash
 # Download the CLI
-curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai && chmod +x postgres_ai
+curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai \
+  && chmod +x postgres_ai
 ```
 
 Now, start it and wait for a few minutes. Two optional adjustments:
