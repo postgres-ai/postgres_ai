@@ -4,12 +4,35 @@ A complete PostgreSQL monitoring solution with automated performance analysis an
 
 ## 🚀 Quick Start
 
+Create a new DB user in database to be monitored (skip this if you want just to check out `postgres_ai` monitoring with a synthetic `demo` database):
+```sql
+-- Create a user for Postgres AI monitoring
+create user postgres_ai_mon with password '<password>';
+
+grant connect on database <database_name> to postgres_ai_mon;
+
+grant pg_monitor to postgres_ai_mon;
+grant usage on schema public to postgres_ai_mon;
+grant select on all tables in schema public to postgres_ai_mon; -- TEMPORARY; TODO: get rid of this
+grant select on all sequences in schema public to postgres_ai_mon;
+
+grant select on pg_stat_statements to postgres_ai_mon;
+grant select on pg_stat_database to postgres_ai_mon;
+grant select on pg_stat_user_tables to postgres_ai_mon;
+```
+
 **One command setup:**
 
 ```bash
 # Download the CLI
 curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai && chmod +x postgres_ai
+```
 
+Now, start it and wait for a few minutes. Two optional adjustments:
+- remove `--demo` unless you want to see it in action without monitoring an actual Postgres DB (this option creates a demo DB)
+- get an Postgres AI access token for your organization at https://console.postgres.ai (`Your org name → Manage → Access tokens`)
+
+```bash
 # Complete setup with demo database
 ./postgres_ai quickstart --demo
 
