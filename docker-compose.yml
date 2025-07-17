@@ -106,6 +106,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./config/grafana/provisioning/grafana.ini:/etc/grafana/grafana.ini
     depends_on:
       - sink-postgres
       - sink-prometheus
