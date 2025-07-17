@@ -2,7 +2,7 @@
 
 A complete PostgreSQL monitoring solution with automated performance analysis and reporting.
 
-## 🚀 Quick Start
+## 🚀 Quick start
 
 Create a new DB user in database to be monitored (skip this if you want just to check out `postgres_ai` monitoring with a synthetic `demo` database):
 ```sql
@@ -42,7 +42,7 @@ Now, start it and wait for a few minutes. Two optional adjustments:
 
 That's it! Everything is installed, configured, and running.
 
-## 📊 What You Get
+## 📊 What you get
 
 - **Grafana Dashboards** - Visual monitoring at http://localhost:3000
 - **PostgreSQL Monitoring** - PGWatch with comprehensive metrics
@@ -50,15 +50,15 @@ That's it! Everything is installed, configured, and running.
 - **API Integration** - Automatic upload to PostgreSQL AI
 - **Demo Database** - Ready-to-use test environment
 
-## 🎯 Use Cases
+## 🎯 Use cases
 
-**For Developers:**
+**For developers:**
 ```bash
 ./postgres_ai quickstart --demo
 ```
 Get a complete monitoring setup with demo data in under 2 minutes.
 
-**For Production:**
+**For production:**
 ```bash
 ./postgres_ai quickstart --api-key=your_key
 # Then add your databases
@@ -71,7 +71,7 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 ```
 Fully automated setup with no interactive prompts.
 
-## 🔧 Management Commands
+## 🔧 Management commands
 
 ```bash
 # Instance management
@@ -88,7 +88,7 @@ Fully automated setup with no interactive prompts.
 ./postgres_ai health
 ```
 
-## 🌐 Access Points
+## 🌐 Access points
 
 After running quickstart:
 
@@ -103,6 +103,5 @@ After running quickstart:
 ./postgres_ai help
 ```
 
-## 🔑 API Key
-
-Get your key at [PostgreSQL AI](https://postgres.ai) for automated report uploads and advanced analysis.
+## 🔑 Postgres AI access token
+Get your key at [Postgres AI](https://postgres.ai) for automated report uploads and advanced analysis.
