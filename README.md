@@ -93,7 +93,9 @@ Fully automated setup with no interactive prompts.
 
 After running quickstart:
 
-- **Grafana**: http://localhost:3000 (admin/admin)
+- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (demouser/demopwd)
+
+Technical URLs (for advanced users):
 - **Demo DB**: postgresql://postgres:postgres@localhost:5432/target_database
 - **Monitoring**: http://localhost:8080 (PGWatch)
 - **Metrics**: http://localhost:9090 (Prometheus)

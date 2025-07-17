@@ -140,13 +140,15 @@ show_help() {
     echo "  target-db           Demo PostgreSQL database (--demo mode only)"
     echo
     echo "ACCESS URLS:"
-    echo "  Grafana:           http://localhost:3000 (admin/admin)"
-    echo "  PGWatch Postgres:  http://localhost:8080"
-    echo "  PGWatch Prometheus: http://localhost:8089"
-    echo "  Prometheus:        http://localhost:9090"
-    echo "  Flask API:         http://localhost:5000"
-    echo "  Sink DB:           postgresql://postgres:postgres@localhost:5433/postgres"
-    echo "  Demo DB:           postgresql://postgres:postgres@localhost:5432/target_database (--demo mode only)"
+    echo "  🚀 MAIN: Grafana Dashboard: http://localhost:3000 (demouser/demopwd)"
+    echo ""
+    echo "  Technical URLs (for advanced users):"
+    echo "    PGWatch Postgres:  http://localhost:8080"
+    echo "    PGWatch Prometheus: http://localhost:8089"
+    echo "    Prometheus:        http://localhost:9090"
+    echo "    Flask API:         http://localhost:5000"
+    echo "    Sink DB:           postgresql://postgres:postgres@localhost:5433/postgres"
+    echo "    Demo DB:           postgresql://postgres:postgres@localhost:5432/target_database (--demo mode only)"
 }
 
 # Check basic prerequisites (software installation)
@@ -1474,8 +1476,7 @@ open_shell() {
 # Show access information
 show_access_info() {
     echo
-    log_info "Access URLs:"
-    echo "  Grafana:            http://localhost:3000 (admin/admin)"
+    log_info "Technical service URLs (for advanced users):"
     echo "  PGWatch Postgres:   http://localhost:8080"
     echo "  PGWatch Prometheus: http://localhost:8089"
     echo "  Prometheus:         http://localhost:9090"
@@ -1505,6 +1506,14 @@ show_access_info() {
         log_info "Production mode - no demo database running"
         log_info "Use '$0 list-instances' to see your configured PostgreSQL instances"
     fi
+    
+    # Highlight the main access point
+    echo
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${GREEN}🚀 MAIN ACCESS POINT - Start here:${NC}"
+    echo -e "${GREEN}   Grafana Dashboard: http://localhost:3000${NC}"
+    echo -e "${GREEN}   Login: demouser / demopwd${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
 # Main command handling
