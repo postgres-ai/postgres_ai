@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 11,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -688,8 +688,10 @@
         "allowCustomValue": false,
         "current": {
           "text": [
+            "CPU*"
           ],
           "value": [
+            "CPU*"
           ]
         },
         "definition": "label_values(pgwatch_wait_events_total,wait_event_type)",
@@ -711,8 +713,10 @@
         "allowCustomValue": false,
         "current": {
           "text": [
+            "CPU*"
           ],
           "value": [
+            "CPU*"
           ]
         },
         "definition": "label_values(pgwatch_wait_events_total{wait_event_type=~\"$wait_event_type\"},wait_event)",
@@ -767,8 +771,8 @@
       },
       {
         "current": {
-          "text": "target_database",
-          "value": "target_database"
+          "text": "postgres",
+          "value": "postgres"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -791,7 +795,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "4. Wait sampling dashboard",
+      "title": "04. Wait event analysis (Active Session History)",
   "uid": "a222b233-acef-4bac-a451-1591023e4d4f",
-  "version": 13
+  "version": 2
 }

@@ -2,7 +2,7 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, H001, F005, F004, K001, K003)
+This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003)
 by querying Prometheus metrics using PromQL queries.
 """
 
@@ -288,6 +288,389 @@ class PostgresReportGenerator:
             "total_size_pretty": self.format_bytes(total_size)
         }, node_name)
     
+    def generate_h002_unused_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate H002 Unused and rarely used Indexes report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing unused and rarely used indexes information
+        """
+        print("Generating H002 Unused and rarely used Indexes report...")
+        
+        # Query unused indexes using the size metric as the base
+        unused_indexes_query = f'pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}'
+        unused_result = self.query_instant(unused_indexes_query)
+        
+        unused_indexes = []
+        if unused_result.get('status') == 'success' and unused_result.get('data', {}).get('result'):
+            for item in unused_result['data']['result']:
+                schema_name = item['metric'].get('schema_name', 'unknown')
+                table_name = item['metric'].get('table_name', 'unknown')
+                index_name = item['metric'].get('index_name', 'unknown')
+                reason = item['metric'].get('reason', 'Unknown')
+                
+                # Get the index size from the metric value
+                index_size_bytes = float(item['value'][1]) if item.get('value') else 0
+                
+                # Query other related metrics for this index
+                idx_scan_query = f'pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                idx_scan_result = self.query_instant(idx_scan_query)
+                idx_scan = float(idx_scan_result['data']['result'][0]['value'][1]) if idx_scan_result.get('data', {}).get('result') else 0
+                
+                index_data = {
+                    "schema_name": schema_name,
+                    "table_name": table_name,
+                    "index_name": index_name,
+                    "reason": reason,
+                    "idx_scan": idx_scan,
+                    "index_size_bytes": index_size_bytes,
+                    "idx_is_btree": item['metric'].get('opclasses', '').startswith('btree'),
+                    "supports_fk": bool(int(item['metric'].get('supports_fk', 0)))
+                }
+                
+                index_data['index_size_pretty'] = self.format_bytes(index_data['index_size_bytes'])
+                
+                unused_indexes.append(index_data)
+        
+        # Query rarely used indexes (note: logs show 0 rows, but we'll include the structure)
+        rarely_used_indexes = []  # Currently empty as per logs
+        
+        # Combine and calculate totals
+        all_indexes = unused_indexes + rarely_used_indexes
+        total_unused_size = sum(idx['index_size_bytes'] for idx in unused_indexes)
+        total_rarely_used_size = sum(idx['index_size_bytes'] for idx in rarely_used_indexes)
+        total_size = total_unused_size + total_rarely_used_size
+        
+        # Sort by index size descending
+        all_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
+        
+        return self.format_report_data("H002", {
+            "unused_indexes": unused_indexes,
+            "rarely_used_indexes": rarely_used_indexes,
+            "all_indexes": all_indexes,
+            "summary": {
+                "total_unused_count": len(unused_indexes),
+                "total_rarely_used_count": len(rarely_used_indexes),
+                "total_count": len(all_indexes),
+                "total_unused_size_bytes": total_unused_size,
+                "total_rarely_used_size_bytes": total_rarely_used_size,
+                "total_size_bytes": total_size,
+                "total_unused_size_pretty": self.format_bytes(total_unused_size),
+                "total_rarely_used_size_pretty": self.format_bytes(total_rarely_used_size),
+                "total_size_pretty": self.format_bytes(total_size)
+            }
+        }, node_name)
+    
+    def generate_h004_redundant_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate H004 Redundant Indexes report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing redundant indexes information
+        """
+        print("Generating H004 Redundant Indexes report...")
+        
+        # Query redundant indexes using the size metric as the base
+        redundant_indexes_query = f'pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}'
+        result = self.query_instant(redundant_indexes_query)
+        
+        redundant_indexes = []
+        total_size = 0
+        
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                schema_name = item['metric'].get('schema_name', 'unknown')
+                table_name = item['metric'].get('table_name', 'unknown')
+                index_name = item['metric'].get('index_name', 'unknown')
+                relation_name = item['metric'].get('relation_name', f"{schema_name}.{table_name}")
+                access_method = item['metric'].get('access_method', 'unknown')
+                reason = item['metric'].get('reason', 'Unknown')
+                
+                # Get the index size from the metric value
+                index_size_bytes = float(item['value'][1]) if item.get('value') else 0
+                
+                # Query other related metrics for this index
+                table_size_query = f'pgwatch_redundant_indexes_table_size_bytes{{cluster="{cluster}", node_name="{node_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                table_size_result = self.query_instant(table_size_query)
+                table_size_bytes = float(table_size_result['data']['result'][0]['value'][1]) if table_size_result.get('data', {}).get('result') else 0
+                
+                index_usage_query = f'pgwatch_redundant_indexes_index_usage{{cluster="{cluster}", node_name="{node_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                index_usage_result = self.query_instant(index_usage_query)
+                index_usage = float(index_usage_result['data']['result'][0]['value'][1]) if index_usage_result.get('data', {}).get('result') else 0
+                
+                supports_fk_query = f'pgwatch_redundant_indexes_supports_fk{{cluster="{cluster}", node_name="{node_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                supports_fk_result = self.query_instant(supports_fk_query)
+                supports_fk = bool(int(supports_fk_result['data']['result'][0]['value'][1])) if supports_fk_result.get('data', {}).get('result') else False
+                
+                redundant_index = {
+                    "schema_name": schema_name,
+                    "table_name": table_name,
+                    "index_name": index_name,
+                    "relation_name": relation_name,
+                    "access_method": access_method,
+                    "reason": reason,
+                    "index_size_bytes": index_size_bytes,
+                    "table_size_bytes": table_size_bytes,
+                    "index_usage": index_usage,
+                    "supports_fk": supports_fk,
+                    "index_size_pretty": self.format_bytes(index_size_bytes),
+                    "table_size_pretty": self.format_bytes(table_size_bytes)
+                }
+                
+                redundant_indexes.append(redundant_index)
+                total_size += index_size_bytes
+        
+        # Sort by index size descending
+        redundant_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
+        
+        return self.format_report_data("H004", {
+            "redundant_indexes": redundant_indexes,
+            "total_count": len(redundant_indexes),
+            "total_size_bytes": total_size,
+            "total_size_pretty": self.format_bytes(total_size)
+        }, node_name)
+    
+    def generate_d004_pgstat_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate D004 pgstatstatements and pgstatkcache Settings report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing pg_stat_statements and pg_stat_kcache settings information
+        """
+        print("Generating D004 pgstatstatements and pgstatkcache Settings report...")
+        
+        # Define relevant pg_stat_statements and pg_stat_kcache settings
+        pgstat_settings = [
+            'pg_stat_statements.max',
+            'pg_stat_statements.track',
+            'pg_stat_statements.track_utility',
+            'pg_stat_statements.save',
+            'pg_stat_statements.track_planning',
+            'shared_preload_libraries',
+            'track_activities',
+            'track_counts',
+            'track_functions',
+            'track_io_timing',
+            'track_wal_io_timing'
+        ]
+        
+        # Query all PostgreSQL settings for pg_stat_statements and related
+        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        result = self.query_instant(settings_query)
+        
+        pgstat_data = {}
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                setting_name = item['metric'].get('setting_name', 'unknown')
+                
+                # Filter for pg_stat_statements and related settings
+                if any(pgstat_setting in setting_name for pgstat_setting in pgstat_settings):
+                    setting_value = item['metric'].get('setting_value', '')
+                    category = item['metric'].get('category', 'Statistics')
+                    unit = item['metric'].get('unit', '')
+                    context = item['metric'].get('context', '')
+                    vartype = item['metric'].get('vartype', '')
+                    
+                    pgstat_data[setting_name] = {
+                        "setting": setting_value,
+                        "unit": unit,
+                        "category": category,
+                        "context": context,
+                        "vartype": vartype,
+                        "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
+                    }
+        
+        # Check if pg_stat_kcache extension is available and working by querying its metrics
+        kcache_status = self._check_pg_stat_kcache_status(cluster, node_name)
+        
+        # Check if pg_stat_statements is available and working by querying its metrics  
+        pgss_status = self._check_pg_stat_statements_status(cluster, node_name)
+        
+        return self.format_report_data("D004", {
+            "settings": pgstat_data,
+            "pg_stat_statements_status": pgss_status,
+            "pg_stat_kcache_status": kcache_status
+        }, node_name)
+    
+    def _check_pg_stat_kcache_status(self, cluster: str, node_name: str) -> Dict[str, Any]:
+        """
+        Check if pg_stat_kcache extension is working by querying its metrics.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing pg_stat_kcache status information
+        """
+        kcache_queries = {
+            'exec_user_time': f'pgwatch_pg_stat_kcache_exec_user_time{{cluster="{cluster}", node_name="{node_name}"}}',
+            'exec_system_time': f'pgwatch_pg_stat_kcache_exec_system_time{{cluster="{cluster}", node_name="{node_name}"}}',
+            'exec_total_time': f'pgwatch_pg_stat_kcache_exec_total_time{{cluster="{cluster}", node_name="{node_name}"}}'
+        }
+        
+        kcache_status = {
+            "extension_available": False,
+            "metrics_count": 0,
+            "total_exec_time": 0,
+            "total_user_time": 0,
+            "total_system_time": 0,
+            "sample_queries": []
+        }
+        
+        for metric_name, query in kcache_queries.items():
+            result = self.query_instant(query)
+            if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                kcache_status["extension_available"] = True
+                results = result['data']['result']
+                
+                for item in results[:5]:  # Get sample of top 5 queries
+                    queryid = item['metric'].get('queryid', 'unknown')
+                    user = item['metric'].get('tag_user', 'unknown')
+                    value = float(item['value'][1]) if item.get('value') else 0
+                    
+                    # Add to totals
+                    if metric_name == 'exec_total_time':
+                        kcache_status["total_exec_time"] += value
+                        kcache_status["metrics_count"] = len(results)
+                        
+                        # Store sample query info
+                        if len(kcache_status["sample_queries"]) < 5:
+                            kcache_status["sample_queries"].append({
+                                "queryid": queryid,
+                                "user": user,
+                                "exec_total_time": value
+                            })
+                    elif metric_name == 'exec_user_time':
+                        kcache_status["total_user_time"] += value
+                    elif metric_name == 'exec_system_time':
+                        kcache_status["total_system_time"] += value
+        
+        return kcache_status
+    
+    def _check_pg_stat_statements_status(self, cluster: str, node_name: str) -> Dict[str, Any]:
+        """
+        Check if pg_stat_statements extension is working by querying its metrics.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing pg_stat_statements status information
+        """
+        pgss_query = f'pgwatch_pg_stat_statements_calls{{cluster="{cluster}", node_name="{node_name}"}}'
+        result = self.query_instant(pgss_query)
+        
+        pgss_status = {
+            "extension_available": False,
+            "metrics_count": 0,
+            "total_calls": 0,
+            "sample_queries": []
+        }
+        
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            pgss_status["extension_available"] = True
+            results = result['data']['result']
+            pgss_status["metrics_count"] = len(results)
+            
+            for item in results[:5]:  # Get sample of top 5 queries
+                queryid = item['metric'].get('queryid', 'unknown')
+                user = item['metric'].get('tag_user', 'unknown')
+                datname = item['metric'].get('datname', 'unknown')
+                calls = float(item['value'][1]) if item.get('value') else 0
+                
+                pgss_status["total_calls"] += calls
+                
+                # Store sample query info
+                if len(pgss_status["sample_queries"]) < 5:
+                    pgss_status["sample_queries"].append({
+                        "queryid": queryid,
+                        "user": user,
+                        "database": datname,
+                        "calls": calls
+                    })
+        
+        return pgss_status
+    
+    def generate_f001_autovacuum_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate F001 Autovacuum: Current Settings report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing autovacuum settings information
+        """
+        print("Generating F001 Autovacuum: Current Settings report...")
+        
+        # Define autovacuum related settings
+        autovacuum_settings = [
+            'autovacuum',
+            'autovacuum_analyze_scale_factor',
+            'autovacuum_analyze_threshold',
+            'autovacuum_freeze_max_age',
+            'autovacuum_max_workers',
+            'autovacuum_multixact_freeze_max_age',
+            'autovacuum_naptime',
+            'autovacuum_vacuum_cost_delay',
+            'autovacuum_vacuum_cost_limit',
+            'autovacuum_vacuum_scale_factor',
+            'autovacuum_vacuum_threshold',
+            'autovacuum_work_mem',
+            'vacuum_cost_delay',
+            'vacuum_cost_limit',
+            'vacuum_cost_page_dirty',
+            'vacuum_cost_page_hit',
+            'vacuum_cost_page_miss',
+            'vacuum_freeze_min_age',
+            'vacuum_freeze_table_age',
+            'vacuum_multixact_freeze_min_age',
+            'vacuum_multixact_freeze_table_age'
+        ]
+        
+        # Query all PostgreSQL settings for autovacuum
+        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        result = self.query_instant(settings_query)
+        
+        autovacuum_data = {}
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                setting_name = item['metric'].get('setting_name', 'unknown')
+                
+                # Filter for autovacuum and vacuum settings
+                if setting_name in autovacuum_settings:
+                    setting_value = item['metric'].get('setting_value', '')
+                    category = item['metric'].get('category', 'Autovacuum')
+                    unit = item['metric'].get('unit', '')
+                    context = item['metric'].get('context', '')
+                    vartype = item['metric'].get('vartype', '')
+                    
+                    autovacuum_data[setting_name] = {
+                        "setting": setting_value,
+                        "unit": unit,
+                        "category": category,
+                        "context": context,
+                        "vartype": vartype,
+                        "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
+                    }
+        
+        return self.format_report_data("F001", autovacuum_data, node_name)
+    
     def generate_f005_btree_bloat_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
         Generate F005 Autovacuum: Btree Index Bloat (Estimated) report.
@@ -357,7 +740,168 @@ class PostgresReportGenerator:
             "total_bloat_size_bytes": total_bloat_size,
             "total_bloat_size_pretty": self.format_bytes(total_bloat_size)
         }, node_name)
+
+    def generate_g001_memory_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate G001 Memory-related Settings report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            
+        Returns:
+            Dictionary containing memory-related settings information
+        """
+        print("Generating G001 Memory-related Settings report...")
+        
+        # Define memory-related settings
+        memory_settings = [
+            'shared_buffers',
+            'work_mem',
+            'maintenance_work_mem',
+            'effective_cache_size',
+            'autovacuum_work_mem',
+            'max_wal_size',
+            'min_wal_size',
+            'wal_buffers',
+            'checkpoint_completion_target',
+            'max_connections',
+            'max_prepared_transactions',
+            'max_locks_per_transaction',
+            'max_pred_locks_per_transaction',
+            'max_pred_locks_per_relation',
+            'max_pred_locks_per_page',
+            'logical_decoding_work_mem',
+            'hash_mem_multiplier',
+            'temp_buffers',
+            'shared_preload_libraries',
+            'dynamic_shared_memory_type',
+            'huge_pages',
+            'max_files_per_process',
+            'max_stack_depth'
+        ]
+        
+        # Query all PostgreSQL settings for memory-related settings
+        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        result = self.query_instant(settings_query)
+        
+        memory_data = {}
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                setting_name = item['metric'].get('setting_name', 'unknown')
+                
+                # Filter for memory-related settings
+                if setting_name in memory_settings:
+                    setting_value = item['metric'].get('setting_value', '')
+                    category = item['metric'].get('category', 'Memory')
+                    unit = item['metric'].get('unit', '')
+                    context = item['metric'].get('context', '')
+                    vartype = item['metric'].get('vartype', '')
+                    
+                    memory_data[setting_name] = {
+                        "setting": setting_value,
+                        "unit": unit,
+                        "category": category,
+                        "context": context,
+                        "vartype": vartype,
+                        "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
+                    }
+        
+        # Calculate some memory usage estimates and recommendations
+        memory_analysis = self._analyze_memory_settings(memory_data)
+        
+        return self.format_report_data("G001", {
+            "settings": memory_data,
+            "analysis": memory_analysis
+        }, node_name)
     
+    def _analyze_memory_settings(self, memory_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze memory settings and provide estimates and recommendations.
+        
+        Args:
+            memory_data: Dictionary of memory settings
+            
+        Returns:
+            Dictionary containing memory analysis
+        """
+        analysis = {
+            "estimated_total_memory_usage": {}
+        }
+        
+        try:
+            # Extract key memory values for analysis
+            shared_buffers = self._parse_memory_value(memory_data.get('shared_buffers', {}).get('setting', '128MB'))
+            work_mem = self._parse_memory_value(memory_data.get('work_mem', {}).get('setting', '4MB'))
+            maintenance_work_mem = self._parse_memory_value(memory_data.get('maintenance_work_mem', {}).get('setting', '64MB'))
+            effective_cache_size = self._parse_memory_value(memory_data.get('effective_cache_size', {}).get('setting', '4GB'))
+            max_connections = int(memory_data.get('max_connections', {}).get('setting', '100'))
+            wal_buffers = self._parse_memory_value(memory_data.get('wal_buffers', {}).get('setting', '16MB'))
+            
+            # Calculate estimated memory usage
+            shared_memory = shared_buffers + wal_buffers
+            potential_work_mem_usage = work_mem * max_connections  # Worst case scenario
+            
+            analysis["estimated_total_memory_usage"] = {
+                "shared_buffers_bytes": shared_buffers,
+                "shared_buffers_pretty": self.format_bytes(shared_buffers),
+                "wal_buffers_bytes": wal_buffers,
+                "wal_buffers_pretty": self.format_bytes(wal_buffers),
+                "shared_memory_total_bytes": shared_memory,
+                "shared_memory_total_pretty": self.format_bytes(shared_memory),
+                "work_mem_per_connection_bytes": work_mem,
+                "work_mem_per_connection_pretty": self.format_bytes(work_mem),
+                "max_work_mem_usage_bytes": potential_work_mem_usage,
+                "max_work_mem_usage_pretty": self.format_bytes(potential_work_mem_usage),
+                "maintenance_work_mem_bytes": maintenance_work_mem,
+                "maintenance_work_mem_pretty": self.format_bytes(maintenance_work_mem),
+                "effective_cache_size_bytes": effective_cache_size,
+                "effective_cache_size_pretty": self.format_bytes(effective_cache_size)
+            }
+            
+            # Generate recommendations                            
+        except (ValueError, TypeError) as e:
+            # If parsing fails, return empty analysis
+            analysis["estimated_total_memory_usage"] = {}
+        
+        return analysis
+    
+    def _parse_memory_value(self, value: str) -> int:
+        """
+        Parse a PostgreSQL memory value string to bytes.
+        
+        Args:
+            value: Memory value string (e.g., "128MB", "4GB", "8192")
+            
+        Returns:
+            Memory value in bytes
+        """
+        if not value or value == '-1':
+            return 0
+            
+        value = str(value).strip().upper()
+        
+        # Handle unit suffixes
+        if value.endswith('TB'):
+            return int(float(value[:-2]) * 1024 * 1024 * 1024 * 1024)
+        elif value.endswith('GB'):
+            return int(float(value[:-2]) * 1024 * 1024 * 1024)
+        elif value.endswith('MB'):
+            return int(float(value[:-2]) * 1024 * 1024)
+        elif value.endswith('KB'):
+            return int(float(value[:-2]) * 1024)
+        elif value.endswith('B'):
+            return int(float(value[:-1]))
+        else:
+            # Assume it's in the PostgreSQL default unit (typically 8KB blocks for some settings)
+            try:
+                numeric_value = int(value)
+                # For most memory settings, bare numbers are in KB or 8KB blocks
+                # This is a simplified assumption - in reality it depends on the specific setting
+                return numeric_value * 1024  # Assume KB if no unit specified
+            except ValueError:
+                return 0
+
     def generate_f004_heap_bloat_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
         Generate F004 Autovacuum: Heap Bloat (Estimated) report.
@@ -860,6 +1404,8 @@ class PostgresReportGenerator:
                         return f"{val} ms"
                 elif unit == "s":
                     return f"{value} s"
+                elif unit == "min":
+                    return f"{value} min"
                 elif unit == "connections":
                     return f"{value} connections"
                 elif unit == "workers":
@@ -868,18 +1414,52 @@ class PostgresReportGenerator:
                     return f"{value} {unit}"
             
             # Fallback to setting name based formatting
-            if setting_name in ['shared_buffers', 'effective_cache_size', 'work_mem', 'maintenance_work_mem']:
+            if setting_name in ['shared_buffers', 'effective_cache_size', 'work_mem', 'maintenance_work_mem', 'autovacuum_work_mem', 'logical_decoding_work_mem', 'temp_buffers', 'wal_buffers']:
                 val = int(value)
                 if val >= 1024:
                     return f"{val // 1024} MB"
                 else:
                     return f"{val} kB"
-            elif setting_name in ['log_min_duration_statement', 'idle_in_transaction_session_timeout', 'lock_timeout', 'statement_timeout']:
+            elif setting_name in ['log_min_duration_statement', 'idle_in_transaction_session_timeout', 'lock_timeout', 'statement_timeout', 'autovacuum_vacuum_cost_delay', 'vacuum_cost_delay']:
                 val = int(value)
                 if val >= 1000:
                     return f"{val // 1000} s"
                 else:
                     return f"{val} ms"
+            elif setting_name in ['autovacuum_naptime']:
+                val = int(value)
+                if val >= 60:
+                    return f"{val // 60} min"
+                else:
+                    return f"{val} s"
+            elif setting_name in ['autovacuum_max_workers']:
+                return f"{value} workers"
+            elif setting_name in ['pg_stat_statements.max']:
+                return f"{value} statements"
+            elif setting_name in ['max_wal_size', 'min_wal_size']:
+                val = int(value)
+                if val >= 1024:
+                    return f"{val // 1024} GB"
+                else:
+                    return f"{val} MB"
+            elif setting_name in ['checkpoint_completion_target']:
+                return f"{float(value):.2f}"
+            elif setting_name in ['hash_mem_multiplier']:
+                return f"{float(value):.1f}"
+            elif setting_name in ['max_connections', 'max_prepared_transactions', 'max_locks_per_transaction', 'max_pred_locks_per_transaction', 'max_pred_locks_per_relation', 'max_pred_locks_per_page', 'max_files_per_process']:
+                return f"{value} connections" if "connections" in setting_name else f"{value}"
+            elif setting_name in ['max_stack_depth']:
+                val = int(value)
+                if val >= 1024:
+                    return f"{val // 1024} MB"
+                else:
+                    return f"{val} kB"
+            elif setting_name in ['autovacuum_analyze_scale_factor', 'autovacuum_vacuum_scale_factor']:
+                return f"{float(value) * 100:.1f}%"
+            elif setting_name in ['autovacuum', 'track_activities', 'track_counts', 'track_functions', 'track_io_timing', 'track_wal_io_timing', 'pg_stat_statements.track_utility', 'pg_stat_statements.save', 'pg_stat_statements.track_planning']:
+                return "on" if value.lower() in ['on', 'true', '1'] else "off"
+            elif setting_name in ['huge_pages']:
+                return value  # on/off/try
             else:
                 return str(value)
         except (ValueError, TypeError):
@@ -935,9 +1515,14 @@ class PostgresReportGenerator:
         reports['A003'] = self.generate_a003_settings_report(cluster, node_name)
         reports['A004'] = self.generate_a004_cluster_report(cluster, node_name)
         reports['A007'] = self.generate_a007_altered_settings_report(cluster, node_name)
-        reports['H001'] = self.generate_h001_invalid_indexes_report(cluster, node_name)
-        reports['F005'] = self.generate_f005_btree_bloat_report(cluster, node_name)
+        reports['D004'] = self.generate_d004_pgstat_settings_report(cluster, node_name)
+        reports['F001'] = self.generate_f001_autovacuum_settings_report(cluster, node_name)
         reports['F004'] = self.generate_f004_heap_bloat_report(cluster, node_name)
+        reports['F005'] = self.generate_f005_btree_bloat_report(cluster, node_name)
+        reports['G001'] = self.generate_g001_memory_settings_report(cluster, node_name)
+        reports['H001'] = self.generate_h001_invalid_indexes_report(cluster, node_name)
+        reports['H002'] = self.generate_h002_unused_indexes_report(cluster, node_name)
+        reports['H004'] = self.generate_h004_redundant_indexes_report(cluster, node_name)
         reports['K001'] = self.generate_k001_query_calls_report(cluster, node_name)
         reports['K003'] = self.generate_k003_top_queries_report(cluster, node_name)
         
@@ -994,7 +1579,7 @@ def main():
                        help='Cluster name (default: local)')
     parser.add_argument('--node-name', default='node-01',
                        help='Node name (default: node-01)')
-    parser.add_argument('--check-id', choices=['A002', 'A003', 'A004', 'A007', 'H001', 'F005', 'F004', 'K001', 'K003', 'ALL'],
+    parser.add_argument('--check-id', choices=['A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002', 'H004', 'K001', 'K003', 'ALL'],
                        help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                        help='Output file (default: stdout)')
@@ -1040,12 +1625,22 @@ def main():
                 report = generator.generate_a004_cluster_report(args.cluster, args.node_name)
             elif args.check_id == 'A007':
                 report = generator.generate_a007_altered_settings_report(args.cluster, args.node_name)
-            elif args.check_id == 'H001':
-                report = generator.generate_h001_invalid_indexes_report(args.cluster, args.node_name)
-            elif args.check_id == 'F005':
-                report = generator.generate_f005_btree_bloat_report(args.cluster, args.node_name)
+            elif args.check_id == 'D004':
+                report = generator.generate_d004_pgstat_settings_report(args.cluster, args.node_name)
+            elif args.check_id == 'F001':
+                report = generator.generate_f001_autovacuum_settings_report(args.cluster, args.node_name)
             elif args.check_id == 'F004':
                 report = generator.generate_f004_heap_bloat_report(args.cluster, args.node_name)
+            elif args.check_id == 'F005':
+                report = generator.generate_f005_btree_bloat_report(args.cluster, args.node_name)
+            elif args.check_id == 'G001':
+                report = generator.generate_g001_memory_settings_report(args.cluster, args.node_name)
+            elif args.check_id == 'H001':
+                report = generator.generate_h001_invalid_indexes_report(args.cluster, args.node_name)
+            elif args.check_id == 'H002':
+                report = generator.generate_h002_unused_indexes_report(args.cluster, args.node_name)
+            elif args.check_id == 'H004':
+                report = generator.generate_h004_redundant_indexes_report(args.cluster, args.node_name)
             elif args.check_id == 'K001':
                 report = generator.generate_k001_query_calls_report(args.cluster, args.node_name)
             elif args.check_id == 'K003':

@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 4,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -4026,8 +4026,8 @@
       },
       {
         "current": {
-          "text": "target_database",
-          "value": "target_database"
+          "text": "postgres",
+          "value": "postgres"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -4050,7 +4050,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-  "title": "1. Postgres node performance overview (high-level)",
+      "title": "01. Single node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 5
+  "version": 2
 }
