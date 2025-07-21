@@ -1966,7 +1966,7 @@ metrics:
       11: |
         -- postgresql wal archiving lag monitor
         with wal_info as (
-            select 
+            select
                 last_archived_wal,
                 last_archived_time,
                 substr(last_archived_wal, 9, 8) as log_id_hex,
@@ -1983,14 +1983,7 @@ metrics:
         select 
             pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint as current_lsn_numeric,
             pg_wal_lsn_diff((log_id_hex || '/' || lpad(to_hex((segment_dec + 1) * wal_segment_size_bytes), 8, '0'))::pg_lsn, '0/0')::bigint as archived_wal_finish_lsn_numeric,
-            pg_size_pretty(
-                pg_wal_lsn_diff(
-                    pg_current_wal_lsn(),
-                    (log_id_hex || '/' || lpad(to_hex(segment_dec * wal_segment_size_bytes), 8, '0'))::pg_lsn
-                )
-            ) as lag_human,
             
-            -- dynamic calculation based on actual segment size
             round(
                 pg_wal_lsn_diff(
                     pg_current_wal_lsn(),
