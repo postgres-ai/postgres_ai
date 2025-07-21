@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 3,
   "links": [],
   "panels": [
     {
@@ -607,7 +607,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "ms/s"
         },
         "overrides": [
           {
@@ -1083,7 +1083,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "Bps"
         },
         "overrides": [
           {
@@ -1321,7 +1321,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "Bps"
         },
         "overrides": [
           {
@@ -1556,7 +1556,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "Bps"
         },
         "overrides": [
           {
@@ -1791,7 +1792,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "Bps"
         },
         "overrides": [
           {
@@ -2027,7 +2028,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "Bps"
         },
         "overrides": [
           {
@@ -2277,8 +2278,8 @@
       },
       {
         "current": {
-          "text": "target_database",
-          "value": "target_database"
+          "text": "postgres",
+          "value": "postgres"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -2301,7 +2302,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-  "title": "2. Postgres aggregated query performance analysis",
+      "title": "02. Query performance analysis (top-N)",
   "uid": "3ceb2e98-639d-48df-8e1f-7686d2052170",
-  "version": 5
+  "version": 2
 }

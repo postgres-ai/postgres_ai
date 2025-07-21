@@ -1956,6 +1956,68 @@ metrics:
         order by grp, index_size_bytes desc;
     gauges:
       - '*'
+  
+  archive_lag:
+    description: >
+      This metric measures the lag in WAL archive processing.
+      It provides insights into the time taken to archive WAL logs and the current status of the archive process.
+      This metric helps administrators monitor the WAL archive process and identify any performance issues.
+    sqls:
+      11: |
+        -- postgresql wal archiving lag monitor
+        with wal_info as (
+            select
+                last_archived_wal,
+                last_archived_time,
+                substr(last_archived_wal, 9, 8) as log_id_hex,
+                ('x' || substr(last_archived_wal, 17, 8))::bit(32)::bigint as segment_dec,
+                archived_count,
+                failed_count,
+                -- wal_segment_size is already in bytes!
+                (select setting::bigint 
+                from pg_settings 
+                where name = 'wal_segment_size') as wal_segment_size_bytes
+            from pg_stat_archiver
+            where last_archived_wal is not null
+        )
+        select 
+            pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint as current_lsn_numeric,
+            pg_wal_lsn_diff((log_id_hex || '/' || lpad(to_hex((segment_dec + 1) * wal_segment_size_bytes), 8, '0'))::pg_lsn, '0/0')::bigint as archived_wal_finish_lsn_numeric,
+            
+            round(
+                pg_wal_lsn_diff(
+                    pg_current_wal_lsn(),
+                    (log_id_hex || '/' || lpad(to_hex(segment_dec * wal_segment_size_bytes), 8, '0'))::pg_lsn
+                )::numeric / wal_segment_size_bytes, 
+                2
+            ) as wal_files_behind,
+            
+            pg_size_pretty(wal_segment_size_bytes) as wal_segment_size,
+            extract(epoch from (now() - last_archived_time))::int as seconds_since_archive,
+            
+            -- alert thresholds based on segment size
+            case 
+                when pg_wal_lsn_diff(
+                        pg_current_wal_lsn(), 
+                        (log_id_hex || '/' || lpad(to_hex(segment_dec * wal_segment_size_bytes), 8, '0'))::pg_lsn
+                    ) > 6 * wal_segment_size_bytes then 'critical'
+                when pg_wal_lsn_diff(
+                        pg_current_wal_lsn(), 
+                        (log_id_hex || '/' || lpad(to_hex(segment_dec * wal_segment_size_bytes), 8, '0'))::pg_lsn
+                    ) > 3 * wal_segment_size_bytes then 'warning'
+                else 'ok'
+            end as tag_status,
+            
+            archived_count,
+            failed_count
+        from wal_info;
+    gauges:
+      - 'seconds_since_archive'
+      - 'archived_count'
+      - 'failed_count'
+      - 'wal_files_behind'
+      - 'current_lsn_numeric'
+      - 'archived_wal_start_lsn_numeric'
 
 presets:
   full:
@@ -2006,7 +2068,8 @@ presets:
       pg_gin_index: 5
       pg_table_bloat: 86400
       pg_btree_bloat: 86400
-      pg_invalid_indexes: 86400
-      redundant_indexes: 86400
-      unused_indexes: 86400
-      rarely_used_indexes: 86400
+      pg_invalid_indexes: 60
+      redundant_indexes: 60
+      unused_indexes: 60
+      rarely_used_indexes: 60
+      archive_lag: 60
