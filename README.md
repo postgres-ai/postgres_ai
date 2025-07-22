@@ -16,10 +16,6 @@ create user postgres_ai_mon with password '<password>';
 grant connect on database <database_name> to postgres_ai_mon;
 
 grant pg_monitor to postgres_ai_mon;
-grant usage on schema public to postgres_ai_mon;
-grant select on all tables in schema public to postgres_ai_mon; -- TEMPORARY; TODO: get rid of this
-grant select on all sequences in schema public to postgres_ai_mon;
-
 grant select on pg_stat_statements to postgres_ai_mon;
 grant select on pg_stat_database to postgres_ai_mon;
 grant select on pg_stat_user_tables to postgres_ai_mon;
