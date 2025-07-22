@@ -899,7 +899,7 @@ start_services() {
         log_info "Starting Postgres AI monitoring services (production mode)..."
         log_info "Target demo database not included - add your own PostgreSQL instances to monitor"
         # Start all services except target-db
-        $compose_cmd -f "$COMPOSE_FILE" up -d sources-generator sink-postgres sink-prometheus pgwatch-postgres pgwatch-prometheus grafana flask-backend
+        $compose_cmd -f "$COMPOSE_FILE" up -d sources-generator sink-postgres sink-prometheus pgwatch-postgres pgwatch-prometheus grafana flask-backend postgres-reports
     fi
     
     log_success "Services started!"

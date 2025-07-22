@@ -142,8 +142,8 @@ services:
       sh -c "
       echo 'Installing Python dependencies...' &&
       pip install -r requirements.txt &&
-      echo 'Waiting 1 hour before generating reports...' &&
-      sleep 3600 &&
+      echo 'Waiting 30 minutes before generating reports...' &&
+      sleep 1800 &&
       echo 'Starting PostgreSQL reports generation...' &&
       while true; do
         echo 'Generating PostgreSQL reports...' &&
