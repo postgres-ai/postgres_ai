@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 6,
   "links": [],
   "panels": [
     {
@@ -216,18 +216,33 @@
                   "type": "number"
                 },
                 {
-                  "selector": "total_time",
-                  "text": "Total Time (ms)",
+                  "selector": "exec_time",
+                  "text": "Exec Time (ms)",
                   "type": "number"
                 },
                 {
-                  "selector": "total_time_per_sec",
-                  "text": "Total Time/sec (ms/s)",
+                  "selector": "exec_time_per_sec",
+                  "text": "Exec Time/sec (ms/s)",
                   "type": "number"
                 },
                 {
-                  "selector": "total_time_per_call",
-                  "text": "Time/call (ms)",
+                  "selector": "exec_time_per_call",
+                  "text": "Exec Time/call (ms)",
+                  "type": "number"
+                },
+                {
+                  "selector": "plan_time",
+                  "text": "Planning Time (ms)",
+                  "type": "number"
+                },
+                {
+                  "selector": "plan_time_per_sec",
+                  "text": "Planning Time/sec (ms/s)",
+                  "type": "number"
+                },
+                {
+                  "selector": "plan_time_per_call",
+                  "text": "Planning Time/call (ms)",
                   "type": "number"
                 },
                 {
@@ -365,6 +380,7 @@
                   {
                     "key": "db_name",
                     "value": "${db_name}"
+                    "value": "${db_name}"
                   }
                 ]
               }
@@ -380,34 +396,37 @@
                 },
                 "includeByName": {},
                 "indexByName": {
-                  "Block Read Time (ms)": 24,
-                  "Block Read Time/call (ms)": 26,
-                  "Block Read Time/sec (ms)": 25,
-                  "Block Write Time (ms)": 21,
-                  "Block Write Time/call (ms)": 23,
-                  "Block Write Time/sec (ms)": 22,
+                  "Block Read Time (ms)": 27,
+                  "Block Read Time/call (ms)": 29,
+                  "Block Read Time/sec (ms)": 28,
+                  "Block Write Time (ms)": 24,
+                  "Block Write Time/call (ms)": 26,
+                  "Block Write Time/sec (ms)": 25,
                   "Calls": 1,
                   "Calls/sec": 2,
-                  "Duration (seconds)": 27,
+                  "Duration (seconds)": 30,
+                  "Exec Time (ms)": 6,
+                  "Exec Time/call (ms)": 8,
+                  "Exec Time/sec (ms/s)": 7,
+                  "Planning Time (ms)": 9,
+                  "Planning Time/call (ms)": 11,
+                  "Planning Time/sec (ms/s)": 10,
                   "Query ID": 0,
                   "Rows": 3,
                   "Rows/call": 5,
                   "Rows/sec": 4,
-                  "Shared Blocks Dirtied": 18,
-                  "Shared Blocks Dirtied/call": 20,
-                  "Shared Blocks Dirtied/sec": 19,
-                  "Shared Blocks Hit": 9,
-                  "Shared Blocks Hit/call": 11,
-                  "Shared Blocks Hit/sec": 10,
-                  "Shared Blocks Read": 12,
-                  "Shared Blocks Read/call": 14,
-                  "Shared Blocks Read/sec": 13,
-                  "Shared Blocks Written": 15,
-                  "Shared Blocks Written/call": 17,
-                  "Shared Blocks Written/sec": 16,
-                  "Time/call (ms)": 8,
-                  "Total Time (ms)": 6,
-                  "Total Time/sec (ms/s)": 7
+                  "Shared Blocks Dirtied": 21,
+                  "Shared Blocks Dirtied/call": 23,
+                  "Shared Blocks Dirtied/sec": 22,
+                  "Shared Blocks Hit": 12,
+                  "Shared Blocks Hit/call": 14,
+                  "Shared Blocks Hit/sec": 13,
+                  "Shared Blocks Read": 15,
+                  "Shared Blocks Read/call": 17,
+                  "Shared Blocks Read/sec": 16,
+                  "Shared Blocks Written": 18,
+                  "Shared Blocks Written/call": 20,
+                  "Shared Blocks Written/sec": 19
                 },
                 "renameByName": {}
               }
@@ -416,7 +435,7 @@
           "type": "table"
         }
       ],
-      "title": "pg_stat_statements",
+      "title": "Detailed table view (pg_stat_statements)",
       "type": "row"
     },
     {
@@ -429,7 +448,7 @@
       },
       "id": 18,
       "panels": [],
-      "title": "Graph Call Stats",
+      "title": "Top $top_n queries analysis (pg_stat_statements)",
       "type": "row"
     },
     {
@@ -844,7 +863,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "ms/s"
         },
         "overrides": [
           {
@@ -873,6 +893,243 @@
         "w": 12,
         "x": 0,
         "y": 22
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by planning time (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by planning time per call (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
       },
       "id": 6,
       "options": {
@@ -991,7 +1248,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 22
+        "y": 30
       },
       "id": 7,
       "options": {
@@ -1084,6 +1341,7 @@
             ]
           },
           "unit": "binBps"
+          "unit": "binBps"
         },
         "overrides": [
           {
@@ -1111,7 +1369,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 38
       },
       "id": 8,
       "options": {
@@ -1229,7 +1487,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 38
       },
       "id": 9,
       "options": {
@@ -1322,6 +1580,7 @@
             ]
           },
           "unit": "binBps"
+          "unit": "binBps"
         },
         "overrides": [
           {
@@ -1349,7 +1608,721 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 38
+        "y": 46
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by shared_blks_read (in bytes) (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by shared_blks_read (in bytes) per call (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by shared_blks_written (in bytes) (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by shared_blks_written (in bytes) per call (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 62
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by shared_blks_written (in bytes) (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 62
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "{{queryid}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Top $top_n statements by shared_blks_dirtied (in bytes) per call (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "oneClick": false,
+                    "targetBlank": true,
+                    "title": "Query Analysis",
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 70
       },
       "id": 10,
       "options": {
@@ -1467,7 +2440,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 38
+        "y": 70
       },
       "id": 13,
       "options": {
@@ -1558,6 +2531,7 @@
             ]
           },
           "unit": "binBps"
+          "unit": "binBps"
         },
         "overrides": [
           {
@@ -1585,7 +2559,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 46
+        "y": 78
       },
       "id": 11,
       "options": {
@@ -1702,7 +2676,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 46
+        "y": 78
       },
       "id": 14,
       "options": {
@@ -1793,6 +2767,7 @@
             ]
           },
           "unit": "binBps"
+          "unit": "binBps"
         },
         "overrides": [
           {
@@ -1820,7 +2795,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 86
       },
       "id": 12,
       "options": {
@@ -1938,7 +2913,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 86
       },
       "id": 15,
       "options": {
@@ -2029,6 +3004,7 @@
             ]
           },
           "unit": "binBps"
+          "unit": "binBps"
         },
         "overrides": [
           {
@@ -2056,7 +3032,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 94
       },
       "id": 16,
       "options": {
@@ -2174,7 +3150,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 94
       },
       "id": 17,
       "options": {
@@ -2217,7 +3193,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 102
       },
       "id": 21,
       "options": {
@@ -2303,8 +3279,8 @@
       },
       {
         "current": {
-          "text": "postgres",
-          "value": "postgres"
+          "text": "target_database",
+          "value": "target_database"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -2327,7 +3303,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-      "title": "02. Query performance analysis (top-N)",
+  "title": "02. Query performance analysis (top-N)",
   "uid": "3ceb2e98-639d-48df-8e1f-7686d2052170",
-  "version": 2
+  "version": 32
 }

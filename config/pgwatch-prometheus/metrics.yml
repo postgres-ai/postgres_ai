@@ -311,6 +311,51 @@ metrics:
           pg_stat_database, pg_control_system()
         where
           datname = current_database()
+      17: |-
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          numbackends,
+          xact_commit,
+          xact_rollback,
+          blks_read,
+          blks_hit,
+          tup_returned,
+          tup_fetched,
+          tup_inserted,
+          tup_updated,
+          tup_deleted,
+          conflicts,
+          temp_files,
+          temp_bytes,
+          deadlocks,
+          shared_blk_read_time as blk_read_time,
+          shared_blk_write_time as blk_write_time,
+          extract(epoch from (now() - pg_postmaster_start_time()))::int8 as postmaster_uptime_s,
+          checksum_failures,
+          extract(epoch from (now() - checksum_last_failure))::int8 as checksum_last_failure_s,
+          case when pg_is_in_recovery() then 1 else 0 end as in_recovery_int,
+          system_identifier::text as tag_sys_id,
+          session_time::int8,
+          active_time::int8,
+          idle_in_transaction_time::int8,
+          sessions,
+          sessions_abandoned,
+          sessions_fatal,
+          sessions_killed,
+          (select count(*) from pg_index i
+            where not indisvalid
+            and not exists ( /* leave out ones that are being actively rebuilt */
+              select * from pg_locks l
+              join pg_stat_activity a using (pid)
+              where l.relation = i.indexrelid
+              and a.state = 'active'
+              and a.query ~* 'concurrently'
+          )) as invalid_indexes
+        from
+          pg_stat_database, pg_control_system()
+        where
+          datname = current_database()
     gauges:
       - numbackends
       - postmaster_uptime_s
@@ -1065,6 +1110,78 @@ metrics:
             (current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
             pg_stat_statements.blk_read_time as block_read_total,
             pg_stat_statements.blk_write_time as block_write_total,
+            pg_stat_statements.wal_records,
+            pg_stat_statements.wal_fpi,
+            pg_stat_statements.wal_bytes,
+            (current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
+            (current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written,
+            row_number() over (order by total_exec_time desc) as rn
+            from pg_stat_statements
+            join pg_database
+            on pg_database.oid = pg_stat_statements.dbid
+        )
+        select
+          ranked_statements.user as tag_user,
+          datname as tag_datname,
+          queryid as tag_queryid,
+          calls::int8 as calls,
+          plans_total::int8 as plans_total,
+          exec_time_total::int8 as exec_time_total,
+          plan_time_total::int8 as plan_time_total,
+          rows::int8 as rows,
+          shared_bytes_hit_total::int8 as shared_bytes_hit_total,
+          shared_bytes_read_total::int8 as shared_bytes_read_total,
+          shared_bytes_dirtied_total::int8 as shared_bytes_dirtied_total,
+          shared_bytes_written_total::int8 as shared_bytes_written_total,
+          block_read_total::int8 as block_read_total,
+          block_write_total::int8 as block_write_total,
+          wal_records::int8 as wal_records,
+          wal_fpi::int8 as wal_fpi,
+          wal_bytes::int8 as wal_bytes,
+          temp_bytes_read::int8 as temp_bytes_read,
+          temp_bytes_written::int8 as temp_bytes_written
+          from ranked_statements
+          where rn <= 500
+        union all
+        select
+          'tail_dummy_user' as tag_user,
+          current_database() as tag_datname,
+          -1 as tag_qqueryid,
+          sum(calls)::int8 as calls,
+          sum(plans_total)::int8 as plans_total,
+          sum(exec_time_total)::int8 as exec_time_total,
+          sum(plan_time_total)::int8 as plan_time_total,
+          sum(rows)::int8 as rows,
+          sum(shared_bytes_hit_total)::int8 as shared_bytes_hit_total,
+          sum(shared_bytes_read_total)::int8 as shared_bytes_read_total,
+          sum(shared_bytes_dirtied_total)::int8 as shared_bytes_dirtied_total,
+          sum(shared_bytes_written_total)::int8 as shared_bytes_written_total,
+          sum(block_read_total)::int8 as block_read_total,
+          sum(block_write_total)::int8 as block_write_total,
+          sum(wal_records)::int8 as wal_records,
+          sum(wal_fpi)::int8 as wal_fpi,
+          sum(wal_bytes)::int8 as wal_bytes,
+          sum(temp_bytes_read)::int8 as temp_bytes_read,
+          sum(temp_bytes_written)::int8 as temp_bytes_written
+        from ranked_statements
+        where rn > 500
+      17: |
+        WITH ranked_statements as (
+          select
+            pg_get_userbyid(userid) as user,
+            pg_database.datname,
+            pg_stat_statements.queryid ,
+            pg_stat_statements.plans as plans_total,
+            pg_stat_statements.calls,
+            pg_stat_statements.total_exec_time as exec_time_total,
+            pg_stat_statements.total_plan_time as plan_time_total,
+            pg_stat_statements.rows,
+            (current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
+            (current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
+            (current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
+            (current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
+            pg_stat_statements.shared_blk_read_time as block_read_total,
+            pg_stat_statements.shared_blk_write_time as block_write_total,
             pg_stat_statements.wal_records,
             pg_stat_statements.wal_fpi,
             pg_stat_statements.wal_bytes,

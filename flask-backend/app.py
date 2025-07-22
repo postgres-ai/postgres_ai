@@ -17,7 +17,8 @@ PROMETHEUS_URL = "http://sink-prometheus:9090"
 # Metric name mapping for cleaner CSV output
 METRIC_NAME_MAPPING = {
     'calls': 'calls',
-    'exec_time_total': 'total_time',
+    'exec_time_total': 'exec_time',
+    'plan_time_total': 'plan_time',
     'rows': 'rows',
     'shared_bytes_hit_total': 'shared_blks_hit',
     'shared_bytes_read_total': 'shared_blks_read',
@@ -167,7 +168,7 @@ def get_pgss_metrics_csv():
             
             # Get metric fields from the mapping in specific order with their rates
             desired_order = [
-                'calls', 'total_time', 'rows', 'shared_blks_hit', 
+                'calls', 'exec_time', 'plan_time', 'rows', 'shared_blks_hit', 
                 'shared_blks_read', 'shared_blks_dirtied', 'shared_blks_written',
                 'blk_read_time', 'blk_write_time'
             ]
@@ -277,7 +278,7 @@ def process_pgss_data(start_data, end_data, start_time, end_time):
         result_rows.append(row)
 
     # Sort by total execution time difference (descending)
-    result_rows.sort(key=lambda x: x.get('total_time', 0), reverse=True)
+    result_rows.sort(key=lambda x: x.get('exec_time', 0), reverse=True)
 
     return result_rows
 
