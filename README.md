@@ -2,6 +2,10 @@
 
 A complete PostgreSQL monitoring solution with automated performance analysis and reporting.
 
+## 📋 Requirements
+
+- Supports PostgreSQL versions 14-17
+
 ## 🚀 Quick start
 
 Create a new DB user in database to be monitored (skip this if you want just to check out `postgres_ai` monitoring with a synthetic `demo` database):
@@ -108,3 +112,4 @@ Technical URLs (for advanced users):
 
 ## 🔑 Postgres AI access token
 Get your key at [Postgres AI](https://postgres.ai) for automated report uploads and advanced analysis.
+
