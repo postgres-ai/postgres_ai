@@ -1512,7 +1512,7 @@ show_access_info() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${GREEN}🚀 MAIN ACCESS POINT - Start here:${NC}"
     echo -e "${GREEN}   Grafana Dashboard: http://localhost:3000${NC}"
-    echo -e "${GREEN}   Login: demouser / demopwd${NC}"
+    echo -e "${GREEN}   Login: demo / demo${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
