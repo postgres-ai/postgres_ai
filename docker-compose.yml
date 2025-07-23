@@ -144,8 +144,8 @@ services:
       echo 'Installing Python dependencies...' &&
       pip install -r requirements.txt &&
       pip install pyyaml &&
-      echo 'Waiting 5 minutes before generating reports...' &&
-      sleep 300 &&
+      echo 'Waiting 30 minutes before generating reports...' &&
+      sleep 1800 &&
       echo 'Starting PostgreSQL reports generation...' &&
       while true; do
         echo 'Extracting cluster and node name from instances.yml...' &&
@@ -160,8 +160,8 @@ services:
           echo 'No API key configured, generating reports without upload...' &&
           python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --cluster \"$$CLUSTER\" --node-name \"$$NODE_NAME\" --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
         fi &&
-        echo 'Reports generated. Sleeping for 5 minutes...' &&
-        sleep 300
+        echo 'Reports generated. Sleeping for 24 hours...' &&
+        sleep 86400
       done
       "
 
