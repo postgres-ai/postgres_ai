@@ -19,6 +19,17 @@ grant pg_monitor to postgres_ai_mon;
 grant select on pg_stat_statements to postgres_ai_mon;
 grant select on pg_stat_database to postgres_ai_mon;
 grant select on pg_stat_user_tables to postgres_ai_mon;
+
+-- Create a public view for pg_statistic access for bloat metrics
+CREATE VIEW public.pg_statistic AS
+ SELECT pg_statistic.stawidth,
+    pg_statistic.stanullfrac,
+    pg_statistic.starelid,
+    pg_statistic.staattnum
+   FROM pg_statistic;
+
+GRANT SELECT ON public.pg_statistic TO pg_monitor;
+ALTER USER postgres_ai_mon set search_path = "$user", public, pg_catalog;
 ```
 
 **One command setup:**
