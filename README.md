@@ -7,7 +7,7 @@ A complete PostgreSQL monitoring solution with automated performance analysis an
 **Infrastructure:**
 - **Linux machine** with Docker installed (separate from your database server)
 - **Docker access** - the user running `postgres_ai` must have Docker permissions
-- **Network access** to the PostgreSQL database(s) you want to monitor
+- **Access (network and pg_hba)** to the PostgreSQL database(s) you want to monitor
 
 **Database:**
 - Supports PostgreSQL versions 14-17
@@ -79,12 +79,16 @@ Now, start it and wait for a few minutes. Two optional adjustments:
 - get an Postgres AI access token for your organization at https://console.postgres.ai (`Your org name → Manage → Access tokens`)
 
 ```bash
+# Production setup with your Access token
+./postgres_ai quickstart --api-key=your_access_token
+```
+
+Or if you want to just check out how it works:
+```bash
 # Complete setup with demo database
 ./postgres_ai quickstart --demo
-
-# Production setup with your API key
-./postgres_ai quickstart --api-key=your_api_key
 ```
+
 
 That's it! Everything is installed, configured, and running.
 
@@ -110,12 +114,6 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 # Then add your databases
 ./postgres_ai add-instance "postgresql://user:pass@host:port/db"
 ```
-
-**For CI/CD:**
-```bash
-./postgres_ai quickstart --demo --api-key=$API_KEY
-```
-Fully automated setup with no interactive prompts.
 
 ## 🔧 Management commands
 
