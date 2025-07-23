@@ -132,7 +132,7 @@ services:
     volumes:
       - ./reporter/postgres_reports.py:/app/postgres_reports.py
       - ./reporter/requirements.txt:/app/requirements.txt
-      - ./.pgwatch-config:/app/.pgwatch-config:ro
+      - ./.pgwatch-config:/app/.pgwatch-config
     environment:
       - PROMETHEUS_URL=http://sink-prometheus:9090
     depends_on:
@@ -148,7 +148,7 @@ services:
       while true; do
         echo 'Generating PostgreSQL reports...' &&
         if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
-          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config) &&
+          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
           python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY --project postgres-ai-monitoring
         else
           echo 'No API key configured, generating reports without upload...' &&
