@@ -19,8 +19,17 @@ INSERT INTO sample_data (name) VALUES
 CREATE USER monitor WITH PASSWORD 'monitor_pass';
 GRANT CONNECT ON DATABASE target_database TO monitor;
 GRANT USAGE ON SCHEMA public TO monitor;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO monitor;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO monitor;
+
+-- Create a public view for pg_statistic access
+CREATE VIEW public.pg_statistic AS
+ SELECT pg_statistic.stawidth,
+    pg_statistic.stanullfrac,
+    pg_statistic.starelid,
+    pg_statistic.staattnum
+   FROM pg_statistic;
+
+-- Grant specific access instead of all tables
+GRANT SELECT ON public.pg_statistic TO pg_monitor;
 
 -- Grant access to monitoring views
 GRANT SELECT ON pg_stat_statements TO monitor;
@@ -28,3 +37,6 @@ GRANT SELECT ON pg_stat_database TO monitor;
 GRANT SELECT ON pg_stat_user_tables TO monitor; 
 -- Grant pg_monitor role to monitor user for enhanced monitoring capabilities
 GRANT pg_monitor TO monitor;
+
+-- Set search path for the monitor user
+ALTER USER monitor SET search_path = "$user", public, pg_catalog;

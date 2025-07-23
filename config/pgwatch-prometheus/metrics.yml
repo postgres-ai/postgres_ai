@@ -2183,8 +2183,8 @@ presets:
       pg_stat_activity_autovacuum: 5
       pg_stat_activity_autovacuum_active: 5
       pg_gin_index: 5
-      pg_table_bloat: 86400
-      pg_btree_bloat: 86400
+      pg_table_bloat: 60
+      pg_btree_bloat: 60
       pg_invalid_indexes: 60
       redundant_indexes: 60
       unused_indexes: 60
