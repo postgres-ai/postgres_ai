@@ -4,7 +4,34 @@ A complete PostgreSQL monitoring solution with automated performance analysis an
 
 ## 📋 Requirements
 
+**Infrastructure:**
+- **Linux machine** with Docker installed (separate from your database server)
+- **Docker access** - the user running `postgres_ai` must have Docker permissions
+- **Network access** to the PostgreSQL database(s) you want to monitor
+
+**Database:**
 - Supports PostgreSQL versions 14-17
+
+## ⚠️ Security Notice
+
+**WARNING: Security is your responsibility!**
+
+This monitoring solution exposes several ports that **MUST** be properly firewalled:
+- **Port 3000** (Grafana) - Contains sensitive database metrics and dashboards
+- **Port 58080** (PGWatch Postgres) - Database monitoring interface  
+- **Port 58089** (PGWatch Prometheus) - Database monitoring interface
+- **Port 59090** (Prometheus) - Metrics storage and queries
+- **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
+- **Port 55000** (Flask API) - Backend API service
+- **Port 55432** (Demo DB) - When using `--demo` option
+- **Port 55433** (Metrics DB) - PostgreSQL metrics storage
+
+**Configure your firewall to:**
+- Block public access to all monitoring ports
+- Allow access only from trusted networks/IPs
+- Use VPN or SSH tunnels for remote access
+
+Failure to secure these ports may expose sensitive database information!
 
 ## 🚀 Quick start
 

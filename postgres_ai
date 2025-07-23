@@ -200,16 +200,28 @@ check_docker_running() {
     log_info "Checking Docker daemon status..."
     
     if ! docker info &> /dev/null; then
-        log_error "Docker daemon is not running"
+        log_error "Cannot access Docker daemon"
         echo
-        echo "Please start Docker:"
-        echo "  macOS: Start Docker Desktop application"
-        echo "  Linux: sudo systemctl start docker"
-        echo "  Windows: Start Docker Desktop application"
+        echo "This could be due to:"
+        echo "  1. Docker daemon not running"
+        echo "  2. User lacks permission to access Docker"
+        echo
+        echo "Solutions:"
+        echo "  If Docker daemon is not running:"
+        echo "    • macOS: Start Docker Desktop application"
+        echo "    • Linux: sudo systemctl start docker"
+        echo "    • Windows: Start Docker Desktop application"
+        echo
+        echo "  If permission denied:"
+        echo "    • Linux: Add user to docker group: sudo usermod -aG docker \$USER"
+        echo "    • Then log out and back in, or run: newgrp docker"
+        echo "    • Verify with: docker run hello-world"
+        echo
+        echo "  Alternative: Run postgres_ai with sudo (not recommended)"
         exit 1
     fi
     
-    log_success "Docker daemon is running"
+    log_success "Docker daemon is accessible"
 }
 
 # Check system resources
