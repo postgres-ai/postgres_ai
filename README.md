@@ -141,9 +141,9 @@ After running quickstart:
 - **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (demouser/demopwd)
 
 Technical URLs (for advanced users):
-- **Demo DB**: postgresql://postgres:postgres@localhost:5432/target_database
-- **Monitoring**: http://localhost:8080 (PGWatch)
-- **Metrics**: http://localhost:9090 (Prometheus)
+- **Demo DB**: postgresql://postgres:postgres@localhost:55432/target_database
+- **Monitoring**: http://localhost:58080 (PGWatch)
+- **Metrics**: http://localhost:59090 (Prometheus)
 
 ## 📖 Help
 
