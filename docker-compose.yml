@@ -148,14 +148,14 @@ services:
       while true; do
         echo 'Generating PostgreSQL reports...' &&
         if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
-          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2) &&
+          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config) &&
           python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY --project postgres-ai-monitoring
         else
           echo 'No API key configured, generating reports without upload...' &&
           python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
         fi &&
-        echo 'Reports generated. Sleeping for 24 hours...' &&
-        sleep 86400
+        echo 'Reports generated. Sleeping for 5 minutes...' &&
+        sleep 300
       done
       "
 
