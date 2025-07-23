@@ -21,12 +21,19 @@ GRANT CONNECT ON DATABASE target_database TO monitor;
 GRANT USAGE ON SCHEMA public TO monitor;
 
 -- Create a public view for pg_statistic access
-CREATE VIEW public.pg_statistic AS
- SELECT pg_statistic.stawidth,
-    pg_statistic.stanullfrac,
-    pg_statistic.starelid,
-    pg_statistic.staattnum
-   FROM pg_statistic;
+CREATE OR REPLACE VIEW public.pg_statistic AS
+SELECT 
+    n.nspname as schemaname,
+    c.relname as tablename,
+    a.attname,
+    s.stanullfrac as null_frac,
+    s.stawidth as avg_width,
+    false as inherited
+FROM pg_statistic s
+JOIN pg_class c ON c.oid = s.starelid
+JOIN pg_namespace n ON n.oid = c.relnamespace  
+JOIN pg_attribute a ON a.attrelid = s.starelid AND a.attnum = s.staattnum
+WHERE a.attnum > 0 AND NOT a.attisdropped;
 
 -- Grant specific access instead of all tables
 GRANT SELECT ON public.pg_statistic TO pg_monitor;
