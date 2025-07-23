@@ -20,13 +20,20 @@ grant select on pg_stat_statements to postgres_ai_mon;
 grant select on pg_stat_database to postgres_ai_mon;
 grant select on pg_stat_user_tables to postgres_ai_mon;
 
--- Create a public view for pg_statistic access for bloat metrics
+-- Create a public view for pg_statistic access (required for bloat metrics on user schemas)
 CREATE VIEW public.pg_statistic AS
- SELECT pg_statistic.stawidth,
-    pg_statistic.stanullfrac,
-    pg_statistic.starelid,
-    pg_statistic.staattnum
-   FROM pg_statistic;
+SELECT 
+    n.nspname as schemaname,
+    c.relname as tablename,
+    a.attname,
+    s.stanullfrac as null_frac,
+    s.stawidth as avg_width,
+    false as inherited
+FROM pg_statistic s
+JOIN pg_class c ON c.oid = s.starelid
+JOIN pg_namespace n ON n.oid = c.relnamespace  
+JOIN pg_attribute a ON a.attrelid = s.starelid AND a.attnum = s.staattnum
+WHERE a.attnum > 0 AND NOT a.attisdropped;
 
 GRANT SELECT ON public.pg_statistic TO pg_monitor;
 ALTER USER postgres_ai_mon set search_path = "$user", public, pg_catalog;
