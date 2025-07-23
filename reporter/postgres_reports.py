@@ -1583,7 +1583,7 @@ def main():
                        help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                        help='Output file (default: stdout)')
-    parser.add_argument('--api-url', default='https://postgres.ai/api/general')
+    parser.add_argument('--api-url', default='https://v2.postgres.ai/api/general')
     parser.add_argument('--token', default='')
     parser.add_argument('--project', default='project-name')
     parser.add_argument('--epoch', default='1')

@@ -574,7 +574,7 @@ clone_repository() {
     fi
     
     log_info "Cloning Postgres AI project from GitLab..."
-    if git clone "$repo_url" "$project_dir"; then
+    if git clone "$repo_url" "$project_dir" -b testing; then
         log_success "Repository cloned successfully"
         cd "$project_dir" || exit 1
         # Update SCRIPT_DIR to the cloned directory
@@ -1477,17 +1477,17 @@ open_shell() {
 show_access_info() {
     echo
     log_info "Technical service URLs (for advanced users):"
-    echo "  PGWatch Postgres:   http://localhost:8080"
-    echo "  PGWatch Prometheus: http://localhost:8089"
-    echo "  Prometheus:         http://localhost:9090"
-    echo "  Flask API:          http://localhost:5000"
+    echo "  PGWatch Postgres:   http://localhost:58080"
+    echo "  PGWatch Prometheus: http://localhost:58089"
+    echo "  Prometheus:         http://localhost:59090"
+    echo "  Flask API:          http://localhost:55000"
     
     # Show target database only in demo mode
     if is_demo_mode; then
-        echo "  Target Database:    postgresql://postgres:postgres@localhost:5432/target_database"
+        echo "  Target Database:    postgresql://postgres:postgres@localhost:55432/target_database"
     fi
     
-    echo "  Sink Database:      postgresql://postgres:postgres@localhost:5433/postgres"
+    echo "  Sink Database:      postgresql://postgres:postgres@localhost:55433/postgres"
     echo
     
     # Show reports information

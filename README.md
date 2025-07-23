@@ -43,7 +43,7 @@ ALTER USER postgres_ai_mon set search_path = "$user", public, pg_catalog;
 
 ```bash
 # Download the CLI
-curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai \
+curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/testing/postgres_ai \
   && chmod +x postgres_ai
 ```
 
