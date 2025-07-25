@@ -1374,8 +1374,8 @@ metrics:
       This metric helps administrators identify indexes that may need maintenance like VACUUM FULL or index reorganization.
     sqls:
       11: | 
-        select current_database() as tag_datname, nspname as tag_schemaname, tblname as tag_tblname, idxname as tag_idxname, bs*(relpages)::bigint as real_size,
-          bs*(relpages-est_pages)::bigint as extra_size,
+        select current_database() as tag_datname, nspname as tag_schemaname, tblname as tag_tblname, idxname as tag_idxname, (bs*(relpages)/(1024*1024))::float as real_size_mib,
+          (bs*(relpages-est_pages))::float as extra_size,
           100 * (relpages-est_pages)::float / relpages as extra_pct,
           fillfactor,
           CasE when relpages > est_pages_ff
@@ -1472,7 +1472,7 @@ metrics:
         ) as relation_stats
         order by nspname, tblname, idxname;
     gauges:
-      - real_size
+      - real_size_mib
       - extra_size
       - extra_pct
       - fillfactor
@@ -1487,7 +1487,7 @@ metrics:
       This metric helps administrators identify tables that may need maintenance like VACUUM FULL or table reorganization.
     sqls:
       11: |
-        select current_database() as tag_datname, schemaname as tag_schemaname, tblname as tag_tblname, bs*tblpages as real_size,
+        select current_database() as tag_datname, schemaname as tag_schemaname, tblname as tag_tblname, (bs*tblpages)/(1024*1024)::float as real_size_mib,
           (tblpages-est_tblpages)*bs as extra_size,
           CasE when tblpages > 0 and tblpages - est_tblpages > 0
             then 100 * (tblpages - est_tblpages)/tblpages::float
@@ -1548,7 +1548,7 @@ metrics:
         --   and tblpages*((pst).free_percent + (pst).dead_tuple_percent)::float4/100 >= 1
         order by schemaname, tblname;
     gauges:
-      - real_size
+      - real_size_mib
       - extra_size
       - extra_pct
       - fillfactor
