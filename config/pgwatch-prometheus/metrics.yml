@@ -541,6 +541,7 @@ metrics:
         select * from (
             select
                 epoch_ns,
+                tag_datname,
                 quote_ident(qr.root_schema) as tag_schema,
                 quote_ident(qr.root_relname) as tag_table_name,
                 quote_ident(qr.root_schema) || '.' || quote_ident(qr.root_relname) as tag_table_full_name,
@@ -573,7 +574,7 @@ metrics:
                     join q_parts qp on qp.relid = ts.relid
                     join q_root_part qr on qr.oid = qp.root
               group by
-                    1, 2, 3, 4, 5
+                    1, 2, 3, 4, 5, 6
         ) x
         order by table_size_b desc nulls last limit 300
       16: |-
@@ -602,6 +603,7 @@ metrics:
             ),
             q_tstats as (
                 select (extract(epoch from now()) * 1e9)::int8                                                  as epoch_ns,
+                        current_database()                                                                       as tag_datname,
                         relid, -- not sent to final output
                         quote_ident(schemaname)                                                                  as tag_schema,
                         quote_ident(ut.relname)                                                                  as tag_table_name,
@@ -645,6 +647,7 @@ metrics:
         
         select /* pgwatch_generated */
             epoch_ns,
+            tag_datname,
             tag_schema,
             tag_table_name,
             tag_table_full_name,
@@ -681,6 +684,7 @@ metrics:
         select * from (
             select
                 epoch_ns,
+                tag_datname,
                 quote_ident(qr.root_schema) as tag_schema,
                 quote_ident(qr.root_relname) as tag_table_name,
                 quote_ident(qr.root_schema) || '.' || quote_ident(qr.root_relname) as tag_table_full_name,
@@ -714,7 +718,7 @@ metrics:
                     join q_parts qp on qp.relid = ts.relid
                     join q_root_part qr on qr.oid = qp.root
               group by
-                    1, 2, 3, 4
+                    1, 2, 3, 4, 5
         ) x
         order by table_size_b desc nulls last limit 300
     gauges:
@@ -1097,7 +1101,7 @@ metrics:
         select
           'tail_dummy_user' as tag_user,
           current_database() as tag_datname,
-          -1 as tag_qqueryid,
+          -1 as tag_queryid,
           sum(calls)::int8 as calls,
           sum(plans_total)::int8 as plans_total,
           sum(exec_time_total)::int8 as exec_time_total,
@@ -1169,7 +1173,7 @@ metrics:
         select
           'tail_dummy_user' as tag_user,
           current_database() as tag_datname,
-          -1 as tag_qqueryid,
+          -1 as tag_queryid,
           sum(calls)::int8 as calls,
           sum(plans_total)::int8 as plans_total,
           sum(exec_time_total)::int8 as exec_time_total,
