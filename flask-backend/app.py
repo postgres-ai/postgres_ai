@@ -337,5 +337,115 @@ def list_metrics():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/btree_bloat/csv', methods=['GET'])
+def get_btree_bloat_csv():
+    """
+    Get current pg_btree_bloat metrics as a CSV table.
+
+    Query parameters:
+    - cluster_name: Cluster name filter (optional)
+    - node_name: Node name filter (optional)
+    - schemaname: Schema name filter (optional)
+    - tblname: Table name filter (optional)
+    - idxname: Index name filter (optional)
+    """
+    try:
+        # Get query parameters
+        cluster_name = request.args.get('cluster_name')
+        node_name = request.args.get('node_name')
+        db_name = request.args.get('db_name')
+        schemaname = request.args.get('schemaname')
+        tblname = request.args.get('tblname')
+        idxname = request.args.get('idxname')
+
+        # Build label filters
+        filters = []
+        if cluster_name:
+            filters.append(f'cluster="{cluster_name}"')
+        if node_name:
+            filters.append(f'node_name="{node_name}"')
+        if schemaname:
+            filters.append(f'schemaname="{schemaname}"')
+        if tblname:
+            filters.append(f'tblname="{tblname}"')
+        if idxname:
+            filters.append(f'idxname="{idxname}"')
+        if db_name:
+            filters.append(f'datname="{db_name}"')
+        filter_str = '{' + ','.join(filters) + '}' if filters else ''
+
+        # Metrics to fetch
+        metric_names = [
+            'pgwatch_pg_btree_bloat_real_size_mib',
+            'pgwatch_pg_btree_bloat_extra_size',
+            'pgwatch_pg_btree_bloat_extra_pct',
+            'pgwatch_pg_btree_bloat_fillfactor',
+            'pgwatch_pg_btree_bloat_bloat_size',
+            'pgwatch_pg_btree_bloat_bloat_pct',
+            'pgwatch_pg_btree_bloat_is_na',
+        ]
+        prom = get_prometheus_client()
+        # Fetch all metrics
+        metric_results = {}
+        for metric in metric_names:
+            try:
+                result = prom.get_current_metric_value(metric_name=metric + filter_str)
+                for entry in result:
+                    metric_labels = entry.get('metric', {})
+                    key = (
+                        metric_labels.get('datname', ''),
+                        metric_labels.get('schemaname', ''),
+                        metric_labels.get('tblname', ''),
+                        metric_labels.get('idxname', '')
+                    )
+                    if key not in metric_results:
+                        metric_results[key] = {
+                            'database': metric_labels.get('datname', ''),
+                            'schemaname': metric_labels.get('schemaname', ''),
+                            'tblname': metric_labels.get('tblname', ''),
+                            'idxname': metric_labels.get('idxname', ''),
+                        }
+                    logger.warning(f"metric: {metric}")
+                    if metric.endswith('real_size_mib'):
+                        metric_results[key]['real_size_mib'] = float(entry['value'][1]) if entry.get('value') else None
+                    elif metric.endswith('extra_size'):
+                        metric_results[key]['extra_size'] = float(entry['value'][1]) if entry.get('value') else None
+                    elif metric.endswith('extra_pct'):
+                        metric_results[key]['extra_pct'] = float(entry['value'][1]) if entry.get('value') else None
+                    elif metric.endswith('fillfactor'):
+                        metric_results[key]['fillfactor'] = float(entry['value'][1]) if entry.get('value') else None
+                    elif metric.endswith('bloat_size'):
+                        metric_results[key]['bloat_size'] = float(entry['value'][1]) if entry.get('value') else None
+                    elif metric.endswith('bloat_pct'):
+                        metric_results[key]['bloat_pct'] = float(entry['value'][1]) if entry.get('value') else None
+                    elif metric.endswith('is_na'):
+                        metric_results[key]['is_na'] = int(float(entry['value'][1])) if entry.get('value') else None
+            except Exception as e:
+                logger.warning(f"Failed to query metric {metric}: {e}")
+                continue
+
+        # Prepare CSV output
+        output = io.StringIO()
+        fieldnames = [
+            'database', 'schemaname', 'tblname', 'idxname',
+            'real_size_mib', 'extra_size', 'extra_pct', 'fillfactor',
+            'bloat_size', 'bloat_pct', 'is_na'
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in metric_results.values():
+            writer.writerow(row)
+        csv_content = output.getvalue()
+        output.close()
+
+        # Create response
+        response = make_response(csv_content)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=btree_bloat_metrics.csv'
+        return response
+    except Exception as e:
+        logger.error(f"Error processing btree bloat request: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
