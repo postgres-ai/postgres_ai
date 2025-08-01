@@ -1,0 +1,16 @@
+FROM alpine:latest
+
+# Create a directory to hold the configs
+RUN mkdir -p /config
+
+# Copy all config contents except sources.yml files
+COPY config/ /config/
+
+# Remove the sources.yml files that should be excluded
+RUN rm -f /config/pgwatch-postgres/sources.yml /config/pgwatch-prometheus/sources.yml
+
+# Create a volume for the configs
+VOLUME /config
+
+# Keep the container running
+CMD ["tail", "-f", "/dev/null"]

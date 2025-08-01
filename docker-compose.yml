@@ -4,9 +4,12 @@ services:
     image: alpine:3.22.0
     container_name: sources-generator
     working_dir: /app
+    depends_on:
+      - postgres-ai
     volumes:
-      - ./instances.yml:/app/instances.yaml
-      - ./config:/app/config
+      - ./instances.yml:/app/instances.yaml:rw
+      - postgres_ai_configs:/app/config:rw
+      - grafana_data:/var/lib/grafana:rw
     command: >
       sh -c "
       mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
@@ -15,7 +18,20 @@ services:
       echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
       echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
       sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
-      echo 'Generated sources.yml files for both postgres and prometheus'
+      echo 'Generated sources.yml files for both postgres and prometheus' &&
+      ls -la /app/config/pgwatch-postgres/ &&
+      ls -la /app/config/pgwatch-prometheus/ &&
+      echo 'Copying files to shared volume location...' &&
+      mkdir -p /app/config/pgwatch &&
+      cp /app/config/pgwatch-postgres/sources.yml /app/config/pgwatch/ &&
+      cp /app/config/pgwatch-postgres/metrics.yml /app/config/pgwatch/ &&
+      echo 'Files copied to shared volume:' &&
+      ls -la /app/config/pgwatch/ &&
+      echo 'Copying Grafana dashboards...' &&
+      cp /app/config/grafana/dashboards/*.json /var/lib/grafana/dashboards/ &&
+      echo 'Grafana dashboards copied to shared volume:' &&
+      ls -la /var/lib/grafana/dashboards/ &&
+      tail -f /dev/null
       "
 
   # Target Database - The PostgreSQL database being monitored
@@ -26,12 +42,65 @@ services:
       POSTGRES_DB: target_database
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     ports:
       - "55432:5432"
+    depends_on:
+      - postgres-ai
     volumes:
       - target_db_data:/var/lib/postgresql/data
-      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      sh -c "
+      echo '-- Initialize target database for monitoring' > /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Enable pg_stat_statements extension for query monitoring' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Create a sample table for demonstration' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE TABLE IF NOT EXISTS sample_data (' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    id SERIAL PRIMARY KEY,' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    name VARCHAR(100),' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo ');' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Insert some sample data' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'INSERT INTO sample_data (name) VALUES' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    (''Sample Record 1''),' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    (''Sample Record 2''),' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    (''Sample Record 3'');' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Create a user for PGWatch monitoring' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE USER monitor WITH PASSWORD ''monitor_pass'';' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT CONNECT ON DATABASE target_database TO monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT USAGE ON SCHEMA public TO monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Create a public view for pg_statistic access' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE OR REPLACE VIEW public.pg_statistic AS' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'SELECT' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    n.nspname as schemaname,' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    c.relname as tablename,' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    a.attname,' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    s.stanullfrac as null_frac,' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    s.stawidth as avg_width,' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '    false as inherited' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'FROM pg_statistic s' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'JOIN pg_class c ON c.oid = s.starelid' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'JOIN pg_namespace n ON n.oid = c.relnamespace' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'JOIN pg_attribute a ON a.attrelid = s.starelid AND a.attnum = s.staattnum' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'WHERE a.attnum > 0 AND NOT a.attisdropped;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Grant specific access instead of all tables' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT SELECT ON public.pg_statistic TO pg_monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Grant access to monitoring views' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT SELECT ON pg_stat_statements TO monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT SELECT ON pg_stat_database TO monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT SELECT ON pg_stat_user_tables TO monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Grant pg_monitor role to monitor user for enhanced monitoring capabilities' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT pg_monitor TO monitor;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Set search path for the monitor user' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'ALTER USER monitor SET search_path = \"$$user\", public, pg_catalog;' >> /docker-entrypoint-initdb.d/init.sql &&
+      exec postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all
+      "
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
   sink-postgres:
@@ -41,23 +110,52 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    depends_on:
+      - postgres-ai
     ports:
       - "55433:5432"
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
-      - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      sh -c "
+      echo '-- Initialize PostgreSQL sink database for storing pgwatch measurements' > /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- This database will store all the monitoring metrics collected by PGWatch' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Based on https://pgwat.ch/latest/howto/metrics_db_bootstrap.html' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Create the pgwatch role for measurements database' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE ROLE pgwatch WITH LOGIN PASSWORD ''pgwatchadmin'';' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Create the measurements database owned by pgwatch' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE DATABASE measurements OWNER pgwatch;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Switch to the measurements database context' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '\\c measurements;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Create extensions that might be useful for metrics storage' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE EXTENSION IF NOT EXISTS btree_gist;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- Grant necessary permissions to pgwatch user' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT ALL PRIVILEGES ON DATABASE measurements TO pgwatch;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo 'GRANT ALL PRIVILEGES ON SCHEMA public TO pgwatch;' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- pgwatch will automatically create the admin and subpartitions schemas' >> /docker-entrypoint-initdb.d/init.sql &&
+      echo '-- and all necessary tables when it starts up' >> /docker-entrypoint-initdb.d/init.sql &&
+      "
 
   # Prometheus Sink - Storage for metrics in Prometheus format
   sink-prometheus:
     image: prom/prometheus:v3.4.2
     container_name: sink-prometheus
+    depends_on:
+      - postgres-ai
     ports:
       - "59090:9090"
     volumes:
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - postgres_ai_configs:/config:ro
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--config.file=/config/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
@@ -68,30 +166,30 @@ services:
   pgwatch-postgres:
     image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-postgres
-    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
+    command: ["--sources=/config/pgwatch-postgres/sources.yml", "--metrics=/config/pgwatch-postgres/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
     ports:
       - "58080:8080"
     depends_on:
+      - postgres-ai
       - sources-generator
       - sink-postgres
     volumes:
-      - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+      - postgres_ai_configs:/config:rw
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
   pgwatch-prometheus:
     image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-prometheus
-    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=prometheus://0.0.0.0:9091/pgwatch", "--web-addr=:8089"]
+    command: ["--sources=/config/pgwatch-prometheus/sources.yml", "--metrics=/config/pgwatch-prometheus/metrics.yml", "--sink=prometheus://0.0.0.0:9091/pgwatch", "--web-addr=:8089"]
     ports:
       - "58089:8089"
       - "59091:9091"
     depends_on:
+      - postgres-ai
       - sources-generator
       - sink-prometheus
     volumes:
-      - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+      - postgres_ai_configs:/config:rw
 
   # Grafana with datasources - Visualization layer
   grafana:
@@ -101,16 +199,19 @@ services:
       GF_SECURITY_ADMIN_USER: demo
       GF_SECURITY_ADMIN_PASSWORD: demo
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+      GF_PATHS_PROVISIONING: /config/grafana/provisioning
+      GF_PATHS_CONFIG: /config/grafana/provisioning/grafana.ini
+      GF_PATHS_DATA: /var/lib/grafana
     ports:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./config/grafana/provisioning/grafana.ini:/etc/grafana/grafana.ini
+      - postgres_ai_configs:/config:rw
     depends_on:
+      - postgres-ai
       - sink-postgres
       - sink-prometheus
+    
   flask-backend:
     build:
       context: ./flask-backend
@@ -164,9 +265,17 @@ services:
         sleep 86400
       done
       "
+  postgres-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres_ai
+    container_name: postgres-ai
+    volumes:
+      - postgres_ai_configs:/config:/config
 
 volumes:
   target_db_data:
   sink_postgres_data:
   prometheus_data:
   grafana_data:
+  postgres_ai_configs:
