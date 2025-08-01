@@ -23,46 +23,6 @@
 #        statement_timeout_seconds: 300
 #        metric_storage_name: db_stats
 metrics:
-  backends:
-    description: >
-      This metric gathers detailed information from the PostgreSQL pg_stat_activity view, providing an overview of the database's current session
-      and activity state. It tracks the total number of client backends, active sessions, idle sessions, sessions waiting on locks, and background workers.
-      The metric also calculates statistics on blocked sessions, most extended waiting times, average and longest session durations, transaction times,
-      and query durations. Additionally, it monitors autovacuum worker activity and provides the age of the oldest transaction (measured by xmin).
-      This metric helps administrators monitor session states, detect bottlenecks, and ensure the system is within its connection limits,
-      providing visibility into database performance and contention.
-    sqls:
-      11: |
-        with sa_snapshot as (
-          select * from pg_stat_activity
-          where pid != pg_backend_pid()
-          and datname = current_database()
-        )
-        select /* pgwatch_generated */
-          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
-          current_database() as tag_datname,
-          (select count(*) from sa_snapshot where backend_type = 'client backend') as total,
-          (select count(*) from pg_stat_activity where pid != pg_backend_pid()) as instance_total,
-          current_setting('max_connections')::int as max_connections,
-          (select count(*) from sa_snapshot where backend_type = 'background worker') as background_workers,
-          (select count(*) from sa_snapshot where state = 'active' and backend_type = 'client backend') as active,
-          (select count(*) from sa_snapshot where state = 'idle' and backend_type = 'client backend') as idle,
-          (select count(*) from sa_snapshot where state = 'idle in transaction' and backend_type = 'client backend') as idleintransaction,
-          (select count(*) from sa_snapshot where wait_event_type in ('LWLock', 'Lock', 'BufferPin') and backend_type = 'client backend') as waiting,
-          (select coalesce(sum(case when coalesce(array_length(pg_blocking_pids(pid), 1), 0) >= 1 then 1 else 0 end), 0) from sa_snapshot where backend_type = 'client backend' and state = 'active') as blocked,
-          (select ceil(extract(epoch from max(now() - query_start)))::int from sa_snapshot where wait_event_type in ('LWLock', 'Lock', 'BufferPin') and backend_type = 'client backend') as longest_waiting_seconds,
-          (select round(avg(abs(extract(epoch from now() - query_start)))::numeric, 3)::float from sa_snapshot where wait_event_type in ('LWLock', 'Lock', 'BufferPin') and backend_type = 'client backend') as avg_waiting_seconds,
-          (select ceil(extract(epoch from (now() - backend_start)))::int from sa_snapshot where backend_type = 'client backend' order by backend_start limit 1) as longest_session_seconds,
-          (select round(avg(abs(extract(epoch from now() - backend_start)))::numeric, 3)::float from sa_snapshot where backend_type = 'client backend') as avg_session_seconds,
-          (select ceil(extract(epoch from (now() - xact_start)))::int from sa_snapshot where xact_start is not null and backend_type = 'client backend' order by xact_start limit 1) as longest_tx_seconds,
-          (select round(avg(abs(extract(epoch from now() - xact_start)))::numeric, 3)::float from sa_snapshot where xact_start is not null and backend_type = 'client backend') as avg_tx_seconds,
-          (select ceil(extract(epoch from (now() - xact_start)))::int from sa_snapshot where backend_type = 'autovacuum worker' order by xact_start limit 1) as longest_autovacuum_seconds,
-          (select ceil(extract(epoch from max(now() - query_start)))::int from sa_snapshot where state = 'active' and backend_type = 'client backend') as longest_query_seconds,
-          (select round(avg(abs(extract(epoch from now() - query_start)))::numeric, 3)::float from sa_snapshot where state = 'active' and backend_type = 'client backend') as avg_query_seconds,
-          (select max(age(backend_xmin))::int8 from sa_snapshot) as max_xmin_age_tx,
-          (select count(*) from sa_snapshot where state = 'active' and backend_type = 'autovacuum worker') as av_workers
-    gauges:
-      - '*'
   bgwriter:
     description: >
       Retrieves key statistics from the PostgreSQL `pg_stat_bgwriter` view, providing insights into the background writer's performance.
@@ -318,7 +278,7 @@ metrics:
       Retrieves lock mode statistics from the PostgreSQL `pg_locks` view, providing insights into the different lock modes currently held in the database.
       It returns the lock mode and the count of locks for each mode. This metric helps administrators monitor lock contention and performance.
     sqls:
-      11: |-
+      13: |-
         WITH q_locks as (
           select
             *
@@ -327,7 +287,9 @@ metrics:
           where
             pid != pg_backend_pid()
             and database = (select oid from pg_database where datname = current_database())
+          limit 5000
         )
+        
         select /* pgwatch_generated */
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
@@ -376,8 +338,7 @@ metrics:
     sqls:
       11: |-
         select /* pgwatch_generated */
-          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
-          current_database() as tag_datname,
+          (current_database() as tag_datname,
           slot_name::text as tag_slot_name,
           coalesce(plugin, 'physical')::text as tag_plugin,
           active,
@@ -410,31 +371,6 @@ metrics:
     gauges:
       - '*'
     is_instance_level: true
-  sproc_stats:
-    description: >
-      This metric collects statistics about user-defined functions (stored procedures) in the database.
-      It provides insights into function usage, including call counts and execution times.
-      This metric is useful for monitoring function performance and identifying potential bottlenecks.
-    sqls:
-      11: |-
-        select /* pgwatch_generated */
-          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
-          current_database() as tag_datname,
-          schemaname::text as tag_schema,
-          funcname::text  as tag_function_name,
-          quote_ident(schemaname)||'.'||quote_ident(funcname) as tag_function_full_name,
-          p.oid::text as tag_oid, -- for overloaded funcs
-          calls as sp_calls,
-          self_time,
-          total_time
-        from
-          pg_stat_user_functions f
-          join
-          pg_proc p on p.oid = f.funcid
-        order by
-          total_time DESC
-        LIMIT
-          300
 
   table_stats:
     description: >
@@ -466,8 +402,7 @@ metrics:
                           join pg_class c on c.oid = i.inhrelid
             ),
             q_tstats as (
-                select (extract(epoch from now()) * 1e9)::int8                                                  as epoch_ns,
-                        current_database()                                                                       as tag_datname,
+                select (current_database()                                                                       as tag_datname,
                         relid, -- not sent to final output
                         quote_ident(schemaname)                                                                  as tag_schema,
                         quote_ident(ut.relname)                                                                  as tag_table_name,
@@ -541,6 +476,7 @@ metrics:
         select * from (
             select
                 epoch_ns,
+                tag_datname,
                 quote_ident(qr.root_schema) as tag_schema,
                 quote_ident(qr.root_relname) as tag_table_name,
                 quote_ident(qr.root_schema) || '.' || quote_ident(qr.root_relname) as tag_table_full_name,
@@ -573,7 +509,7 @@ metrics:
                     join q_parts qp on qp.relid = ts.relid
                     join q_root_part qr on qr.oid = qp.root
               group by
-                    1, 2, 3, 4, 5
+                    1, 2, 3, 4, 5, 6
         ) x
         order by table_size_b desc nulls last limit 300
       16: |-
@@ -601,7 +537,7 @@ metrics:
                           join pg_class c on c.oid = i.inhrelid
             ),
             q_tstats as (
-                select (extract(epoch from now()) * 1e9)::int8                                                  as epoch_ns,
+                select (current_database()                                                                       as tag_datname,
                         relid, -- not sent to final output
                         quote_ident(schemaname)                                                                  as tag_schema,
                         quote_ident(ut.relname)                                                                  as tag_table_name,
@@ -645,6 +581,7 @@ metrics:
         
         select /* pgwatch_generated */
             epoch_ns,
+            tag_datname,
             tag_schema,
             tag_table_name,
             tag_table_full_name,
@@ -681,6 +618,7 @@ metrics:
         select * from (
             select
                 epoch_ns,
+                tag_datname,
                 quote_ident(qr.root_schema) as tag_schema,
                 quote_ident(qr.root_relname) as tag_table_name,
                 quote_ident(qr.root_schema) || '.' || quote_ident(qr.root_relname) as tag_table_full_name,
@@ -714,7 +652,7 @@ metrics:
                     join q_parts qp on qp.relid = ts.relid
                     join q_root_part qr on qr.oid = qp.root
               group by
-                    1, 2, 3, 4
+                    1, 2, 3, 4, 5
         ) x
         order by table_size_b desc nulls last limit 300
     gauges:
@@ -822,7 +760,7 @@ metrics:
       11: |
         WITH
           current_wal_file as (
-            select CasE when not pg_is_in_recovery() then pg_walfile_name(pg_current_wal_insert_lsn()) else null end pg_walfile_name
+            select case when not pg_is_in_recovery() then pg_walfile_name(pg_current_wal_insert_lsn()) else null end pg_walfile_name
           ),
           current_wal as (
             select
@@ -850,6 +788,7 @@ metrics:
           '__transaction__' as tag_table
         from pg_catalog.pg_locks blocked
         where not blocked.granted and locktype = 'transactionid'
+        limit 5000
         group by locktype
         union
         select
@@ -857,6 +796,7 @@ metrics:
           blocked.relation::regclass::text as tag_table
         from pg_catalog.pg_locks blocked
         where not blocked.granted and locktype != 'transactionid'
+        limit 5000
         group by relation
     gauges:
       - queries
@@ -885,31 +825,6 @@ metrics:
           postgres_gin_pending_list_size()
     gauges:
       - pending_list_bytes
-  pg_indexes_with_size:
-    sqls:
-      11: select current_database() as tag_datname, schemaname as tag_schemaname, tablename as tag_relname, indexname as tag_indexrelname, pg_class.relpages
-        * 8192::bigint as index_size from pg_indexes inner join pg_namespace on pg_indexes.schemaname
-        = pg_namespace.nspname inner join pg_class on pg_class.relnamespace = pg_namespace.oid
-        and pg_class.relname = pg_indexes.indexname where pg_indexes.schemaname != 'pg_catalog' and pg_indexes.schemaname != 'pg_toast'
-    gauges:
-      - index_size
-  pg_integer_capacity:
-    sqls:
-      11: |
-        select current_database() as tag_datname, 'sent_notifications' as tag_table_name, 'id' as tag_column_name, max(id) as current, (select (2^(numeric_precision-1)-1) as maximum from information_schema.columns where (table_name, column_name) = ('sent_notifications', 'id')) from sent_notifications
-          union all
-                  select current_database() as tag_datname, 'notes', 'id', max(id), (select (2^(numeric_precision-1)-1) from information_schema.columns where (table_name, column_name) = ('notes', 'id')) from notes
-          union all
-                  select current_database() as tag_datname, 'system_note_metadata', 'id', max(id), (select (2^(numeric_precision-1)-1) from information_schema.columns where (table_name, column_name) = ('system_note_metadata', 'id')) from system_note_metadata
-          union all
-        select current_database() as tag_datname, 'merge_request_diffs', 'id', max(id), (select (2^(numeric_precision-1)-1) from information_schema.columns where (table_name, column_name) = ('merge_request_diffs', 'id')) from merge_request_diffs
-          union all
-        select current_database() as tag_datname, 'merge_request_metrics', 'id', max(id), (select (2^(numeric_precision-1)-1) from information_schema.columns where (table_name, column_name) = ('merge_request_metrics', 'id')) from merge_request_metrics
-          union all
-        select current_database() as tag_datname, 'deployments', 'id', max(id), (select (2^(numeric_precision-1)-1) from information_schema.columns where (table_name, column_name) = ('deployments', 'id')) from deployments
-    gauges:
-      - current
-      - maximum
   pg_long_running_transactions:
     sqls:
       11: |
@@ -920,112 +835,51 @@ metrics:
         where state is distinct from 'idle' and (now() - xact_start) > '1 minutes'::interval and query not like 'autovacuum:%'
     gauges:
       - '*'
-  pg_oldest_blocked:
-    sqls:
-      11: |
-        select current_database() as tag_datname,
-        coalesce(extract('epoch' from max(clock_timestamp() - state_change)), 0) age_seconds
-          from pg_catalog.pg_stat_activity
-        where wait_event_type = 'Lock'
-          and state='active'
-    gauges:
-      - age_seconds
-  pg_postmaster:
-    sqls:
-      11: select current_database() as tag_datname, pg_postmaster_start_time as start_time_seconds from pg_postmaster_start_time()
-    gauges:
-      - start_time_seconds
-  pg_replication:
-    sqls:
-      11: select current_database() as tag_datname, CasE when not pg_is_in_recovery() then 0 else GREATEST (0, extract(epoch
-        from (now() - pg_last_xact_replay_timestamp()))) end as lag, CasE when pg_is_in_recovery()
-        then 1 else 0 end as is_replica
-    gauges:
-      - lag
-      - is_replica
-  pg_replication_slots:
-    sqls:
-      11: |
-        select current_database() as tag_datname, slot_name as tag_slot_name, slot_type as tag_slot_type,
-              case when active then 1.0 else 0.0 end as active,
-              age(xmin) as xmin_age,
-              age(catalog_xmin) as catalog_xmin_age,
-              CasE when pg_is_in_recovery() then pg_last_wal_replay_lsn() else pg_current_wal_lsn() end - restart_lsn as restart_lsn_bytes,
-              CasE when pg_is_in_recovery() then pg_last_wal_replay_lsn() else pg_current_wal_lsn() end - confirmed_flush_lsn as confirmed_flush_lsn_bytes
-          from pg_replication_slots
-    gauges:
-      - active
-      - xmin_age
-      - catalog_xmin_age
-      - restart_lsn_bytes
-      - confirmed_flush_lsn_bytes
-  pg_slow:
-    sqls:
-      11: |
-        select current_database() as tag_datname, COUNT(*) as queries
-        from pg_catalog.pg_stat_activity
-        where state = 'active' and (now() - query_start) > '1 seconds'::interval
-    gauges:
-      - queries
-  pg_stat_activity_autovacuum:
-    sqls:
-      11: |
-        select
-          current_database() as tag_datname,
-          split_part(query, '.', 2) as tag_relname,
-          extract(epoch from (clock_timestamp() - xact_start)) as tag_age_in_seconds
-        from
-          pg_catalog.pg_stat_activity
-        where
-          query like 'autovacuum:%'
-        and
-          extract(epoch from (clock_timestamp() - xact_start)) > 300
-    gauges:
-      - age_in_seconds
-  pg_stat_activity_autovacuum_active:
-    sqls:
-      11: |
-        select current_database() as tag_datname,
-        v.phase as tag_phase,
-              CasE
-                when a.query ~ '^autovacuum.*to prevent wraparound' then 'wraparound'
-                when a.query ~* '^vacuum' then 'user'
-                when a.pid is null then null
-                else 'regular'
-              end as tag_mode,
-              count(1) as workers_count
-          from pg_stat_progress_vacuum v
-          left join pg_catalog.pg_stat_activity a using (pid)
-        group by 1,2
-    gauges:
-      - workers_count
   pg_stat_kcache:
     sqls:
-      11: "WITH ranked_kcache as (\n   select pg_get_userbyid(pg_stat_kcache_raw.userid)\
-        \ as tag_user,\n     pg_database.datname,\n     pg_stat_kcache_raw.queryid,\n  \
-        \   pg_stat_kcache_raw.exec_user_time,\n     pg_stat_kcache_raw.exec_system_time,\n\
-        \     pg_stat_kcache_raw.exec_user_time + pg_stat_kcache_raw.exec_system_time\
-        \ as tag_exec_total_time,\n     row_number() over (order by pg_stat_kcache_raw.exec_user_time\
-        \ + pg_stat_kcache_raw.exec_system_time desc) as rn\n   from public.pg_stat_kcache()\
-        \ pg_stat_kcache_raw\n     INNER join pg_database on pg_database.oid = pg_stat_kcache_raw.dbid\n\
-        )    \nselect\n  ranked_kcache.tag_user,\n  datname,\n  queryid,\n  exec_user_time,\n\
-        \  exec_system_time,\n  exec_total_time\nfrom ranked_kcache\nwhere rn <= 500\n\
-        union all\nselect\n  'tail_dummy_user' as tag_user,\n  current_database() as datname,\n\
-        \  -1 as queryid,\n  sum(exec_user_time) as exec_user_time,\n  sum(exec_system_time)\
-        \ as exec_system_time,\n  sum(exec_total_time) as exec_total_time\nfrom ranked_kcache\n\
-        where rn > 500\n"
+      11: |
+        WITH ranked_kcache as (
+          select pg_get_userbyid(pg_stat_kcache_raw.userid) as tag_user, 
+            pg_database.datname, 
+            pg_stat_kcache_raw.queryid, 
+            pg_stat_kcache_raw.exec_user_time, 
+            pg_stat_kcache_raw.exec_system_time, 
+            pg_stat_kcache_raw.exec_user_time + pg_stat_kcache_raw.exec_system_time as tag_exec_total_time, 
+            row_number() over (order by pg_stat_kcache_raw.exec_user_time + pg_stat_kcache_raw.exec_system_time desc)as rn 
+          from public.pg_stat_kcache() 
+          pg_stat_kcache_raw inner join pg_database on pg_database.oid = pg_stat_kcache_raw.dbid
+        )    
+        select ranked_kcache.tag_user,
+          datname, 
+          queryid, 
+          exec_user_time, 
+          exec_system_time, 
+          exec_total_time 
+        from ranked_kcache where rn <= 500
+        union all
+        select 'tail_dummy_user' as tag_user,
+          current_database() as datname,
+          -1 as queryid,
+          sum(exec_user_time) as exec_user_time, 
+          sum(exec_system_time) as exec_system_time, 
+          sum(exec_total_time) as exec_total_time 
+        from ranked_kcache where rn > 500
     gauges:
       - exec_user_time
       - exec_system_time
       - exec_total_time
   pg_stat_replication:
     sqls:
-      11: "select current_database() as tag_datname,\n  application_name as tag_application_name, \n  (pg_current_wal_lsn() - '0/0') % (2^52)::bigint\
-        \ as current_wal_lsn, \n  (sent_lsn - '0/0') % (2^52)::bigint as sent_lsn, \n\
-        \  (write_lsn - '0/0') % (2^52)::bigint as write_lsn, \n  (flush_lsn - '0/0')\
-        \ % (2^52)::bigint as flush_lsn, \n  (replay_lsn - '0/0') % (2^52)::bigint as\
-        \ replay_lsn,\n  extract(SEConDS from (now() - reply_time)) reply_time_lag \n\
-        \ from pg_stat_replication\n"
+      11: |
+        select current_database() as tag_datname, 
+          application_name as tag_application_name, 
+          (pg_current_wal_lsn() - '0/0') % (2^52)::bigint as current_wal_lsn, 
+          (sent_lsn - '0/0') % (2^52)::bigint as sent_lsn, 
+          (write_lsn - '0/0') % (2^52)::bigint as write_lsn, 
+          (flush_lsn - '0/0') % (2^52)::bigint as flush_lsn, 
+          (replay_lsn - '0/0') % (2^52)::bigint as replay_lsn,
+          extract(seconds from (now() - reply_time)) reply_time_lag 
+        from pg_stat_replication
     gauges:
       - current_wal_lsn
       - sent_lsn
@@ -1033,15 +887,6 @@ metrics:
       - flush_lsn
       - replay_lsn
       - reply_time_lag
-  pg_stat_ssl:
-    sqls:
-      11: |
-        select current_database() as tag_datname, pid as tag_pid, bits as bits,
-              CasE when ssl then 1.0 else 0.0 end as active
-              from pg_stat_ssl
-    gauges:
-      - active
-      - bits
   pg_stat_statements:
     sqls:
       11: |
@@ -1097,7 +942,7 @@ metrics:
         select
           'tail_dummy_user' as tag_user,
           current_database() as tag_datname,
-          -1 as tag_qqueryid,
+          -1 as tag_queryid,
           sum(calls)::int8 as calls,
           sum(plans_total)::int8 as plans_total,
           sum(exec_time_total)::int8 as exec_time_total,
@@ -1169,7 +1014,7 @@ metrics:
         select
           'tail_dummy_user' as tag_user,
           current_database() as tag_datname,
-          -1 as tag_qqueryid,
+          -1 as tag_queryid,
           sum(calls)::int8 as calls,
           sum(plans_total)::int8 as plans_total,
           sum(exec_time_total)::int8 as exec_time_total,
@@ -1207,8 +1052,16 @@ metrics:
       - temp_bytes_written
   pg_stat_user_indexes:
     sqls:
-      11: select schemaname as tag_schemaname, relname as tag_relname, indexrelname as tag_indexrelname, idx_scan, idx_tup_read, idx_tup_fetch
+      11: |
+        select schemaname as tag_schemaname, 
+          relname as tag_relname, 
+          indexrelname as tag_indexrelname, 
+          idx_scan, 
+          idx_tup_read, 
+          idx_tup_fetch
         from pg_stat_user_indexes
+        order by idx_scan desc
+        limit 5000
     gauges:
       - idx_scan
       - idx_tup_read
@@ -1236,6 +1089,8 @@ metrics:
           (analyze_count + autoanalyze_count) as analyze_count
         from
           pg_stat_user_tables
+        order by n_live_tup + n_dead_tup desc
+        limit 5000
     gauges:
       - seq_scan
       - seq_tup_read
@@ -1279,27 +1134,6 @@ metrics:
       - latest_end_lsn
       - latest_end_time
       - upstream_node
-  pg_statio_user_indexes:
-    sqls:
-      11: select current_database() as tag_datname, schemaname as tag_schemaname, relname as tag_relname, indexrelname as tag_indexrelname, idx_blks_read, idx_blks_hit from
-        pg_statio_user_indexes
-    gauges:
-      - idx_blks_read
-      - idx_blks_hit
-  pg_statio_user_tables:
-    sqls:
-      11: select current_database() as tag_datname, schemaname as tag_schemaname, relname as tag_relname, heap_blks_read, heap_blks_hit, idx_blks_read,
-        idx_blks_hit, toast_blks_read, toast_blks_hit, tidx_blks_read, tidx_blks_hit
-        from pg_statio_user_tables
-    gauges:
-      - heap_blks_read
-      - heap_blks_hit
-      - idx_blks_read
-      - idx_blks_hit
-      - toast_blks_read
-      - toast_blks_hit
-      - tidx_blks_read
-      - tidx_blks_hit
   pg_stuck_idle_in_transaction:
     sqls:
       11: |
@@ -1316,7 +1150,9 @@ metrics:
               relname as tag_relname,
               pg_total_relation_size(oid) bytes
           from pg_class
-        where relkind = 'r';
+        where relkind = 'r'
+        order by bytes desc
+        limit 5000
     gauges:
       - bytes
   pg_txid:
@@ -1324,9 +1160,9 @@ metrics:
       11: |
         select
           current_database() as tag_datname,
-          CasE when pg_is_in_recovery() then 'NaN'::float else txid_current() % (2^52)::bigint end as current,
-          CasE when pg_is_in_recovery() then 'NaN'::float else txid_snapshot_xmin(txid_current_snapshot()) % (2^52)::bigint end as xmin,
-          CasE when pg_is_in_recovery() then 'NaN'::float else txid_current() - txid_snapshot_xmin(txid_current_snapshot()) end as xmin_age
+          case when pg_is_in_recovery() then 'NaN'::float else txid_current() % (2^52)::bigint end as current,
+          case when pg_is_in_recovery() then 'NaN'::float else txid_snapshot_xmin(txid_current_snapshot()) % (2^52)::bigint end as xmin,
+          case when pg_is_in_recovery() then 'NaN'::float else txid_current() - txid_snapshot_xmin(txid_current_snapshot()) end as xmin_age
     gauges:
       - current
       - xmin
@@ -1359,7 +1195,7 @@ metrics:
     sqls:
       11: |
         select current_database() as tag_datname,
-        CasE
+        case
               when pg_is_in_recovery()
               then (pg_last_wal_replay_lsn() - '0/0') % (2^52)::bigint
               else (pg_current_wal_lsn() - '0/0') % (2^52)::bigint
@@ -1378,7 +1214,7 @@ metrics:
           (bs*(relpages-est_pages))::float as extra_size,
           100 * (relpages-est_pages)::float / relpages as extra_pct,
           fillfactor,
-          CasE when relpages > est_pages_ff
+          case when relpages > est_pages_ff
             then bs*(relpages-est_pages_ff)
             else 0
           end as bloat_size,
@@ -1397,11 +1233,11 @@ metrics:
           from (
               select maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor,
                     ( index_tuple_hdr_bm +
-                        maxalign - CasE -- Add padding to the index tuple header to align on MAXALIGN
+                        maxalign - case -- Add padding to the index tuple header to align on MAXALIGN
                           when index_tuple_hdr_bm%maxalign = 0 then maxalign
                           else index_tuple_hdr_bm%maxalign
                         end
-                      + nulldatawidth + maxalign - CasE -- Add padding to the data to align on MAXALIGN
+                      + nulldatawidth + maxalign - case -- Add padding to the data to align on MAXALIGN
                           when nulldatawidth = 0 then 0
                           when nulldatawidth::integer%maxalign = 0 then maxalign
                           else nulldatawidth::integer%maxalign
@@ -1411,7 +1247,7 @@ metrics:
               from (
                   select n.nspname, i.tblname, i.idxname, i.reltuples, i.relpages,
                       i.idxoid, i.fillfactor, current_setting('block_size')::numeric as bs,
-                      CasE -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
+                      case -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
                         when version() ~ 'mingw32' OR version() ~ '64-bit|x86_64|ppc64|ia64|amd64' then 8
                         else 4
                       end as maxalign,
@@ -1420,17 +1256,17 @@ metrics:
                       /* per page btree opaque data */
                       16 as pageopqdata,
                       /* per tuple header: add IndexAttributeBitMapData if some cols are null-able */
-                      CasE when max(coalesce(s.null_frac,0)) = 0
+                      case when max(coalesce(s.null_frac,0)) = 0
                           then 8 -- IndexTupleData size
                           else 8 + (( 32 + 8 - 1 ) / 8) -- IndexTupleData size + IndexAttributeBitMapData size ( max num filed per index + 8 - 1 /8)
                       end as index_tuple_hdr_bm,
                       /* data len: we remove null values save space using it fractionnal part from stats */
                       sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 1024)) as nulldatawidth,
-                      (max( CasE when i.atttypid = 'pg_catalog.name'::regtype then 1 else 0 end ) > 0)::int as is_na
+                      (max( case when i.atttypid = 'pg_catalog.name'::regtype then 1 else 0 end ) > 0)::int as is_na
                   from (
                       select ct.relname as tblname, ct.relnamespace, ic.idxname, ic.attpos, ic.indkey, ic.indkey[ic.attpos], ic.reltuples, ic.relpages, ic.tbloid, ic.idxoid, ic.fillfactor,
                           coalesce(a1.attnum, a2.attnum) as attnum, coalesce(a1.attname, a2.attname) as attname, coalesce(a1.atttypid, a2.atttypid) as atttypid,
-                          CasE when a1.attnum IS null
+                          case when a1.attnum IS null
                           then ic.idxname
                           else ct.relname
                           end as attrelname
@@ -1470,7 +1306,8 @@ metrics:
               ) as rows_data_stats
           ) as rows_hdr_pdg_stats
         ) as relation_stats
-        order by nspname, tblname, idxname;
+        order by real_size_mib desc
+        limit 5000
     gauges:
       - real_size_mib
       - extra_size
@@ -1489,15 +1326,15 @@ metrics:
       11: |
         select current_database() as tag_datname, schemaname as tag_schemaname, tblname as tag_tblname, (bs*tblpages)/(1024*1024)::float as real_size_mib,
           (tblpages-est_tblpages)*bs as extra_size,
-          CasE when tblpages > 0 and tblpages - est_tblpages > 0
+          case when tblpages > 0 and tblpages - est_tblpages > 0
             then 100 * (tblpages - est_tblpages)/tblpages::float
             else 0
           end as extra_pct, fillfactor,
-          CasE when tblpages - est_tblpages_ff > 0
+          case when tblpages - est_tblpages_ff > 0
             then (tblpages-est_tblpages_ff)*bs
             else 0
           end as bloat_size,
-          CasE when tblpages > 0 and tblpages - est_tblpages_ff > 0
+          case when tblpages > 0 and tblpages - est_tblpages_ff > 0
             then 100 * (tblpages - est_tblpages_ff)/tblpages::float
             else 0
           end as bloat_pct, is_na
@@ -1510,8 +1347,8 @@ metrics:
           from (
             select
               ( 4 + tpl_hdr_size + tpl_data_size + (2*ma)
-                - CasE when tpl_hdr_size%ma = 0 then ma else tpl_hdr_size%ma end
-                - CasE when ceil(tpl_data_size)::int%ma = 0 then ma else ceil(tpl_data_size)::int%ma end
+                - case when tpl_hdr_size%ma = 0 then ma else tpl_hdr_size%ma end
+                - case when ceil(tpl_data_size)::int%ma = 0 then ma else ceil(tpl_data_size)::int%ma end
               ) as tpl_size, bs - page_hdr as size_per_block, (heappages + toastpages) as tblpages, heappages,
               toastpages, reltuples, toasttuples, bs, page_hdr, tblid, schemaname, tblname, fillfactor, is_na
               -- , tpl_hdr_size, tpl_data_size
@@ -1524,13 +1361,13 @@ metrics:
                   array_to_string(tbl.reloptions, ' ')
                   from 'fillfactor=([0-9]+)')::smallint, 100) as fillfactor,
                 current_setting('block_size')::numeric as bs,
-                CasE when version()~'mingw32' OR version()~'64-bit|x86_64|ppc64|ia64|amd64' then 8 else 4 end as ma,
+                case when version()~'mingw32' OR version()~'64-bit|x86_64|ppc64|ia64|amd64' then 8 else 4 end as ma,
                 24 as page_hdr,
-                23 + CasE when MAX(coalesce(s.null_frac,0)) > 0 then ( 7 + count(s.attname) ) / 8 else 0::int end
-                  + CasE when bool_or(att.attname = 'oid' and att.attnum < 0) then 4 else 0 end as tpl_hdr_size,
+                23 + case when MAX(coalesce(s.null_frac,0)) > 0 then ( 7 + count(s.attname) ) / 8 else 0::int end
+                  + case when bool_or(att.attname = 'oid' and att.attnum < 0) then 4 else 0 end as tpl_hdr_size,
                 sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 0) ) as tpl_data_size,
                 (bool_or(att.atttypid = 'pg_catalog.name'::regtype)
-                  OR sum(CasE when att.attnum > 0 then 1 else 0 end) <> count(s.attname))::int as is_na
+                  OR sum(case when att.attnum > 0 then 1 else 0 end) <> count(s.attname))::int as is_na
               from pg_attribute as att
                 join pg_class as tbl on att.attrelid = tbl.oid
                 join pg_namespace as ns on ns.oid = tbl.relnamespace
@@ -1546,7 +1383,8 @@ metrics:
         ) as s3
         -- where not is_na
         --   and tblpages*((pst).free_percent + (pst).dead_tuple_percent)::float4/100 >= 1
-        order by schemaname, tblname;
+        order by real_size_mib desc
+        limit 5000
     gauges:
       - real_size_mib
       - extra_size
@@ -2091,53 +1929,39 @@ presets:
   full:
     description: almost all available metrics for a even deeper performance understanding
     metrics:
-      backends: 5
-      bgwriter: 5
-      checkpointer: 5
-      db_size: 5
-      db_stats: 5
-      locks_mode: 5
-      replication: 5
-      replication_slots: 5
-      settings: 5
-      sproc_stats: 5
-      table_io_stats: 5
-      table_stats: 5
-      wait_events: 5
-      wal: 5
-      pg_stat_activity: 5
-      pg_replication: 5
-      pg_stat_wal_receiver: 5
-      pg_archiver: 5
-      pg_postmaster: 5
-      pg_stat_user_tables: 5
-      pg_statio_user_tables: 5
-      pg_stat_user_indexes: 5
-      pg_statio_user_indexes: 5
-      pg_indexes_with_size: 5
-      pg_stat_statements: 5
-      pg_stat_kcache: 5
-      pg_total_relation_size: 5
-      pg_blocked: 5
-      pg_oldest_blocked: 5
-      pg_slow: 5
-      pg_long_running_transactions: 5
-      pg_stuck_idle_in_transaction: 5
-      pg_txid: 5
-      pg_database_wraparound: 5
-      pg_xlog_position: 5
-      pg_replication_slots: 5
-      pg_stat_ssl: 5
-      pg_integer_capacity: 5
-      pg_wait_sampling: 5
-      pg_wait_sampling_agg: 5
-      pg_stat_activity_autovacuum: 5
-      pg_stat_activity_autovacuum_active: 5
-      pg_gin_index: 5
-      pg_table_bloat: 60
-      pg_btree_bloat: 60
-      pg_invalid_indexes: 60
-      redundant_indexes: 60
-      unused_indexes: 60
-      rarely_used_indexes: 60
-      archive_lag: 60
+      bgwriter: 30
+      checkpointer: 30
+      db_size: 30
+      db_stats: 30
+      locks_mode: 30
+      replication: 30
+      replication_slots: 30
+      settings: 300
+      table_stats: 30
+      wait_events: 15
+      wal: 30
+      pg_stat_activity: 15
+      pg_stat_wal_receiver: 30
+      pg_archiver: 30
+      pg_stat_user_tables: 30
+      pg_stat_user_indexes: 30
+      pg_stat_statements: 30
+      pg_stat_kcache: 30
+      pg_stat_replication: 30
+      pg_total_relation_size: 30
+      pg_blocked: 30
+      pg_long_running_transactions: 30
+      pg_stuck_idle_in_transaction: 30
+      pg_txid: 30
+      pg_database_wraparound: 30
+      pg_xlog_position: 30
+      pg_wait_sampling: 30
+      pg_wait_sampling_agg: 30
+      pg_gin_index: 30
+      pg_table_bloat: 7200
+      pg_btree_bloat: 7200
+      pg_invalid_indexes: 7200
+      redundant_indexes: 10800
+      unused_indexes: 7200
+      rarely_used_indexes: 10800
+      archive_lag: 15
