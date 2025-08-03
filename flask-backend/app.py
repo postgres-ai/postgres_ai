@@ -337,17 +337,45 @@ def list_metrics():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/debug/metrics', methods=['GET'])
+def debug_metrics():
+    """
+    Debug endpoint to check what metrics are actually available in Prometheus
+    """
+    try:
+        prom = get_prometheus_client()
+        
+        # Get all available metrics
+        all_metrics = prom.all_metrics()
+        
+        # Filter for pg_btree_bloat metrics
+        btree_metrics = [m for m in all_metrics if 'btree_bloat' in m]
+        
+        # Get sample data for each btree metric
+        sample_data = {}
+        for metric in btree_metrics[:5]:  # Limit to first 5 to avoid overwhelming
+            try:
+                result = prom.get_current_metric_value(metric_name=metric)
+                sample_data[metric] = {
+                    'count': len(result),
+                    'sample_labels': [entry.get('metric', {}) for entry in result[:2]]  # First 2 entries
+                }
+            except Exception as e:
+                sample_data[metric] = {'error': str(e)}
+        
+        return jsonify({
+            'all_metrics_count': len(all_metrics),
+            'btree_metrics': btree_metrics,
+            'sample_data': sample_data
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/btree_bloat/csv', methods=['GET'])
 def get_btree_bloat_csv():
     """
-    Get current pg_btree_bloat metrics as a CSV table.
-
-    Query parameters:
-    - cluster_name: Cluster name filter (optional)
-    - node_name: Node name filter (optional)
-    - schemaname: Schema name filter (optional)
-    - tblname: Table name filter (optional)
-    - idxname: Index name filter (optional)
+    Get the most recent pg_btree_bloat metrics as a CSV table.
     """
     try:
         # Get query parameters
@@ -372,24 +400,28 @@ def get_btree_bloat_csv():
             filters.append(f'idxname="{idxname}"')
         if db_name:
             filters.append(f'datname="{db_name}"')
+
         filter_str = '{' + ','.join(filters) + '}' if filters else ''
 
-        # Metrics to fetch
-        metric_names = [
-            'pgwatch_pg_btree_bloat_real_size_mib',
-            'pgwatch_pg_btree_bloat_extra_size',
-            'pgwatch_pg_btree_bloat_extra_pct',
-            'pgwatch_pg_btree_bloat_fillfactor',
-            'pgwatch_pg_btree_bloat_bloat_size',
-            'pgwatch_pg_btree_bloat_bloat_pct',
-            'pgwatch_pg_btree_bloat_is_na',
+        # Metrics to fetch with last_over_time to get only the most recent value
+        metric_queries = [
+            f'last_over_time(pgwatch_pg_btree_bloat_real_size_mib{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_btree_bloat_extra_size{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_btree_bloat_extra_pct{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_btree_bloat_fillfactor{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_btree_bloat_bloat_size{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_btree_bloat_is_na{filter_str}[1d])',
         ]
+
         prom = get_prometheus_client()
-        # Fetch all metrics
         metric_results = {}
-        for metric in metric_names:
+
+        for query in metric_queries:
             try:
-                result = prom.get_current_metric_value(metric_name=metric + filter_str)
+                # Use custom_query instead of get_current_metric_value
+                result = prom.custom_query(query=query)
+
                 for entry in result:
                     metric_labels = entry.get('metric', {})
                     key = (
@@ -398,6 +430,7 @@ def get_btree_bloat_csv():
                         metric_labels.get('tblname', ''),
                         metric_labels.get('idxname', '')
                     )
+
                     if key not in metric_results:
                         metric_results[key] = {
                             'database': metric_labels.get('datname', ''),
@@ -405,23 +438,25 @@ def get_btree_bloat_csv():
                             'tblname': metric_labels.get('tblname', ''),
                             'idxname': metric_labels.get('idxname', ''),
                         }
-                    logger.warning(f"metric: {metric}")
-                    if metric.endswith('real_size_mib'):
-                        metric_results[key]['real_size_mib'] = float(entry['value'][1]) if entry.get('value') else None
-                    elif metric.endswith('extra_size'):
-                        metric_results[key]['extra_size'] = float(entry['value'][1]) if entry.get('value') else None
-                    elif metric.endswith('extra_pct'):
-                        metric_results[key]['extra_pct'] = float(entry['value'][1]) if entry.get('value') else None
-                    elif metric.endswith('fillfactor'):
-                        metric_results[key]['fillfactor'] = float(entry['value'][1]) if entry.get('value') else None
-                    elif metric.endswith('bloat_size'):
-                        metric_results[key]['bloat_size'] = float(entry['value'][1]) if entry.get('value') else None
-                    elif metric.endswith('bloat_pct'):
-                        metric_results[key]['bloat_pct'] = float(entry['value'][1]) if entry.get('value') else None
-                    elif metric.endswith('is_na'):
-                        metric_results[key]['is_na'] = int(float(entry['value'][1])) if entry.get('value') else None
+
+                    # Extract metric type from query and store value
+                    if 'real_size_mib' in query:
+                        metric_results[key]['real_size_mib'] = float(entry['value'][1])
+                    elif 'extra_size' in query and 'extra_pct' not in query:
+                        metric_results[key]['extra_size'] = float(entry['value'][1])
+                    elif 'extra_pct' in query:
+                        metric_results[key]['extra_pct'] = float(entry['value'][1])
+                    elif 'fillfactor' in query:
+                        metric_results[key]['fillfactor'] = float(entry['value'][1])
+                    elif 'bloat_size' in query:
+                        metric_results[key]['bloat_size'] = float(entry['value'][1])
+                    elif 'bloat_pct' in query:
+                        metric_results[key]['bloat_pct'] = float(entry['value'][1])
+                    elif 'is_na' in query:
+                        metric_results[key]['is_na'] = int(float(entry['value'][1]))
+
             except Exception as e:
-                logger.warning(f"Failed to query metric {metric}: {e}")
+                logger.warning(f"Failed to query: {query}, error: {e}")
                 continue
 
         # Prepare CSV output
@@ -435,14 +470,16 @@ def get_btree_bloat_csv():
         writer.writeheader()
         for row in metric_results.values():
             writer.writerow(row)
+
         csv_content = output.getvalue()
         output.close()
 
         # Create response
         response = make_response(csv_content)
         response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = 'attachment; filename=btree_bloat_metrics.csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=btree_bloat_latest.csv'
         return response
+
     except Exception as e:
         logger.error(f"Error processing btree bloat request: {e}")
         return jsonify({"error": str(e)}), 500

@@ -165,7 +165,7 @@
           }
         }
       ],
-      "title": "New panel",
+      "title": "",
       "transformations": [
         {
           "id": "calculateField",
