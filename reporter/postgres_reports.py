@@ -1617,7 +1617,7 @@ class PostgresReportGenerator:
             List of database names
         """
         # Query for all databases using pg_stat_database metrics
-        db_query = f'pgwatch_pg_stat_database_numbackends{{cluster="{cluster}", node_name="{node_name}"}}'
+        db_query = f'pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}", datname!="template1"}}'
         result = self.query_instant(db_query)
 
         databases = []
@@ -1626,7 +1626,6 @@ class PostgresReportGenerator:
                 db_name = item['metric'].get('datname', '')
                 if db_name and db_name not in databases:
                     databases.append(db_name)
-
         # If no databases found, try alternative query
         if not databases:
             db_query = f'pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}'
