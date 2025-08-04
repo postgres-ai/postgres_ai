@@ -764,13 +764,11 @@ class PostgresReportGenerator:
             total_bloat_size = 0
 
             for index_data in bloated_indexes.values():
-                # Skip indexes with minimal bloat
-                if index_data['bloat_pct'] >= 10:  # Only report indexes with >= 10% bloat
-                    index_data['extra_size_pretty'] = self.format_bytes(index_data['extra_size'])
-                    index_data['bloat_size_pretty'] = self.format_bytes(index_data['bloat_size'])
+                index_data['extra_size_pretty'] = self.format_bytes(index_data['extra_size'])
+                index_data['bloat_size_pretty'] = self.format_bytes(index_data['bloat_size'])
 
-                    bloated_indexes_list.append(index_data)
-                    total_bloat_size += index_data['bloat_size']
+                bloated_indexes_list.append(index_data)
+                total_bloat_size += index_data['bloat_size']
 
             # Sort by bloat percentage descending
             bloated_indexes_list.sort(key=lambda x: x['bloat_pct'], reverse=True)
