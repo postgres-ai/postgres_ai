@@ -11,6 +11,7 @@ A complete PostgreSQL monitoring solution with automated performance analysis an
 
 **Database:**
 - Supports PostgreSQL versions 14-17
+- **pg_stat_statements extension must be enabled** for query performance monitoring
 
 ## ⚠️ Security Notice
 
@@ -74,21 +75,20 @@ curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgr
   && chmod +x postgres_ai
 ```
 
-Now, start it and wait for a few minutes. Two optional adjustments:
-- remove `--demo` unless you want to see it in action without monitoring an actual Postgres DB (this option creates a demo DB)
-- get an Postgres AI access token for your organization at https://console.postgres.ai (`Your org name → Manage → Access tokens`)
+Now, start it and wait for a few minutes. Get a Postgres AI access token for your organization at https://console.postgres.ai (`Your org name → Manage → Access tokens`):
 
 ```bash
 # Production setup with your Access token
 ./postgres_ai quickstart --api-key=your_access_token
 ```
+**Note:** You can also add your database instance in the same command:
+./postgres_ai quickstart --api-key=your_access_token --add-instance="postgresql://user:pass@host:port/db"
 
 Or if you want to just check out how it works:
 ```bash
 # Complete setup with demo database
 ./postgres_ai quickstart --demo
 ```
-
 
 That's it! Everything is installed, configured, and running.
 
