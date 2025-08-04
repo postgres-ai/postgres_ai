@@ -1002,14 +1002,12 @@ class PostgresReportGenerator:
             total_bloat_size = 0
 
             for table_data in bloated_tables.values():
-                # Skip tables with minimal bloat
-                if table_data['bloat_pct'] >= 10:  # Only report tables with >= 10% bloat
-                    table_data['real_size_pretty'] = self.format_bytes(table_data['real_size'])
-                    table_data['extra_size_pretty'] = self.format_bytes(table_data['extra_size'])
-                    table_data['bloat_size_pretty'] = self.format_bytes(table_data['bloat_size'])
+                table_data['real_size_pretty'] = self.format_bytes(table_data['real_size'])
+                table_data['extra_size_pretty'] = self.format_bytes(table_data['extra_size'])
+                table_data['bloat_size_pretty'] = self.format_bytes(table_data['bloat_size'])
 
-                    bloated_tables_list.append(table_data)
-                    total_bloat_size += table_data['bloat_size']
+                bloated_tables_list.append(table_data)
+                total_bloat_size += table_data['bloat_size']
 
             # Sort by bloat percentage descending
             bloated_tables_list.sort(key=lambda x: x['bloat_pct'], reverse=True)
