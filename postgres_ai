@@ -53,7 +53,7 @@ show_help() {
     echo "COMMANDS:"
     echo "  quickstart [--demo] [--api-key=KEY] [--db-url=URL] [-y] Complete setup: install, configure, and start monitoring"
     echo "  install [--demo]    Clone repository and setup the monitoring project"
-    echo "  start               Start all monitoring services using Docker Compose"
+    echo "  start               Start all monitoring services using Docker Compose (auto-generates secure Grafana password)"
     echo "  stop                Stop all services"
     echo "  restart             Restart all services"
     echo "  status              Show status of all services"
@@ -77,6 +77,10 @@ show_help() {
     echo "  show-key                       Show current API key (masked)"
     echo "  remove-key                     Remove stored API key"
     echo ""
+    echo "GRAFANA PASSWORD MANAGEMENT:"
+    echo "  generate-grafana-password      Generate secure password for Grafana"
+    echo "  show-grafana-credentials       Show current Grafana credentials"
+    echo ""
     echo "OPTIONS:"
     echo "  --demo                         Include demo PostgreSQL database for testing"
     echo "  --api-key=KEY                  Provide API key for automated report uploads"
@@ -99,11 +103,13 @@ show_help() {
     echo "  $0 quickstart -y --api-key=key --db-url=postgresql://user:pass@host:5432/db  # Fully automated setup"
     echo "  $0 install                   # Clone repository and setup for production"
     echo "  $0 install --demo           # Clone repository and setup with demo database"
-    echo "  $0 start                     # Start monitoring services"
+    echo "  $0 start                     # Start monitoring services (auto-generates secure Grafana password)"
     echo "  $0 logs pgwatch-postgres     # Show logs for postgres pgwatch instance"
     echo "  $0 health                    # Check if all services are healthy"
     echo "  $0 shell target-db           # Open shell in target database (demo mode only)"
     echo "  $0 check                     # Verify system prerequisites and readiness"
+    echo "  $0 generate-grafana-password # Generate secure password for Grafana"
+    echo "  $0 show-grafana-credentials  # Show current Grafana login credentials"
     echo ""
     echo "INSTANCE MANAGEMENT EXAMPLES:"
     echo "  $0 list-instances            # Show all configured instances"
@@ -118,17 +124,18 @@ show_help() {
     echo "    • Add '--api-key=your_key' to any quickstart command for automated report uploads"
     echo "    • Add '--db-url=postgresql://user:pass@host:port/db' to automatically configure a database"
     echo "    • Add '-y' to accept all defaults and skip interactive prompts (useful for automation)"
+    echo "    • Secure Grafana password is automatically generated for all setups"
     echo ""
     echo "  MANUAL SETUP:"
     echo "    PRODUCTION MODE:"
     echo "      1. Run '$0 install' to setup monitoring infrastructure"
     echo "      2. Add your PostgreSQL instances: '$0 add-instance postgresql://user:pass@host:port/db'"
-    echo "      3. Start monitoring: '$0 start'"
+    echo "      3. Start monitoring: '$0 start' (auto-generates secure Grafana password)"
     echo ""
     echo "    DEMO MODE:"
     echo "      1. Run '$0 install --demo' to setup with demo database included"
-    echo "      2. Start all services: '$0 start'"
-    echo "      3. Access demo database at localhost:5432"
+    echo "      2. Start all services: '$0 start' (auto-generates secure Grafana password)"
+    echo "      3. Access demo database at localhost:55432"
     echo ""
     echo "  The CLI auto-detects the project directory and should be run from outside it"
     echo
@@ -146,12 +153,12 @@ show_help() {
     echo "  🚀 MAIN: Grafana Dashboard: http://localhost:3000 (demouser/demopwd)"
     echo ""
     echo "  Technical URLs (for advanced users):"
-    echo "    PGWatch Postgres:  http://localhost:8080"
-    echo "    PGWatch Prometheus: http://localhost:8089"
-    echo "    Prometheus:        http://localhost:9090"
-    echo "    Flask API:         http://localhost:5000"
-    echo "    Sink DB:           postgresql://postgres:postgres@localhost:5433/postgres"
-    echo "    Demo DB:           postgresql://postgres:postgres@localhost:5432/target_database (--demo mode only)"
+    echo "    PGWatch Postgres:  http://localhost:58080"
+    echo "    PGWatch Prometheus: http://localhost:58089"
+    echo "    Prometheus:        http://localhost:59090"
+    echo "    Flask API:         http://localhost:55000"
+    echo "    Sink DB:           postgresql://postgres:postgres@localhost:55433/postgres"
+    echo "    Demo DB:           postgresql://postgres:postgres@localhost:55432/target_database (--demo mode only)"
 }
 
 # Check basic prerequisites (software installation)
@@ -243,7 +250,7 @@ check_system_resources() {
     fi
     
     # Check if required ports are available
-    local required_ports=(3000 5000 5432 5433 8080 8089 9090)
+    local required_ports=(3000 55000 55432 55433 58080 58089 59090)
     local ports_in_use=()
     
     for port in "${required_ports[@]}"; do
@@ -261,8 +268,8 @@ check_system_resources() {
     if [ ${#ports_in_use[@]} -ne 0 ]; then
         log_warning "The following ports are already in use: ${ports_in_use[*]}"
         log_warning "This may cause conflicts when starting services"
-        echo "Required ports: 3000 (Grafana), 5000 (Flask), 5432 (Target DB), 5433 (Sink DB),"
-        echo "               8080 (PGWatch), 8089 (PGWatch Prometheus), 9090 (Prometheus)"
+        echo "Required ports: 3000 (Grafana), 55000 (Flask), 55432 (Target DB), 55433 (Sink DB),"
+        echo "               58080 (PGWatch), 58089 (PGWatch Prometheus), 59090 (Prometheus)"
     fi
     
     log_success "System resources check completed"
@@ -471,6 +478,146 @@ is_demo_mode() {
     return 1
 }
 
+# Password Generator Functions
+
+# Generate a secure random password
+generate_secure_password() {
+    # Generate a 16-character password with mixed case, numbers, and special characters
+    local password
+    password=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-16)
+    
+    # Ensure it contains at least one uppercase, one lowercase, one number, and one special character
+    local upper=$(echo {A..Z} | tr -d ' ' | fold -w1 | sort -R | head -1)
+    local lower=$(echo {a..z} | tr -d ' ' | fold -w1 | sort -R | head -1)
+    local number=$(echo {0..9} | tr -d ' ' | fold -w1 | sort -R | head -1)
+    local special=$(echo "!@#$%^&*" | fold -w1 | sort -R | head -1)
+    
+    # Replace characters at random positions
+    local pos1=$((RANDOM % 16))
+    local pos2=$((RANDOM % 16))
+    local pos3=$((RANDOM % 16))
+    local pos4=$((RANDOM % 16))
+    
+    # Ensure all positions are different
+    while [ "$pos2" -eq "$pos1" ]; do pos2=$((RANDOM % 16)); done
+    while [ "$pos3" -eq "$pos1" ] || [ "$pos3" -eq "$pos2" ]; do pos3=$((RANDOM % 16)); done
+    while [ "$pos4" -eq "$pos1" ] || [ "$pos4" -eq "$pos2" ] || [ "$pos4" -eq "$pos3" ]; do pos4=$((RANDOM % 16)); done
+    
+    # Build the final password
+    password=$(echo "$password" | sed "s/./$upper/$((pos1+1))" | sed "s/./$lower/$((pos2+1))" | sed "s/./$number/$((pos3+1))" | sed "s/./$special/$((pos4+1))")
+    
+    echo "$password"
+}
+
+# Check if Grafana password exists
+check_grafana_password_exists() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        local password=$(grep "^grafana_password=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        if [ -n "$password" ]; then
+            return 0  # Password exists
+        fi
+    fi
+    return 1  # Password doesn't exist
+}
+
+# Ensure Grafana password exists (generate if needed)
+ensure_grafana_password() {
+    if ! check_grafana_password_exists; then
+        log_info "No Grafana password configured - generating secure password..."
+        generate_grafana_password
+    else
+        log_info "Grafana password already configured"
+    fi
+}
+
+# Generate Grafana password and update configuration
+generate_grafana_password() {
+    local password
+    password=$(generate_secure_password)
+    
+    # Create config file if it doesn't exist
+    touch "$SCRIPT_DIR/.pgwatch-config"
+    
+    # Remove existing grafana_password line if present
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep -v "^grafana_password=" "$SCRIPT_DIR/.pgwatch-config" > "$SCRIPT_DIR/.pgwatch-config.tmp" || true
+        mv "$SCRIPT_DIR/.pgwatch-config.tmp" "$SCRIPT_DIR/.pgwatch-config"
+    fi
+    
+    # Add the new Grafana password
+    echo "grafana_password=$password" >> "$SCRIPT_DIR/.pgwatch-config"
+    
+    log_success "Grafana password generated successfully"
+    log_info "New password: $password"
+    log_info "Username: monitor"
+    log_info "Access Grafana at: http://localhost:3000"
+    
+    # Change password via existing Grafana container
+    change_grafana_password_via_container "$password"
+    
+    return 0
+}
+
+# Change Grafana password via existing container
+change_grafana_password_via_container() {
+    local password="$1"
+    local compose_cmd=$(get_compose_cmd)
+    
+    cd "$SCRIPT_DIR"
+    
+    # Check if Grafana container is running
+    if ! $compose_cmd -f "$COMPOSE_FILE" ps --services --filter "status=running" | grep -q "grafana"; then
+        log_warning "Grafana container is not running. Starting it first..."
+        $compose_cmd -f "$COMPOSE_FILE" up -d grafana
+        
+        # Wait for Grafana to be ready
+        log_info "Waiting for Grafana to be ready..."
+        sleep 10
+    fi
+    
+    # Change password using Grafana CLI inside the container
+    log_info "Changing Grafana password via container..."
+    
+    # Use grafana-cli to change the admin password
+    if $compose_cmd -f "$COMPOSE_FILE" exec -T grafana grafana-cli admin reset-admin-password "$password" > /dev/null 2>&1; then
+        log_success "Grafana password changed successfully via container"
+    else
+        log_warning "Failed to change password via grafana-cli, trying alternative method..."
+        
+        # Alternative: Use SQL to update password directly in database
+        if $compose_cmd -f "$COMPOSE_FILE" exec -T grafana sqlite3 /var/lib/grafana/grafana.db "UPDATE user SET password = '$password' WHERE login = 'monitor';" > /dev/null 2>&1; then
+            log_success "Grafana password changed successfully via database update"
+        else
+            log_error "Failed to change Grafana password via container"
+            log_info "Password has been saved to .pgwatch-config but may need manual update in Grafana"
+            return 1
+        fi
+    fi
+    
+    log_info "Password saved to .pgwatch-config file"
+}
+
+# Show current Grafana credentials
+show_grafana_credentials() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        local password=$(grep "^grafana_password=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        if [ -n "$password" ]; then
+            log_info "Current Grafana credentials:"
+            echo "  Username: monitor"
+            echo "  Password: $password"
+            echo "  URL: http://localhost:3000"
+        else
+            log_warning "No custom Grafana password configured"
+            log_info "Using default credentials: monitor/demo"
+            log_info "Use '$0 generate-grafana-password' to set a secure password"
+        fi
+    else
+        log_warning "No Grafana password configured"
+        log_info "Using default credentials: monitor/demo"
+        log_info "Use '$0 generate-grafana-password' to set a secure password"
+    fi
+}
+
 # API Key Management Functions
 
 # Add API key to configuration
@@ -653,7 +800,7 @@ EOF
     
     if [ "$demo_mode" = true ]; then
         log_info "You can now start all services (including demo database) with: $0 start"
-        log_info "The demo database will be available at: postgresql://postgres:postgres@localhost:5432/target_database"
+        log_info "The demo database will be available at: postgresql://postgres:postgres@localhost:55432/target_database"
     else
         log_info "You can now:"
         echo "  1. Add PostgreSQL instances to monitor: $0 add-instance 'postgresql://user:pass@host:port/db'"
@@ -872,16 +1019,25 @@ quickstart_setup() {
     fi
     update_config
     
-    # Step 5/4: Start services
+    # Step 5/4: Ensure Grafana password is configured
     echo
     if [ "$demo_mode" = true ]; then
-        log_info "Step 4: Starting monitoring services..."
+        log_info "Step 4: Configuring Grafana security..."
     else
+        log_info "Step 5: Configuring Grafana security..."
+    fi
+    ensure_grafana_password
+    
+    # Step 6/5: Start services
+    echo
+    if [ "$demo_mode" = true ]; then
         log_info "Step 5: Starting monitoring services..."
+    else
+        log_info "Step 6: Starting monitoring services..."
     fi
     start_services
     
-    # Step 6/5: Final summary
+    # Step 7/6: Final summary
     echo
     log_success "🎉 Quickstart setup completed successfully!"
     echo
@@ -890,7 +1046,7 @@ quickstart_setup() {
         echo "  ✅ Demo PostgreSQL database (monitoring target)"
     fi
     echo "  ✅ PostgreSQL monitoring infrastructure"
-    echo "  ✅ Grafana dashboards"
+    echo "  ✅ Grafana dashboards (with secure password)"
     echo "  ✅ Prometheus metrics storage"
     echo "  ✅ Flask API backend"
     echo "  ✅ Automated report generation (every 24h)"
@@ -904,7 +1060,7 @@ quickstart_setup() {
     else
         log_info "Demo mode next steps:"
         echo "  • Explore Grafana dashboards at http://localhost:3000"
-        echo "  • Connect to demo database: postgresql://postgres:postgres@localhost:5432/target_database"
+        echo "  • Connect to demo database: postgresql://postgres:postgres@localhost:55432/target_database"
         echo "  • Generate some load on the demo database to see metrics"
     fi
     
@@ -924,6 +1080,9 @@ get_compose_cmd() {
 # Start services
 start_services() {
     precheck_for_services
+    
+    # Ensure Grafana password is configured before starting services
+    ensure_grafana_password
     
     local compose_cmd=$(get_compose_cmd)
     
@@ -1002,17 +1161,17 @@ health_check() {
     log_info "Performing health checks..."
     
     local services=(
-        "sink-postgres:5433:PostgreSQL Sink"
-        "pgwatch-postgres:8080:PGWatch PostgreSQL"
-        "pgwatch-prometheus:8089:PGWatch Prometheus"
-        "sink-prometheus:9090:Prometheus"
+        "sink-postgres:55433:PostgreSQL Sink"
+        "pgwatch-postgres:58080:PGWatch PostgreSQL"
+        "pgwatch-prometheus:58089:PGWatch Prometheus"
+        "sink-prometheus:59090:Prometheus"
         "grafana:3000:Grafana"
-        "flask-pgss-api:5000:Flask API"
+        "flask-pgss-api:55000:Flask API"
     )
     
     # Add target-db only in demo mode
     if is_demo_mode; then
-        services=("target-db:5432:PostgreSQL Target Database" "${services[@]}")
+        services=("target-db:55432:PostgreSQL Target Database" "${services[@]}")
     fi
     
     local all_healthy=true
@@ -1514,17 +1673,17 @@ open_shell() {
 show_access_info() {
     echo
     log_info "Technical service URLs (for advanced users):"
-    echo "  PGWatch Postgres:   http://localhost:8080"
-    echo "  PGWatch Prometheus: http://localhost:8089"
-    echo "  Prometheus:         http://localhost:9090"
-    echo "  Flask API:          http://localhost:5000"
+    echo "  PGWatch Postgres:   http://localhost:58080"
+    echo "  PGWatch Prometheus: http://localhost:58089"
+    echo "  Prometheus:         http://localhost:59090"
+    echo "  Flask API:          http://localhost:55000"
     
     # Show target database only in demo mode
     if is_demo_mode; then
-        echo "  Target Database:    postgresql://postgres:postgres@localhost:5432/target_database"
+        echo "  Target Database:    postgresql://postgres:postgres@localhost:55432/target_database"
     fi
     
-    echo "  Sink Database:      postgresql://postgres:postgres@localhost:5433/postgres"
+    echo "  Sink Database:      postgresql://postgres:postgres@localhost:55433/postgres"
     echo
     
     # Show reports information
@@ -1549,7 +1708,18 @@ show_access_info() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${GREEN}🚀 MAIN ACCESS POINT - Start here:${NC}"
     echo -e "${GREEN}   Grafana Dashboard: http://localhost:3000${NC}"
-    echo -e "${GREEN}   Login: demo / demo${NC}"
+    
+    # Show custom credentials if available
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        local grafana_password=$(grep "^grafana_password=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        if [ -n "$grafana_password" ]; then
+            echo -e "${GREEN}   Login: monitor / $grafana_password${NC}"
+        else
+            echo -e "${GREEN}   Login: monitor / demo${NC}"
+        fi
+    else
+        echo -e "${GREEN}   Login: monitor / demo${NC}"
+    fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
@@ -1619,6 +1789,12 @@ main() {
             ;;
         "remove-key")
             remove_api_key
+            ;;
+        "generate-grafana-password")
+            generate_grafana_password
+            ;;
+        "show-grafana-credentials")
+            show_grafana_credentials
             ;;
         "help"|"--help"|"-h")
             show_help

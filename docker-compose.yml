@@ -98,7 +98,7 @@ services:
     image: grafana/grafana:12.0.2
     container_name: grafana-with-datasources
     environment:
-      GF_SECURITY_ADMIN_USER: demo
+      GF_SECURITY_ADMIN_USER: monitor
       GF_SECURITY_ADMIN_PASSWORD: demo
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
     ports:
