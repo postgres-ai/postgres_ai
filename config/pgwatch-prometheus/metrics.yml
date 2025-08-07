@@ -338,7 +338,8 @@ metrics:
     sqls:
       11: |-
         select /* pgwatch_generated */
-          (current_database() as tag_datname,
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
           slot_name::text as tag_slot_name,
           coalesce(plugin, 'physical')::text as tag_plugin,
           active,
@@ -359,6 +360,8 @@ metrics:
     sqls:
       11: |-
         select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
           name as tag_setting_name,
           setting as tag_setting_value,
           unit as tag_unit,
@@ -402,7 +405,8 @@ metrics:
                           join pg_class c on c.oid = i.inhrelid
             ),
             q_tstats as (
-                select (current_database()                                                                       as tag_datname,
+                select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+                        current_database()                                                                       as tag_datname,
                         relid, -- not sent to final output
                         quote_ident(schemaname)                                                                  as tag_schema,
                         quote_ident(ut.relname)                                                                  as tag_table_name,
@@ -537,7 +541,8 @@ metrics:
                           join pg_class c on c.oid = i.inhrelid
             ),
             q_tstats as (
-                select (current_database()                                                                       as tag_datname,
+                select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+                        current_database()                                                                       as tag_datname,
                         relid, -- not sent to final output
                         quote_ident(schemaname)                                                                  as tag_schema,
                         quote_ident(ut.relname)                                                                  as tag_table_name,
@@ -747,7 +752,8 @@ metrics:
               state as tag_state,
               count(*) as count,
               MAX(extract(epoch from now() - xact_start))::float as max_tx_duration
-            from pg_stat_activity        group by datname, tag_application_name, tag_state
+            from pg_stat_activity
+            group by datname, tag_application_name, tag_state
           ) as tmp2
         on tmp.tag_state = tmp2.tag_state and pg_database.datname = tmp2.datname
         where pg_database.datname = current_database()
@@ -776,34 +782,34 @@ metrics:
               last_archived_wal
             from pg_stat_archiver
           )
-        select current_database() as tag_datname, coalesce(((cw.log - aw.log) * 256) + (cw.seg-aw.seg), -1) as pending_wal_count from current_wal cw, archive_wal aw
+        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname, 
+          coalesce(((cw.log - aw.log) * 256) + (cw.seg-aw.seg), -1) as pending_wal_count 
+        from current_wal cw, archive_wal aw
     gauges:
       - pending_wal_count
   pg_blocked:
     sqls:
-      11: |
+      11: |-
         select
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
-          count(blocked.transactionid) as queries,
-          '__transaction__' as tag_table
+          count(*) as queries,
+          case 
+            when locktype = 'transactionid' then '__transaction__'
+            else relation::regclass::text 
+          end as tag_table
         from pg_catalog.pg_locks blocked
-        where not blocked.granted and locktype = 'transactionid'
+        where not blocked.granted
+        group by locktype, relation
         limit 5000
-        group by locktype
-        union
-        select
-          count(blocked.relation) as queries,
-          blocked.relation::regclass::text as tag_table
-        from pg_catalog.pg_locks blocked
-        where not blocked.granted and locktype != 'transactionid'
-        limit 5000
-        group by relation
     gauges:
       - queries
   pg_database_wraparound:
     sqls:
       11: |
         select
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           datname as tag_datname,
           age(d.datfrozenxid) as age_datfrozenxid,
           mxid_age(d.datminmxid) as age_datminmxid
@@ -814,64 +820,22 @@ metrics:
     gauges:
       - age_datfrozenxid
       - age_datminmxid
-  pg_gin_index:
-    sqls:
-      11: |
-        select
-          current_database() as tag_datname,
-          index_name as tag_index_name,
-          pending_list_bytes as pending_list_bytes
-        from
-          postgres_gin_pending_list_size()
-    gauges:
-      - pending_list_bytes
   pg_long_running_transactions:
     sqls:
       11: |
-        select current_database() as tag_datname,
-        COUNT(*) as transactions,
-        COALESCE(MAX(extract(epoch from (clock_timestamp() - xact_start)))::int8, 0) as age_in_seconds
+        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          COUNT(*) as transactions,
+          COALESCE(MAX(extract(epoch from (clock_timestamp() - xact_start)))::int8, 0) as age_in_seconds
         from pg_catalog.pg_stat_activity
         where state is distinct from 'idle' and (now() - xact_start) > '1 minutes'::interval and query not like 'autovacuum:%'
     gauges:
       - '*'
-  pg_stat_kcache:
-    sqls:
-      11: |
-        WITH ranked_kcache as (
-          select pg_get_userbyid(pg_stat_kcache_raw.userid) as tag_user, 
-            pg_database.datname, 
-            pg_stat_kcache_raw.queryid, 
-            pg_stat_kcache_raw.exec_user_time, 
-            pg_stat_kcache_raw.exec_system_time, 
-            pg_stat_kcache_raw.exec_user_time + pg_stat_kcache_raw.exec_system_time as tag_exec_total_time, 
-            row_number() over (order by pg_stat_kcache_raw.exec_user_time + pg_stat_kcache_raw.exec_system_time desc)as rn 
-          from public.pg_stat_kcache() 
-          pg_stat_kcache_raw inner join pg_database on pg_database.oid = pg_stat_kcache_raw.dbid
-        )    
-        select ranked_kcache.tag_user,
-          datname, 
-          queryid, 
-          exec_user_time, 
-          exec_system_time, 
-          exec_total_time 
-        from ranked_kcache where rn <= 500
-        union all
-        select 'tail_dummy_user' as tag_user,
-          current_database() as datname,
-          -1 as queryid,
-          sum(exec_user_time) as exec_user_time, 
-          sum(exec_system_time) as exec_system_time, 
-          sum(exec_total_time) as exec_total_time 
-        from ranked_kcache where rn > 500
-    gauges:
-      - exec_user_time
-      - exec_system_time
-      - exec_total_time
   pg_stat_replication:
     sqls:
       11: |
-        select current_database() as tag_datname, 
+        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname, 
           application_name as tag_application_name, 
           (pg_current_wal_lsn() - '0/0') % (2^52)::bigint as current_wal_lsn, 
           (sent_lsn - '0/0') % (2^52)::bigint as sent_lsn, 
@@ -1167,30 +1131,6 @@ metrics:
       - current
       - xmin
       - xmin_age
-  pg_wait_sampling:
-    sqls:
-      11: |
-        select
-          current_database() as tag_datname,
-          coalesce(p.event_type, 'CPU*') as tag_wait_type,
-          coalesce(p.event, 'CPU*') as tag_wait_event,
-          SUM(p.count) as count,
-          p.queryid as tag_queryid,
-          pgsa.backend_type as tag_backend_type
-        from pg_wait_sampling_profile p left OUTER join pg_stat_statements s on p.queryid = s.queryid left OUTER join pg_stat_activity pgsa on pgsa.pid = p.pid group by p.queryid, p.event_type, p.event, pgsa.backend_type
-    gauges:
-      - count
-  pg_wait_sampling_agg:
-    sqls:
-      11: |
-        select
-          current_database() as tag_datname,
-          coalesce(p.event_type, 'CPU*') as tag_wait_type,
-          coalesce(p.event, 'CPU*') as tag_wait_event,
-          SUM(p.count) as count
-        from pg_wait_sampling_profile p group by p.event_type, p.event
-    gauges:
-      - count
   pg_xlog_position:
     sqls:
       11: |
@@ -1433,8 +1373,8 @@ metrics:
               select count(1)
               from fk_indexes fi
               where
-                fi.fk_table_ref = pct.relname
-                and fi.opclasses like (array_to_string(pidx.indclass, ', ') || '%')
+                fi.tag_fk_table_ref = pct.relname
+                and fi.tag_opclasses like (array_to_string(pidx.indclass, ', ') || '%')
             ) > 0)::int as supports_fk
           from pg_index pidx
           join pg_class as pci on pci.oid = pidx.indexrelid
@@ -1451,7 +1391,11 @@ metrics:
             data.*
           from data
         )
-        select * from num_data;
+        select
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          num_data.*
+        from num_data;
     gauges:
       - '*'
 
@@ -1946,7 +1890,6 @@ presets:
       pg_stat_user_tables: 30
       pg_stat_user_indexes: 30
       pg_stat_statements: 30
-      pg_stat_kcache: 30
       pg_stat_replication: 30
       pg_total_relation_size: 30
       pg_blocked: 30
@@ -1955,9 +1898,6 @@ presets:
       pg_txid: 30
       pg_database_wraparound: 30
       pg_xlog_position: 30
-      pg_wait_sampling: 30
-      pg_wait_sampling_agg: 30
-      pg_gin_index: 30
       pg_table_bloat: 7200
       pg_btree_bloat: 7200
       pg_invalid_indexes: 7200
