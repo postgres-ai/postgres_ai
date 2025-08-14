@@ -9,11 +9,108 @@ metrics:
           query
         from pg_stat_statements
         where queryid is not null
+        order by total_exec_time desc
+        limit 1000;
     gauges:
       - '*' 
+  
+  pg_vacuum_progress:
+    description: "Monitor vacuum progress in real-time"
+    sqls:
+      11: |
+        select
+          current_database() AS tag_datname,
+          N.nspname as tag_schema_name,
+          c.relname as tag_table_name,
+          N.nspname || '.' || c.relname as tag_relname,
+          s.relid AS tag_relid,
+          case when A.query ~ '^autovacuum.*(to prevent wraparound)' then
+            'aggressive_autovacuum'
+          when A.query ~ '^autovacuum' then
+            'autovacuum'
+          when A.query ~* '^vacuum' then
+            'manual_vacuum'
+          else
+            'unknown'
+          end as tag_vacuum_mode,
+          extract(epoch from A.query_start) as query_start,
+          case when S.phase ~ 'initial' then
+            1
+          when S.phase ~ 'scanning heap' then 
+            2
+          WHEN S.phase ~ 'vacuuming indexes' THEN
+            3
+          WHEN S.phase ~ 'vacuuming heap' THEN
+            4
+          WHEN S.phase ~ 'cleaning up indexes' THEN
+            5
+          WHEN S.phase ~ 'truncating heap' THEN
+            6
+          WHEN S.phase ~ 'final cleanup' THEN
+            7
+          end tag_phase,
+          S.heap_blks_total::float,
+          S.heap_blks_scanned::float,
+          S.heap_blks_vacuumed::float,
+          S.index_vacuum_count::float,
+          (S.max_dead_tuples / 1024 / 1024)::float as max_dead_tuples_mb,
+          S.num_dead_tuples::float as num_dead_item_ids
+        from
+          pg_stat_progress_vacuum as S
+          join pg_database D on (S.datid = D.oid)
+          join pg_stat_activity as A on (S.pid = A.pid)
+          join pg_class C on (C.oid = S.relid)
+          join pg_namespace N on (N.oid = C.relnamespace)
+      17: |
+        select
+          current_database() AS tag_datname,
+          N.nspname as tag_schema_name,
+          c.relname as tag_table_name,
+          N.nspname || '.' || c.relname as tag_relname,
+          s.relid AS tag_relid,
+          case when A.query ~ '^autovacuum.*(to prevent wraparound)' then
+            'aggressive_autovacuum'
+          when A.query ~ '^autovacuum' then
+            'autovacuum'
+          when A.query ~* '^vacuum' then
+            'manual_vacuum'
+          else
+            'unknown'
+          end as tag_vacuum_mode,
+          extract(epoch from A.query_start) as query_start,
+          case when S.phase ~ 'initial' then
+            1
+          when S.phase ~ 'scanning heap' then 
+            2
+          WHEN S.phase ~ 'vacuuming indexes' THEN
+            3
+          WHEN S.phase ~ 'vacuuming heap' THEN
+            4
+          WHEN S.phase ~ 'cleaning up indexes' THEN
+            5
+          WHEN S.phase ~ 'truncating heap' THEN
+            6
+          WHEN S.phase ~ 'final cleanup' THEN
+            7
+          end tag_phase,
+          S.heap_blks_total::float,
+          S.heap_blks_scanned::float,
+          S.heap_blks_vacuumed::float,
+          S.index_vacuum_count::float,
+          (S.max_dead_tuple_bytes / 1024 / 1024)::float as max_dead_tuples_mb,
+          S.num_dead_item_ids::float
+        from
+          pg_stat_progress_vacuum as S
+          join pg_database D on (S.datid = D.oid)
+          join pg_stat_activity as A on (S.pid = A.pid)
+          join pg_class C on (C.oid = S.relid)
+          join pg_namespace N on (N.oid = C.relnamespace)
+    gauges:
+      - '*'
 
 presets:
   full:
     description: "Full metrics for PostgreSQL storage"
     metrics:
-      pgss_queryid_queries: 10
+      pgss_queryid_queries: 300
+      pg_vacuum_progress: 30
