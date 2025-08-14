@@ -39,6 +39,7 @@ Failure to secure these ports may expose sensitive database information!
 Create a new DB user in database to be monitored (skip this if you want just to check out `postgres_ai` monitoring with a synthetic `demo` database):
 ```sql
 -- Create a user for Postgres AI monitoring
+begin
 create user postgres_ai_mon with password '<password>';
 
 grant connect on database <database_name> to postgres_ai_mon;
@@ -65,6 +66,7 @@ where a.attnum > 0 and not a.attisdropped;
 
 grant select on public.pg_statistic to pg_monitor;
 alter user postgres_ai_mon set search_path = "$user", public, pg_catalog;
+commit
 ```
 
 **One command setup:**

@@ -62,6 +62,7 @@ show_help() {
     echo "  config              Show current configuration"
     echo "  update-config       Update configuration files"
     echo "  reset               Stop services and remove all data"
+    echo "  reset <service>     Stop specific service, remove its volume, and restart it"
     echo "  clean               Clean up temporary files and unused Docker resources"
     echo "  shell [SERVICE]     Open shell in specified service container"
     echo "  check               Verify system prerequisites and readiness"
@@ -107,6 +108,7 @@ show_help() {
     echo "  $0 logs pgwatch-postgres     # Show logs for postgres pgwatch instance"
     echo "  $0 health                    # Check if all services are healthy"
     echo "  $0 shell target-db           # Open shell in target database (demo mode only)"
+    echo "  $0 reset sink-postgres       # Reset PostgreSQL sink (deletes all postgres metrics data and restarts)"
     echo "  $0 check                     # Verify system prerequisites and readiness"
     echo "  $0 generate-grafana-password # Generate secure password for Grafana"
     echo "  $0 show-grafana-credentials  # Show current Grafana login credentials"
@@ -1561,6 +1563,144 @@ show_config() {
     fi
 }
 
+# Update project from repository
+update_project() {
+    check_project_setup
+    
+    log_info "Updating Postgres AI monitoring project to latest version..."
+    
+    # Check if we're in a git repository
+    if [ ! -d "$SCRIPT_DIR/.git" ]; then
+        log_error "Not a git repository - cannot update"
+        log_info "This project was likely installed from a downloaded archive"
+        log_info "To update, you'll need to:"
+        echo "  1. Backup your configuration: cp instances.yml instances.yml.backup"
+        echo "  2. Backup any custom configs in config/ directory"
+        echo "  3. Run a fresh installation: $0 install"
+        echo "  4. Restore your configuration: cp instances.yml.backup instances.yml"
+        exit 1
+    fi
+    
+    # Check if there are uncommitted changes
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        log_warning "You have uncommitted changes in the repository"
+        git status --porcelain
+        echo
+        log_warning "These changes will be stashed before updating"
+        read -p "Continue with update? (y/N): " -n 1 -r
+        echo
+        
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Update cancelled"
+            exit 0
+        fi
+        
+        log_info "Stashing local changes..."
+        git stash push -m "Auto-stash before update $(date)"
+    fi
+    
+    # Get current branch/commit info
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    local current_commit=$(git rev-parse HEAD)
+    
+    log_info "Current branch: $current_branch"
+    log_info "Current commit: ${current_commit:0:8}"
+    
+    # Fetch latest changes
+    log_info "Fetching latest changes from repository..."
+    if ! git fetch origin; then
+        log_error "Failed to fetch from repository"
+        log_info "Check your internet connection and repository access"
+        exit 1
+    fi
+    
+    # Check if updates are available
+    local remote_commit=$(git rev-parse origin/$current_branch)
+    if [ "$current_commit" = "$remote_commit" ]; then
+        log_success "Project is already up to date!"
+        return 0
+    fi
+    
+    log_info "Updates available. Latest commit: ${remote_commit:0:8}"
+    
+    # Show what will be updated
+    log_info "Changes since current version:"
+    git log --oneline $current_commit..origin/$current_branch | head -10
+    
+    echo
+    read -p "Apply these updates? (y/N): " -n 1 -r
+    echo
+    
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Update cancelled"
+        exit 0
+    fi
+    
+    # Check if services are running and offer to stop them
+    local compose_cmd=$(get_compose_cmd)
+    local running_services
+    running_services=$($compose_cmd -f "$COMPOSE_FILE" ps --services --filter "status=running" 2>/dev/null || true)
+    
+    if [ -n "$running_services" ]; then
+        log_warning "Services are currently running:"
+        echo "$running_services" | sed 's/^/  ✅ /'
+        echo
+        log_warning "It's recommended to stop services before updating"
+        read -p "Stop services before update? (Y/n): " -n 1 -r
+        echo
+        
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            log_info "Stopping services..."
+            $compose_cmd -f "$COMPOSE_FILE" down
+            local should_restart=true
+        else
+            local should_restart=false
+        fi
+    else
+        local should_restart=false
+    fi
+    
+    # Perform the update
+    log_info "Updating project files..."
+    if git pull origin $current_branch; then
+        log_success "Project updated successfully!"
+        
+        # Check if there were any stashed changes to restore
+        if git stash list | grep -q "Auto-stash before update"; then
+            log_info "Attempting to restore your local changes..."
+            if git stash pop; then
+                log_success "Local changes restored successfully"
+            else
+                log_warning "Some conflicts occurred while restoring local changes"
+                log_info "Your changes are still available in git stash"
+                log_info "Use 'git stash list' and 'git stash show' to review them"
+            fi
+        fi
+        
+        # Update configuration if services were running
+        if [ "$should_restart" = true ]; then
+            echo
+            log_info "Updating configuration and restarting services..."
+            update_config
+            sleep 2
+            start_services
+        else
+            echo
+            log_info "Configuration update recommended. Run: $0 update-config"
+        fi
+        
+        # Show what was updated
+        echo
+        log_info "Update completed! Changes applied:"
+        git log --oneline $current_commit..HEAD
+        
+    else
+        log_error "Failed to update project"
+        log_info "You may need to resolve conflicts manually"
+        exit 1
+    fi
+}
+
 # Update configuration
 update_config() {
     check_project_setup
@@ -1591,6 +1731,144 @@ update_config() {
     fi
     
     log_success "Configuration updated"
+}
+
+# Reset specific service volume
+reset_service_volume() {
+    precheck_for_services
+    
+    local service="$1"
+    
+    if [ -z "$service" ]; then
+        log_error "Please specify a service name to reset"
+        log_info "Usage: $0 reset <service>"
+        log_info "Available services: any service with associated data volumes"
+        exit 1
+    fi
+    
+    # Find volume(s) with service name pattern
+    local service_pattern=$(echo "$service" | tr '-' '_')
+    local volume_names
+    
+    # Try multiple patterns to handle different volume naming conventions:
+    # 1. Direct match: service_name_data
+    volume_names=$(docker volume ls --format "{{.Name}}" | grep -E "^${service_pattern}_data$" || true)
+    
+    # 2. With project prefix: project_service_name_data  
+    if [ -z "$volume_names" ]; then
+        volume_names=$(docker volume ls --format "{{.Name}}" | grep -E "_${service_pattern}_data$" || true)
+    fi
+    
+    # 3. Contains service name pattern: *service_name*_data
+    if [ -z "$volume_names" ]; then
+        volume_names=$(docker volume ls --format "{{.Name}}" | grep -E "${service_pattern}.*_data$" || true)
+    fi
+    
+    # 4. Case-insensitive fallback
+    if [ -z "$volume_names" ]; then
+        # Try alternative pattern matching
+        volume_names=$(docker volume ls --format "{{.Name}}" | grep -i "$service" | grep "_data$" || true)
+    fi
+    
+    if [ -z "$volume_names" ]; then
+        log_error "No volumes found for service '$service'"
+        log_info "Available volumes:"
+        docker volume ls --format "  {{.Name}}" | grep "_data$" || echo "  No data volumes found"
+        exit 1
+    fi
+    
+    local volume_count=$(echo "$volume_names" | wc -l)
+    if [ "$volume_count" -gt 1 ]; then
+        log_warning "Multiple volumes found for service '$service':"
+        echo "$volume_names" | sed 's/^/  /'
+        log_warning "All volumes will be deleted!"
+    fi
+    
+    log_warning "This will stop '$service', delete ALL its data, and restart it!"
+    if [ "$volume_count" -gt 1 ]; then
+        log_warning "Volumes to be deleted:"
+        echo "$volume_names" | sed 's/^/  /'
+    else
+        log_warning "Volume to be deleted: $volume_names"
+    fi
+    read -p "Are you sure? (y/N): " -n 1 -r
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        local compose_cmd=$(get_compose_cmd)
+        cd "$SCRIPT_DIR"
+        
+        log_info "Stopping and removing service: $service"
+        $compose_cmd -f "$COMPOSE_FILE" stop "$service"
+        $compose_cmd -f "$COMPOSE_FILE" rm -f "$service"
+        
+        # Also check for any other containers that might be using the volume(s)
+        if [ "$volume_count" -gt 1 ]; then
+            log_info "Removing volumes..."
+            echo "$volume_names" | while read -r volume_name; do
+                if [ -n "$volume_name" ]; then
+                    log_info "Removing volume: $volume_name"
+                    
+                    # Check if any containers are still using this volume
+                    local containers_using_volume
+                    containers_using_volume=$(docker ps -a --filter "volume=$volume_name" --format "{{.Names}}" 2>/dev/null || true)
+                    
+                    if [ -n "$containers_using_volume" ]; then
+                        log_warning "Stopping containers still using volume '$volume_name': $containers_using_volume"
+                        echo "$containers_using_volume" | xargs -r docker stop 2>/dev/null || true
+                        echo "$containers_using_volume" | xargs -r docker rm 2>/dev/null || true
+                    fi
+                    
+                    docker volume rm "$volume_name" 2>/dev/null || {
+                        log_warning "Volume '$volume_name' not found or still in use"
+                        log_info "You may need to manually remove it: docker volume rm $volume_name"
+                    }
+                fi
+            done
+        else
+            log_info "Removing volume: $volume_names"
+            
+            # Check if any containers are still using this volume
+            local containers_using_volume
+            containers_using_volume=$(docker ps -a --filter "volume=$volume_names" --format "{{.Names}}" 2>/dev/null || true)
+            
+            if [ -n "$containers_using_volume" ]; then
+                log_warning "Stopping containers still using volume '$volume_names': $containers_using_volume"
+                echo "$containers_using_volume" | xargs -r docker stop 2>/dev/null || true
+                echo "$containers_using_volume" | xargs -r docker rm 2>/dev/null || true
+            fi
+            
+            docker volume rm "$volume_names" 2>/dev/null || {
+                log_warning "Volume '$volume_names' not found or still in use"
+                log_info "You may need to manually remove it: docker volume rm $volume_names"
+            }
+        fi
+        
+        log_info "Starting service: $service"
+        $compose_cmd -f "$COMPOSE_FILE" up -d "$service"
+        
+        log_success "Service '$service' has been reset successfully!"
+        log_info "All data for '$service' has been cleared and service is restarting"
+        
+        # Special messages for specific services
+        case "$service" in
+            "target-db")
+                log_info "Target database has been reset to initial state"
+                ;;
+            "sink-postgres")
+                log_info "PostgreSQL metrics sink has been reset - all historical metrics deleted"
+                ;;
+            "sink-prometheus")
+                log_info "Prometheus metrics sink has been reset - all historical metrics deleted"
+                ;;
+            "grafana")
+                log_info "Grafana has been reset - all dashboards and settings restored to default"
+                log_info "You may need to reconfigure Grafana password with: $0 generate-grafana-password"
+                ;;
+        esac
+    else
+        log_info "Reset cancelled"
+    fi
 }
 
 # Reset environment
@@ -1757,8 +2035,15 @@ main() {
         "update-config")
             update_config
             ;;
+        "update")
+            update_project
+            ;;
         "reset")
-            reset_environment
+            if [ -n "$2" ]; then
+                reset_service_volume "$2"
+            else
+                reset_environment
+            fi
             ;;
         "clean")
             cleanup
