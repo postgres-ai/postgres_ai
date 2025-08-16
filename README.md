@@ -2,6 +2,10 @@
 
 A complete PostgreSQL monitoring solution with automated performance analysis and reporting.
 
+## Demo
+
+https://demo.postgres.ai (`demo` / `demo`)
+
 ## 📋 Requirements
 
 **Infrastructure:**
