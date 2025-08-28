@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 2,
+  "id": 8,
   "links": [],
   "panels": [
     {
@@ -1157,7 +1157,38 @@
           },
           "unit": "percent"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -1186,6 +1217,20 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))+sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Rollbacks",
+          "range": true,
+          "refId": "B"
+        },
+        {
           "editorMode": "code",
           "expr": "sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))+sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
           "interval": "20",
@@ -1194,7 +1239,7 @@
           "refId": "A"
         }
       ],
-      "title": "Commit ratio",
+      "title": "Commit vs Rollback ratio",
       "type": "timeseries"
     },
     {
@@ -3791,7 +3836,269 @@
           "refId": "A"
         }
       ],
-      "title": "Age of the oldest multi-transaction ID",
+      "title": "Age of the oldest multi-transaction ID that has not been frozen",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 149
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "rate(pgwatch_bgwriter_buffers_checkpoint{datname=\"$db_name\"}[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "Cleaned by the Checkpointer",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_bgwriter_buffers_clean[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Cleaned by the Background Writer",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_bgwriter_buffers_backend[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Cleaned by backends",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "bgwriter and checkpointer",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMax": 7,
+            "axisSoftMin": 1,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "1": {
+                  "index": 0,
+                  "text": "Initial"
+                },
+                "2": {
+                  "index": 1,
+                  "text": "Scanning heap"
+                },
+                "3": {
+                  "index": 2,
+                  "text": "Vacuuming indexes"
+                },
+                "4": {
+                  "index": 3,
+                  "text": "Vacuuming heap"
+                },
+                "5": {
+                  "index": 4,
+                  "text": "Cleaning up indexes"
+                },
+                "6": {
+                  "index": 5,
+                  "text": "Truncating heap"
+                },
+                "7": {
+                  "index": 6,
+                  "text": "Final cleanup"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 159
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "(\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"7\"}) * 0 + 7 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"6\"}) * 0 + 6 or\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"5\"}) * 0 + 5 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"4\"}) * 0 + 4 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"3\"}) * 0 + 3 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"2\"}) * 0 + 2 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"1\"}) * 0 + 1\n)",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "",
+          "legendFormat": "{{schema_name}}.{{table_name}} - {{vacuum_mode}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Vacuum timeline",
       "type": "timeseries"
     },
     {
@@ -3803,7 +4110,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 149
+        "y": 170
       },
       "id": 40,
       "options": {
@@ -3827,8 +4134,8 @@
     "list": [
       {
         "current": {
-          "text": "local",
-          "value": "local"
+          "text": "default",
+          "value": "default"
         },
         "definition": "label_values(pgwatch_settings_configured,cluster)",
         "label": "Cluster name",
@@ -3845,8 +4152,8 @@
       },
       {
         "current": {
-          "text": "node-01",
-          "value": "node-01"
+          "text": "prod-db",
+          "value": "prod-db"
         },
         "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
@@ -3882,12 +4189,12 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-2d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
-      "title": "01. Single node performance overview (high-level)",
+  "title": "01. Single node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 2
+  "version": 7
 }
