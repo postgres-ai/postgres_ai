@@ -1,65 +1,268 @@
 {
-    "annotations": {
-      "list": [
-        {
-          "builtIn": 1,
-          "datasource": {
-            "type": "grafana",
-            "uid": "-- Grafana --"
-          },
-          "enable": true,
-          "hide": true,
-          "iconColor": "rgba(0, 211, 255, 1)",
-          "name": "Annotations & Alerts",
-          "type": "dashboard"
-        }
-      ]
-    },
-    "editable": true,
-    "fiscalYearStartMonth": 0,
-    "graphTooltip": 0,
-    "id": 9,
-    "links": [],
-    "panels": [
+  "annotations": {
+    "list": [
       {
-        "fieldConfig": {
-          "defaults": {},
-          "overrides": []
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
         },
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 0
-        },
-        "id": 1,
-        "options": {
-          "code": {
-            "language": "plaintext",
-            "showLineNumbers": false,
-            "showMiniMap": false
-          },
-          "content": "# Coming soon...",
-          "mode": "markdown"
-        },
-        "pluginVersion": "12.0.2",
-        "title": "",
-        "type": "text"
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
-    ],
-    "preload": false,
-    "schemaVersion": 41,
-    "tags": [],
-    "templating": {
-      "list": []
-    },
-    "time": {
-      "from": "now-6h",
-      "to": "now"
-    },
-    "timepicker": {},
-    "timezone": "browser",
-    "title": "07. Autovacuum and bloat  -- \"Metrics are collected (part of health check); dashboard – TODO\"",
-    "uid": "caffad19-4605-41fe-87f7-484ab67200e8",
-    "version": 1
-  }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 6,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMax": 7,
+            "axisSoftMin": 1,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "1": {
+                  "index": 0,
+                  "text": "Initial"
+                },
+                "2": {
+                  "index": 1,
+                  "text": "Scanning heap"
+                },
+                "3": {
+                  "index": 2,
+                  "text": "Vacuuming indexes"
+                },
+                "4": {
+                  "index": 3,
+                  "text": "Vacuuming heap"
+                },
+                "5": {
+                  "index": 4,
+                  "text": "Cleaning up indexes"
+                },
+                "6": {
+                  "index": 5,
+                  "text": "Truncating heap"
+                },
+                "7": {
+                  "index": 6,
+                  "text": "Final cleanup"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "(\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"7\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 7 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"6\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 6 or\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"5\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 5 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"4\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 4 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"3\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 3 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"2\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 2 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"1\", schema_name=~\"$schema_name\", table_name=~\"$table_name\"}) * 0 + 1\n)",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "",
+          "legendFormat": "{{schema_name}}.{{table_name}} - {{vacuum_mode}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Vacuum timeline",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "default",
+          "value": "default"
+        },
+        "definition": "label_values(pgwatch_settings_configured,cluster)",
+        "label": "Cluster name",
+        "name": "cluster_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_settings_configured,cluster)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "prod-db",
+          "value": "prod-db"
+        },
+        "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+        "label": "Node name",
+        "name": "node_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "postgres",
+          "value": "postgres"
+        },
+        "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "label": "DB name",
+        "name": "db_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "text": "public",
+          "value": "public"
+        },
+        "definition": "label_values(pgwatch_table_stats_tx_freeze_age,schema)",
+        "includeAll": true,
+        "name": "schema_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_table_stats_tx_freeze_age,schema)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
+        },
+        "definition": "label_values(pgwatch_table_stats_tx_freeze_age{schema=~\"$schema_name\"},table_name)",
+        "includeAll": true,
+        "multi": true,
+        "name": "table_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_table_stats_tx_freeze_age{schema=~\"$schema_name\"},table_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "07. Autovacuum and bloat  -- \"Metrics are collected (part of health check); dashboard – TODO\"",
+  "uid": "caffad19-4605-41fe-87f7-484ab67200e8",
+  "version": 5
+}
