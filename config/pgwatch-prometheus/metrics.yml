@@ -901,30 +901,6 @@ metrics:
           temp_bytes_read::int8 as temp_bytes_read,
           temp_bytes_written::int8 as temp_bytes_written
           from ranked_statements
-          where rn <= 500
-        union all
-        select
-          'tail_dummy_user' as tag_user,
-          current_database() as tag_datname,
-          -1 as tag_queryid,
-          sum(calls)::int8 as calls,
-          sum(plans_total)::int8 as plans_total,
-          sum(exec_time_total)::int8 as exec_time_total,
-          sum(plan_time_total)::int8 as plan_time_total,
-          sum(rows)::int8 as rows,
-          sum(shared_bytes_hit_total)::int8 as shared_bytes_hit_total,
-          sum(shared_bytes_read_total)::int8 as shared_bytes_read_total,
-          sum(shared_bytes_dirtied_total)::int8 as shared_bytes_dirtied_total,
-          sum(shared_bytes_written_total)::int8 as shared_bytes_written_total,
-          sum(block_read_total)::int8 as block_read_total,
-          sum(block_write_total)::int8 as block_write_total,
-          sum(wal_records)::int8 as wal_records,
-          sum(wal_fpi)::int8 as wal_fpi,
-          sum(wal_bytes)::int8 as wal_bytes,
-          sum(temp_bytes_read)::int8 as temp_bytes_read,
-          sum(temp_bytes_written)::int8 as temp_bytes_written
-        from ranked_statements
-        where rn > 500
       17: |
         WITH ranked_statements as (
           select
@@ -973,30 +949,6 @@ metrics:
           temp_bytes_read::int8 as temp_bytes_read,
           temp_bytes_written::int8 as temp_bytes_written
           from ranked_statements
-          where rn <= 500
-        union all
-        select
-          'tail_dummy_user' as tag_user,
-          current_database() as tag_datname,
-          -1 as tag_queryid,
-          sum(calls)::int8 as calls,
-          sum(plans_total)::int8 as plans_total,
-          sum(exec_time_total)::int8 as exec_time_total,
-          sum(plan_time_total)::int8 as plan_time_total,
-          sum(rows)::int8 as rows,
-          sum(shared_bytes_hit_total)::int8 as shared_bytes_hit_total,
-          sum(shared_bytes_read_total)::int8 as shared_bytes_read_total,
-          sum(shared_bytes_dirtied_total)::int8 as shared_bytes_dirtied_total,
-          sum(shared_bytes_written_total)::int8 as shared_bytes_written_total,
-          sum(block_read_total)::int8 as block_read_total,
-          sum(block_write_total)::int8 as block_write_total,
-          sum(wal_records)::int8 as wal_records,
-          sum(wal_fpi)::int8 as wal_fpi,
-          sum(wal_bytes)::int8 as wal_bytes,
-          sum(temp_bytes_read)::int8 as temp_bytes_read,
-          sum(temp_bytes_written)::int8 as temp_bytes_written
-        from ranked_statements
-        where rn > 500
     gauges:
       - calls
       - plans_total
