@@ -1,21 +1,67 @@
-# Postgres AI 
+# postgres_ai monitoring
 
-A complete PostgreSQL monitoring solution with automated performance analysis and reporting.
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![GitLab](https://img.shields.io/badge/GitLab-postgres--ai%2Fpostgres__ai-orange?logo=gitlab)](https://gitlab.com/postgres-ai/postgres_ai)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-blue?logo=postgresql)](https://www.postgresql.org/)
 
-## Demo
+**Expert-level Postgres monitoring tool designed for humans and AI systems**
 
-https://demo.postgres.ai (`demo` / `demo`)
+Built for senior DBAs, SREs, and AI systems who need rapid root cause analysis and deep performance insights. This isn't a tool for beginners — it's designed for Postgres experts who need to understand complex performance issues in minutes, not hours.
+
+**Part of [Self-Driving Postgres](https://postgres.ai/blog/20250725-self-driving-postgres)** - postgres_ai monitoring is a foundational component of PostgresAI's open-source Self-Driving Postgres (SDP) initiative, providing the advanced monitoring and intelligent root cause analysis capabilities essential for achieving higher levels of database automation.
+
+![postgres_ai monitoring](assets/postgres_ai_pic.png)
+
+## 🎯 Key highlights
+
+- **Top-down troubleshooting methodology**: Follows the Four Golden Signals approach (Latency, Traffic, Errors, Saturation)
+- **Expert-focused design**: Assumes deep Postgres knowledge and performance troubleshooting experience  
+- **Dual-purpose architecture**: Built for both human experts and AI systems requiring structured performance data
+- **Comprehensive query analysis**: Complete `pg_stat_statements` metrics with historical trends and plan variations
+- **Active Session History**: Postgres's answer to Oracle ASH and AWS RDS Performance Insights
+- **Hybrid storage**: Prometheus for metrics, Postgres for query texts — best of both worlds
+
+> 📖 **Read more**: [postgres_ai monitoring v0.7 announcement](https://postgres.ai/blog/20250722-postgres-ai-v0-7-expert-level-postgresql-monitoring) - detailed technical overview and architecture decisions.
+
+## ⚠️ Important notice
+
+**This tool is NOT for beginners.** It requires extensive Postgres knowledge and assumes familiarity with:
+- Advanced Postgres internals and performance concepts
+- Query plan analysis and optimization techniques  
+- Wait event analysis and system-level troubleshooting
+- Production database operations and incident response
+
+If you're new to Postgres, consider starting with simpler monitoring solutions before using postgres_ai.
+
+## 🚀 Live demo
+
+Experience the full monitoring solution: **https://demo.postgres.ai** (login: `demo` / password: `demo`)
+
+## 📊 Five expert dashboards
+
+1. **Troubleshooting dashboard** - Four Golden Signals with immediate incident response insights
+2. **Query performance analysis** - Top-N query workload analysis with resource consumption breakdowns  
+3. **Single query analysis** - Deep dive into individual query performance and plan variations
+4. **Wait event analysis** - Active Session History for session-level troubleshooting
+5. **Backups and DR** - WAL archiving monitoring with RPO measurements
+
+## 🏗️ Architecture
+
+- **Collection**: pgwatch v3 (by Cybertec) for metrics gathering
+- **Storage**: Prometheus for time-series data + Postgres for query texts
+- **Visualization**: Grafana with expert-designed dashboards
+- **Analysis**: Structured data output for AI system integration
 
 ## 📋 Requirements
 
 **Infrastructure:**
 - **Linux machine** with Docker installed (separate from your database server)
 - **Docker access** - the user running `postgres_ai` must have Docker permissions
-- **Access (network and pg_hba)** to the PostgreSQL database(s) you want to monitor
+- **Access (network and pg_hba)** to the Postgres database(s) you want to monitor
 
 **Database:**
-- Supports PostgreSQL versions 14-17
-- **pg_stat_statements extension must be created** for db used for connection
+- Supports Postgres versions 14-17
+- **pg_stat_statements extension must be created** for the DB used for connection
 
 ## ⚠️ Security Notice
 
@@ -29,7 +75,7 @@ This monitoring solution exposes several ports that **MUST** be properly firewal
 - **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
 - **Port 55000** (Flask API) - Backend API service
 - **Port 55432** (Demo DB) - When using `--demo` option
-- **Port 55433** (Metrics DB) - PostgreSQL metrics storage
+- **Port 55433** (Metrics DB) - Postgres metrics storage
 
 **Configure your firewall to:**
 - Block public access to all monitoring ports
@@ -40,9 +86,9 @@ Failure to secure these ports may expose sensitive database information!
 
 ## 🚀 Quick start
 
-Create a new DB user in database to be monitored (skip this if you want just to check out `postgres_ai` monitoring with a synthetic `demo` database):
+Create a new DB user in the database to be monitored (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database):
 ```sql
--- Create a user for Postgres AI monitoring
+-- Create a user for postgres_ai monitoring
 begin;
 create user postgres_ai_mon with password '<password>';
 
@@ -81,7 +127,7 @@ curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgr
   && chmod +x postgres_ai
 ```
 
-Now, start it and wait for a few minutes. To obtain Postgres AI access token for your organization visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
+Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
 
 ```bash
 # Production setup with your Access token
@@ -89,7 +135,7 @@ Now, start it and wait for a few minutes. To obtain Postgres AI access token for
 ```
 **Note:** You can also add your database instance in the same command:
 ```bash
-./postgres_ai quickstart --api-key=your_access_token --add-instance="postgresql://user:pass@host:port/db"
+./postgres_ai quickstart --api-key=your_access_token --add-instance="postgresql://user:pass@host:port/DB"
 ```
 
 Or if you want to just check out how it works:
@@ -103,9 +149,9 @@ That's it! Everything is installed, configured, and running.
 ## 📊 What you get
 
 - **Grafana Dashboards** - Visual monitoring at http://localhost:3000
-- **PostgreSQL Monitoring** - PGWatch with comprehensive metrics
+- **Postgres Monitoring** - PGWatch with comprehensive metrics
 - **Automated Reports** - Daily performance analysis
-- **API Integration** - Automatic upload to PostgreSQL AI
+- **API Integration** - Automatic upload to PostgresAI
 - **Demo Database** - Ready-to-use test environment
 
 ## 🎯 Use cases
@@ -120,16 +166,16 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 ```bash
 ./postgres_ai quickstart --api-key=your_key
 # Then add your databases
-./postgres_ai add-instance "postgresql://user:pass@host:port/db"
+./postgres_ai add-instance "postgresql://user:pass@host:port/DB"
 ```
 
 ## 🔧 Management commands
 
 ```bash
 # Instance management
-./postgres_ai add-instance "postgresql://user:pass@host:port/db"
+./postgres_ai add-instance "postgresql://user:pass@host:port/DB"
 ./postgres_ai list-instances
-./postgres_ai test-instance my-db
+./postgres_ai test-instance my-DB
 
 # Service management  
 ./postgres_ai status
@@ -144,7 +190,7 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 
 After running quickstart:
 
-- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (demouser/demopwd)
+- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitoring`; password is shown at the end of quickstart)
 
 Technical URLs (for advanced users):
 - **Demo DB**: postgresql://postgres:postgres@localhost:55432/target_database
@@ -157,6 +203,37 @@ Technical URLs (for advanced users):
 ./postgres_ai help
 ```
 
-## 🔑 Postgres AI access token
-Get your key at [Postgres AI](https://postgres.ai) for automated report uploads and advanced analysis.
+## 🔑 PostgresAI access token
+Get your access token at [PostgresAI](https://postgres.ai) for automated report uploads and advanced analysis.
+
+## 🛣️ Roadmap
+
+- Host stats for on-premise and managed Postgres setups
+- `pg_wait_sampling` and `pg_stat_kcache` extension support
+- Additional expert dashboards: autovacuum, checkpointer, lock analysis
+- Query plan analysis and automated recommendations
+- Enhanced AI integration capabilities
+
+## 🤝 Contributing
+
+We welcome contributions from Postgres experts! Please check our [GitLab repository](https://gitlab.com/postgres-ai/postgres_ai) for:
+- Code standards and review process
+- Dashboard design principles
+- Testing requirements for monitoring components
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## 🏢 About PostgresAI
+
+postgres_ai monitoring is developed by [PostgresAI](https://postgres.ai), bringing years of Postgres expertise into automated monitoring and analysis tools. We provide enterprise consulting and advanced Postgres solutions for fast-growing companies.
+
+## 📞 Support & community
+
+- 💬 [Get support](https://postgres.ai/contact)
+- 📺 [Postgres.TV (YouTube)](https://postgres.tv)
+- 🎙️ [Postgres FM Podcast](https://postgres.fm)
+- 🐛 [Report issues](https://gitlab.com/postgres-ai/postgres_ai/-/issues)
+- 📧 [Enterprise support](https://postgres.ai/consulting)
 
