@@ -215,7 +215,7 @@
           "hide": false,
           "includeNullMetadata": true,
           "interval": "60",
-          "legendFormat": "Hot Updates",
+          "legendFormat": "HOT Updates",
           "range": true,
           "refId": "C",
           "useBackend": false
@@ -333,7 +333,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Hot updates %"
+              "options": "HOT Updates %"
             },
             "properties": [
               {
@@ -435,7 +435,7 @@
           "hide": false,
           "includeNullMetadata": true,
           "interval": "60",
-          "legendFormat": "Hot Updates",
+          "legendFormat": "HOT Updates",
           "range": true,
           "refId": "C",
           "useBackend": false
@@ -476,7 +476,7 @@
               "include": [
                 "Inserts",
                 "Updates",
-                "Hot Updates",
+                "HOT Updates",
                 "Deletes"
               ],
               "reducer": "sum"
@@ -538,12 +538,12 @@
         {
           "id": "calculateField",
           "options": {
-            "alias": "Hot updates %",
+            "alias": "HOT Updates %",
             "binary": {
               "left": {
                 "matcher": {
                   "id": "byName",
-                  "options": "Hot Updates"
+                  "options": "HOT Updates"
                 }
               },
               "operator": "/",
@@ -590,7 +590,7 @@
           "options": {
             "excludeByName": {
               "Deletes": true,
-              "Hot Updates": true,
+              "HOT Updates": true,
               "Inserts": true,
               "Time": false,
               "Total": true,
