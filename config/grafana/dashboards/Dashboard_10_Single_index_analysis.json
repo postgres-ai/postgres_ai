@@ -148,12 +148,16 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
+          "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "pgwatch_pg_index_pilot_index_size_bytes{indexrelname=\"$index_name\", schemaname=\"$schema_name\"}/pgwatch_pg_index_pilot_estimated_tuples{indexrelname=\"$index_name\", schemaname=\"$schema_name\"}",
+          "expr": "pgwatch_pg_class_total_relation_size_bytes{relname=\"$index_name\", schemaname=\"$schema_name\"} / pgwatch_pg_class_reltuples{relname=\"$index_name\", schemaname=\"$schema_name\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
           "interval": "",
           "legendFormat": "Current Boguk ratio",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "useBackend": false
         },
         {
           "datasource": {
@@ -164,7 +168,7 @@
           "expr": "pgwatch_pg_index_pilot_best_ratio{indexrelname=\"$index_name\", schemaname=\"$schema_name\"}",
           "hide": false,
           "instant": false,
-          "legendFormat": "Best ratio",
+          "legendFormat": "Baseline Boguk ratio",
           "range": true,
           "refId": "B"
         }
@@ -180,8 +184,8 @@
     "list": [
       {
         "current": {
-          "text": "",
-          "value": ""
+          "text": "test_pilot",
+          "value": "test_pilot"
         },
         "definition": "label_values(pgwatch_pg_index_pilot_estimated_tuples,schemaname)",
         "name": "schema_name",
@@ -215,12 +219,12 @@
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Index Pilot",
+  "title": "10. Single index analysis",
   "uid": "aa0128c5-c5a0-4418-a99e-c941af10426e",
-  "version": 5
+  "version": 6
 }
