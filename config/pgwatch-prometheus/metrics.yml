@@ -1285,6 +1285,7 @@ metrics:
       - bloat_size
       - bloat_pct
       - is_na
+      - reltuples
     statement_timeout_seconds: 300
   pg_invalid_indexes:
     description: >
