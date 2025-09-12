@@ -82,7 +82,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Best ratio"
+              "options": "Baseline Boguk ratio"
             },
             "properties": [
               {
@@ -151,7 +151,7 @@
           "editorMode": "code",
           "expr": "pgwatch_pg_index_pilot_index_size_bytes{indexrelname=\"$index_name\", schemaname=\"$schema_name\"}/pgwatch_pg_index_pilot_estimated_tuples{indexrelname=\"$index_name\", schemaname=\"$schema_name\"}",
           "interval": "",
-          "legendFormat": "Boguk ratio",
+          "legendFormat": "Current Boguk ratio",
           "range": true,
           "refId": "A"
         },
