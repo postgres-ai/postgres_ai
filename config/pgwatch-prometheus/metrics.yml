@@ -1912,6 +1912,29 @@ metrics:
           join pg_namespace N on (N.oid = C.relnamespace)
     gauges:
       - '*'
+  pg_index_pilot:
+    sqls:
+      11: |
+        select
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          database_name as tag_database_name,
+          datname as tag_datname,
+          schemaname as tag_schemaname,
+          relname as tag_relname,
+          indexrelname as tag_indexrelname,
+          indexsize as index_size_bytes,
+          indisvalid::int as is_valid,
+          estimated_tuples,
+          best_ratio
+        from index_pilot.index_current_state
+        order by indexsize desc
+        limit 2000;
+    gauges:
+      - index_size_bytes
+      - is_valid
+      - estimated_tuples
+      - best_ratio
 
 presets:
   full:
@@ -1950,3 +1973,6 @@ presets:
       rarely_used_indexes: 10800
       archive_lag: 15
       pg_vacuum_progress: 30
+  pg_index_pilot:
+    metrics:
+      pg_index_pilot: 30
