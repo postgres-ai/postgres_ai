@@ -1928,7 +1928,8 @@ metrics:
           estimated_tuples,
           best_ratio
         from index_pilot.index_current_state
-        order by indexsize desc;
+        order by indexsize desc
+        limit 2000;
     gauges:
       - index_size_bytes
       - is_valid
