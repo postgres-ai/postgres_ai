@@ -1918,16 +1918,18 @@ metrics:
         select
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
-          database_name as tag_database_name,
-          datname as tag_datname,
-          schemaname as tag_schemaname,
-          relname as tag_relname,
-          indexrelname as tag_indexrelname,
-          indexsize as index_size_bytes,
-          indisvalid::int as is_valid,
-          estimated_tuples,
-          best_ratio
-        from index_pilot.index_current_state
+          s.database_name as tag_database_name,
+          s.datname as tag_datname,
+          s.schemaname as tag_schemaname,
+          s.relname as tag_relname,
+          s.indexrelname as tag_indexrelname,
+          pg_catalog.pg_relation_size(c.oid)::bigint as index_size_bytes,
+          i.indisvalid::int as is_valid,
+          greatest(1, c.reltuples::bigint) as estimated_tuples,
+          s.best_ratio
+        from index_pilot.index_current_state as s
+        join pg_index as i using (indexrelid)
+        join pg_class as c on c.oid = s.indexrelid
         order by indexsize desc
         limit 2000;
     gauges:
