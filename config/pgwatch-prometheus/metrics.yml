@@ -966,6 +966,34 @@ metrics:
       - wal_bytes
       - temp_bytes_read
       - temp_bytes_written
+  pg_index_tuples:
+    description: >
+      Track tuple counts (live, dead, and total) for indexes using reltuples from pg_class.
+      This metric provides insights into index tuple distribution and can help identify
+      indexes that may benefit from maintenance operations.
+    sqls:
+      11: |
+        select 
+          current_database() as tag_datname,
+          n.nspname as tag_schemaname,
+          t.relname as tag_tablename,
+          i.relname as tag_indexname,
+          i.reltuples as total_tuples,
+          coalesce(pg_stat_get_live_tuples(t.oid), 0) as live_tuples,
+          coalesce(pg_stat_get_dead_tuples(t.oid), 0) as dead_tuples
+        from pg_class i
+        join pg_index idx on idx.indexrelid = i.oid
+        join pg_class t on t.oid = idx.indrelid
+        join pg_namespace n on n.oid = i.relnamespace
+        where i.relkind = 'i'
+          and t.relkind = 'r'
+          and n.nspname not in ('information_schema', 'pg_catalog')
+        order by i.reltuples desc nulls last
+        limit 5000
+    gauges:
+      - total_tuples
+      - live_tuples
+      - dead_tuples
   pg_stat_user_indexes:
     sqls:
       11: |
@@ -1957,6 +1985,7 @@ presets:
       pg_stat_wal_receiver: 30
       pg_archiver: 30
       pg_stat_user_tables: 30
+      pg_index_tuples: 30
       pg_stat_user_indexes: 30
       pg_stat_statements: 30
       pg_stat_replication: 30
