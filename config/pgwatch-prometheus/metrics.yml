@@ -1946,8 +1946,6 @@ metrics:
       11: |
         select
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
-          current_database() as tag_datname,
-          database_name as tag_database_name,
           datname as tag_datname,
           schemaname as tag_schemaname,
           relname as tag_relname,
@@ -1956,7 +1954,7 @@ metrics:
           indisvalid::int as is_valid,
           estimated_tuples,
           best_ratio
-        from index_pilot.index_current_state
+        from index_pilot.index_latest_state
         order by indexsize desc
         limit 2000;
     gauges:
