@@ -213,7 +213,7 @@
           "useBackend": false
         }
       ],
-      "title": "Table size per second",
+      "title": "Table size change rate",
       "type": "timeseries"
     },
     {
@@ -284,7 +284,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -466,7 +467,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -484,7 +485,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -585,7 +586,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "sortBy": "Mean",
+          "sortBy": "Max",
           "sortDesc": true
         },
         "tooltip": {
@@ -669,7 +670,7 @@
         {
           "id": "calculateField",
           "options": {
-            "alias": "Non HOT Updates",
+            "alias": "Non-HOT Updates",
             "binary": {
               "left": {
                 "matcher": {
@@ -1078,7 +1079,7 @@
         {
           "id": "calculateField",
           "options": {
-            "alias": "Non HOT Updates %",
+            "alias": "Non-HOT Updates %",
             "binary": {
               "left": {
                 "matcher": {
@@ -1221,8 +1222,8 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "irate(pgwatch_table_stats_n_tup_ins{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "sum by(schema, table_name, table_full_name) (irate(pgwatch_table_stats_n_tup_ins{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "60",
@@ -1335,12 +1336,12 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "sum by(schema, table_name, table_full_name) (irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "60",
-          "legendFormat": "{{table_full_name}}",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1449,8 +1450,8 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "sum by(schema, table_name, table_full_name) (irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "60",
@@ -1460,7 +1461,7 @@
           "useBackend": false
         }
       ],
-      "title": "Number of HOT updated tuples by table",
+      "title": "Number of HOT-updated tuples by table",
       "type": "timeseries"
     },
     {
@@ -1564,7 +1565,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]) - irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval])",
+          "expr": "sum by(schema, table_name, table_full_name) (irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]) - irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "60",
@@ -1574,7 +1575,7 @@
           "useBackend": false
         }
       ],
-      "title": "Number of non HOT updated tuples by table",
+      "title": "Number of Non-HOT-updated tuples by table",
       "type": "timeseries"
     },
     {
@@ -1677,8 +1678,8 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "irate(pgwatch_table_stats_n_tup_del{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval])",
+          "editorMode": "code",
+          "expr": "sum by(schema, table_name, table_full_name) (irate(pgwatch_table_stats_n_tup_del{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\", table_name=~\"$table_name\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "60",
@@ -1826,5 +1827,5 @@
   "timezone": "utc",
   "title": "09. Table analysis",
   "uid": "92657f2a-985b-4d1a-99ed-2fac6e0c53e2",
-  "version": 17
+  "version": 26
 }
