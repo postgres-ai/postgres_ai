@@ -966,6 +966,33 @@ metrics:
       - wal_bytes
       - temp_bytes_read
       - temp_bytes_written
+  pg_class:
+    description: >
+      Direct access to pg_class system catalog data for all relations (tables, indexes, etc).
+      Provides reltuples, relpages, and other pg_class columns with relname and schemaname
+      as tags for easy filtering and querying.
+    sqls:
+      11: |
+        select 
+          current_database() as tag_datname,
+          n.nspname as tag_schemaname,
+          c.relname as tag_relname,
+          c.relkind as tag_relkind,
+          c.reltuples,
+          c.relpages,
+          pg_relation_size(c.oid) as relation_size_bytes,
+          pg_total_relation_size(c.oid) as total_relation_size_bytes
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname not in ('information_schema', 'pg_catalog')
+          and c.relkind in ('r', 'i', 'm', 'v')  -- tables, indexes, materialized views, views
+        order by pg_total_relation_size(c.oid) desc
+        limit 10000
+    gauges:
+      - reltuples
+      - relpages
+      - relation_size_bytes
+      - total_relation_size_bytes
   pg_stat_user_indexes:
     sqls:
       11: |
@@ -1208,6 +1235,7 @@ metrics:
       - bloat_size
       - bloat_pct
       - is_na
+      - reltuples
 
   pg_table_bloat:
     description: >
@@ -1285,6 +1313,7 @@ metrics:
       - bloat_size
       - bloat_pct
       - is_na
+      - reltuples
     statement_timeout_seconds: 300
   pg_invalid_indexes:
     description: >
@@ -1912,6 +1941,29 @@ metrics:
           join pg_namespace N on (N.oid = C.relnamespace)
     gauges:
       - '*'
+  pg_index_pilot:
+    sqls:
+      11: |
+        select
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          database_name as tag_database_name,
+          datname as tag_datname,
+          schemaname as tag_schemaname,
+          relname as tag_relname,
+          indexrelname as tag_indexrelname,
+          indexsize as index_size_bytes,
+          indisvalid::int as is_valid,
+          estimated_tuples,
+          best_ratio
+        from index_pilot.index_current_state
+        order by indexsize desc
+        limit 2000;
+    gauges:
+      - index_size_bytes
+      - is_valid
+      - estimated_tuples
+      - best_ratio
 
 presets:
   full:
@@ -1932,6 +1984,7 @@ presets:
       pg_stat_wal_receiver: 30
       pg_archiver: 30
       pg_stat_user_tables: 30
+      pg_class: 30
       pg_stat_user_indexes: 30
       pg_stat_statements: 30
       pg_stat_replication: 30
@@ -1950,3 +2003,6 @@ presets:
       rarely_used_indexes: 10800
       archive_lag: 15
       pg_vacuum_progress: 30
+  pg_index_pilot:
+    metrics:
+      pg_index_pilot: 30
