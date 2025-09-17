@@ -1777,7 +1777,6 @@
         "type": "query"
       },
       {
-        "allValue": "",
         "current": {
           "text": "All",
           "value": "$__all"
@@ -1799,7 +1798,9 @@
         "allValue": ".+",
         "current": {
           "text": "All",
-          "value": "$__all"
+          "value": [
+            "$__all"
+          ]
         },
         "definition": "label_values(pgwatch_table_stats_tx_freeze_age{schema=~\"$schema_name\"},table_name)",
         "includeAll": true,
@@ -1825,5 +1826,5 @@
   "timezone": "utc",
   "title": "09. Table analysis",
   "uid": "92657f2a-985b-4d1a-99ed-2fac6e0c53e2",
-  "version": 15
+  "version": 17
 }
