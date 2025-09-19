@@ -484,5 +484,106 @@ def get_btree_bloat_csv():
         logger.error(f"Error processing btree bloat request: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/table_bloat/csv', methods=['GET'])
+def get_table_bloat_csv():
+    """
+    Get the most recent pg_table_bloat metrics as a CSV table.
+    """
+    try:
+        # Get query parameters
+        cluster_name = request.args.get('cluster_name')
+        node_name = request.args.get('node_name')
+        db_name = request.args.get('db_name')
+        schemaname = request.args.get('schemaname')
+        tblname = request.args.get('tblname')
+
+        # Build label filters
+        filters = []
+        if cluster_name:
+            filters.append(f'cluster="{cluster_name}"')
+        if node_name:
+            filters.append(f'node_name="{node_name}"')
+        if schemaname:
+            filters.append(f'schemaname="{schemaname}"')
+        if tblname:
+            filters.append(f'tblname="{tblname}"')
+        if db_name:
+            filters.append(f'datname="{db_name}"')
+
+        filter_str = '{' + ','.join(filters) + '}' if filters else ''
+
+        # Metrics to fetch with last_over_time to get only the most recent value
+        metric_queries = [
+            f'last_over_time(pgwatch_pg_table_bloat_real_size_mib{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_table_bloat_extra_size{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_table_bloat_extra_pct{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_table_bloat_fillfactor{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_table_bloat_bloat_size{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_table_bloat_is_na{filter_str}[1d])',
+        ]
+
+        prom = get_prometheus_client()
+        metric_results = {}
+
+        for query in metric_queries:
+            try:
+                result = prom.custom_query(query=query)
+                for entry in result:
+                    metric_labels = entry.get('metric', {})
+                    key = (
+                        metric_labels.get('datname', ''),
+                        metric_labels.get('schemaname', ''),
+                        metric_labels.get('tblname', ''),
+                    )
+                    if key not in metric_results:
+                        metric_results[key] = {
+                            'database': metric_labels.get('datname', ''),
+                            'schemaname': metric_labels.get('schemaname', ''),
+                            'tblname': metric_labels.get('tblname', ''),
+                        }
+                    if 'real_size_mib' in query:
+                        metric_results[key]['real_size_mib'] = float(entry['value'][1])
+                    elif 'extra_size' in query and 'extra_pct' not in query:
+                        metric_results[key]['extra_size'] = float(entry['value'][1])
+                    elif 'extra_pct' in query:
+                        metric_results[key]['extra_pct'] = float(entry['value'][1])
+                    elif 'fillfactor' in query:
+                        metric_results[key]['fillfactor'] = float(entry['value'][1])
+                    elif 'bloat_size' in query:
+                        metric_results[key]['bloat_size'] = float(entry['value'][1])
+                    elif 'bloat_pct' in query:
+                        metric_results[key]['bloat_pct'] = float(entry['value'][1])
+                    elif 'is_na' in query:
+                        metric_results[key]['is_na'] = int(float(entry['value'][1]))
+            except Exception as e:
+                logger.warning(f"Failed to query: {query}, error: {e}")
+                continue
+
+        # Prepare CSV output
+        output = io.StringIO()
+        fieldnames = [
+            'database', 'schemaname', 'tblname',
+            'real_size_mib', 'extra_size', 'extra_pct', 'fillfactor',
+            'bloat_size', 'bloat_pct', 'is_na'
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in metric_results.values():
+            writer.writerow(row)
+
+        csv_content = output.getvalue()
+        output.close()
+
+        # Create response
+        response = make_response(csv_content)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=table_bloat_latest.csv'
+        return response
+
+    except Exception as e:
+        logger.error(f"Error processing table bloat request: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
