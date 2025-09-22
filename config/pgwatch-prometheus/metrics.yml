@@ -1962,6 +1962,42 @@ metrics:
       - is_valid
       - estimated_tuples
       - best_ratio
+  
+  pg_index_pilot_config:
+    sqls:
+      12: |
+        select
+          coalesce(datname, '*') as tag_datname,
+          coalesce(schemaname, '*') as tag_schemaname,
+          coalesce(relname, '*') as tag_relname,
+          coalesce(indexrelname, '*') as tag_indexrelname,
+          key as tag_config_key,
+          case 
+            when key = 'index_size_threshold' then 
+              case 
+                when value ~ '^[0-9]+MB$' then (regexp_replace(value, 'MB$', '')::numeric * 1024 * 1024)::bigint
+                when value ~ '^[0-9]+kB$' then (regexp_replace(value, 'kB$', '')::numeric * 1024)::bigint
+                when value ~ '^[0-9]+GB$' then (regexp_replace(value, 'GB$', '')::numeric * 1024 * 1024 * 1024)::bigint
+                else 0
+              end
+            when key = 'minimum_reliable_index_size' then 
+              case 
+                when value ~ '^[0-9]+kB$' then (regexp_replace(value, 'kB$', '')::numeric * 1024)::bigint
+                when value ~ '^[0-9]+MB$' then (regexp_replace(value, 'MB$', '')::numeric * 1024 * 1024)::bigint
+                else 0
+              end
+            when key = 'index_rebuild_scale_factor' then value::numeric
+            when key = 'reindex_history_retention_period' then 
+              case when value ~ 'years?' then regexp_replace(value, ' years?', '')::int else 0 end
+            when key = 'skip' then case when value::boolean then 1 else 0 end
+            else 0
+          end as config_value_normalized,
+          value as tag_config_value_raw
+        from index_pilot.config_settings
+        order by id;
+    gauges:
+      - config_value_normalized
+
 
 presets:
   full:
@@ -2004,3 +2040,4 @@ presets:
   pg_index_pilot:
     metrics:
       pg_index_pilot: 30
+      pg_index_pilot_config: 7200
