@@ -1975,18 +1975,18 @@ metrics:
           case 
             when key = 'index_size_threshold' then 
               case 
-                when value ~ '^[0-9]+MB$' then (regexp_replace(value, 'MB$', '')::numeric * 1024 * 1024)::bigint
-                when value ~ '^[0-9]+kB$' then (regexp_replace(value, 'kB$', '')::numeric * 1024)::bigint
-                when value ~ '^[0-9]+GB$' then (regexp_replace(value, 'GB$', '')::numeric * 1024 * 1024 * 1024)::bigint
+                when value ~ '^[0-9]+MB$' then (regexp_replace(value, 'MB$', '')::numeric * 1024 * 1024)::float
+                when value ~ '^[0-9]+kB$' then (regexp_replace(value, 'kB$', '')::numeric * 1024)::float
+                when value ~ '^[0-9]+GB$' then (regexp_replace(value, 'GB$', '')::numeric * 1024 * 1024 * 1024)::float
                 else 0
               end
             when key = 'minimum_reliable_index_size' then 
               case 
-                when value ~ '^[0-9]+kB$' then (regexp_replace(value, 'kB$', '')::numeric * 1024)::bigint
-                when value ~ '^[0-9]+MB$' then (regexp_replace(value, 'MB$', '')::numeric * 1024 * 1024)::bigint
+                when value ~ '^[0-9]+kB$' then (regexp_replace(value, 'kB$', '')::numeric * 1024)::float
+                when value ~ '^[0-9]+MB$' then (regexp_replace(value, 'MB$', '')::numeric * 1024 * 1024)::float
                 else 0
               end
-            when key = 'index_rebuild_scale_factor' then value::numeric
+            when key = 'index_rebuild_scale_factor' then value::float
             when key = 'reindex_history_retention_period' then 
               case when value ~ 'years?' then regexp_replace(value, ' years?', '')::int else 0 end
             when key = 'skip' then case when value::boolean then 1 else 0 end
