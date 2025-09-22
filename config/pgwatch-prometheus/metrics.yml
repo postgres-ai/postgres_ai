@@ -1993,7 +1993,7 @@ metrics:
             else 0
           end as config_value_normalized,
           value as tag_config_value_raw
-        from index_pilot.config_settings
+        from index_pilot.config
         order by id;
     gauges:
       - config_value_normalized
