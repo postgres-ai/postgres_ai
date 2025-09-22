@@ -22,19 +22,6 @@
   "links": [],
   "panels": [
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 22,
-      "panels": [],
-      "title": "Row title",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
@@ -98,7 +85,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 0
       },
       "id": 1,
       "options": {
@@ -199,7 +186,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 0
       },
       "id": 7,
       "options": {
@@ -236,6 +223,19 @@
       ],
       "title": "Top $top_n tables by size change rate",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 22,
+      "panels": [],
+      "title": "Bloat stats",
+      "type": "row"
     },
     {
       "datasource": {
@@ -483,645 +483,6 @@
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "D"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 28
-      },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Max",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_ins{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Inserts",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Updates",
-          "range": true,
-          "refId": "B",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "HOT Updates",
-          "range": true,
-          "refId": "C",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_del{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Deletes",
-          "range": true,
-          "refId": "D",
-          "useBackend": false
-        }
-      ],
-      "title": "Tuple operations (aggregated)",
-      "transformations": [
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Non-HOT Updates",
-            "binary": {
-              "left": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Updates"
-                }
-              },
-              "operator": "-",
-              "right": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "HOT Updates"
-                }
-              }
-            },
-            "mode": "binary",
-            "reduce": {
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Updates": true
-            },
-            "includeByName": {},
-            "indexByName": {},
-            "renameByName": {
-              "Hot Updates": "HOT Updates"
-            }
-          }
-        }
-      ],
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "D"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 38
-      },
-      "id": 21,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Max",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_ins{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Inserts",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Updates",
-          "range": true,
-          "refId": "B",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "HOT Updates",
-          "range": true,
-          "refId": "C",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_table_stats_n_tup_del{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", schema=~\"$schema_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Deletes",
-          "range": true,
-          "refId": "D",
-          "useBackend": false
-        }
-      ],
-      "title": "Tuple operations (%) (Aggregated)",
-      "transformations": [
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Non-HOT Updates",
-            "binary": {
-              "left": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Updates"
-                }
-              },
-              "operator": "-",
-              "right": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "HOT Updates"
-                }
-              }
-            },
-            "mode": "binary",
-            "reduce": {
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "mode": "reduceRow",
-            "reduce": {
-              "include": [
-                "Inserts",
-                "Deletes",
-                "Updates"
-              ],
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Inserts %",
-            "binary": {
-              "left": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Inserts"
-                }
-              },
-              "operator": "/",
-              "right": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Total"
-                }
-              }
-            },
-            "mode": "binary",
-            "reduce": {
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Non-HOT-Updates %",
-            "binary": {
-              "left": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Non-HOT Updates"
-                }
-              },
-              "operator": "/",
-              "right": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Total"
-                }
-              }
-            },
-            "mode": "binary",
-            "reduce": {
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "HOT-Updates",
-            "binary": {
-              "left": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "HOT Updates"
-                }
-              },
-              "operator": "/",
-              "right": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Total"
-                }
-              }
-            },
-            "mode": "binary",
-            "reduce": {
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Deletes %",
-            "binary": {
-              "left": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Deletes"
-                }
-              },
-              "operator": "/",
-              "right": {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Total"
-                }
-              }
-            },
-            "mode": "binary",
-            "reduce": {
-              "reducer": "sum"
-            }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Deletes": true,
-              "HOT Updates": true,
-              "Inserts": true,
-              "Non-HOT Updates": true,
-              "Total": true,
-              "Updates": true
-            },
-            "includeByName": {},
-            "indexByName": {},
-            "renameByName": {
-              "Hot Updates": "HOT Updates"
-            }
-          }
-        }
-      ],
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -1156,7 +517,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 28
       },
       "id": 3,
       "options": {
@@ -1270,7 +631,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 28
       },
       "id": 4,
       "options": {
@@ -1384,7 +745,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 58
+        "y": 38
       },
       "id": 5,
       "options": {
@@ -1498,7 +859,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 58
+        "y": 38
       },
       "id": 6,
       "options": {
@@ -1612,7 +973,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 68
+        "y": 48
       },
       "id": 10,
       "options": {
@@ -1665,7 +1026,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 58
       },
       "id": 20,
       "options": {
@@ -1674,7 +1035,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "<h1>\n  Brought to you by <a href=\"https://postgres.ai\">PostgresAI</a>\n  <img src=\"https://postgres.ai/img/logo.svg\" alt=\"Postgres.AI\" style=\"height: 2em; vertical-align: middle; margin-left: 0.3em;\">\n</h1>\n",
+        "content": "<h1>\n  Brought to you by <a href=\"https://postgres.ai\">Postgres AI</a>\n  <img src=\"https://postgres.ai/img/logo.svg\" alt=\"Postgres.AI\" style=\"height: 2em; vertical-align: middle; margin-left: 0.3em;\">\n</h1>\n",
         "mode": "html"
       },
       "pluginVersion": "12.0.2",
@@ -1802,5 +1163,5 @@
   "timezone": "utc",
   "title": "09. Top tables overview",
   "uid": "92657f2a-985b-4d1a-99ed-2fac6e0c53e2",
-  "version": 54
+  "version": 58
 }
