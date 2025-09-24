@@ -719,7 +719,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-  "title": "08. Index health  -- \"Metrics are collected (part of health check); dashboard – TODO\"",
+  "title": "10. Aggregated index analysis",
   "uid": "db3b37d1-1540-4f7e-95c9-4082f2ca349e",
   "version": 11
 }
