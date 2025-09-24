@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 12,
+  "id": 16,
   "links": [],
   "panels": [
     {
@@ -37,8 +37,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -116,7 +116,7 @@
           "useBackend": false
         }
       ],
-      "title": "Table size",
+      "title": "Total table size",
       "type": "timeseries"
     },
     {
@@ -135,8 +135,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -215,7 +215,7 @@
           "useBackend": false
         }
       ],
-      "title": "Table size change rate",
+      "title": "Table size change rate (absolute)",
       "type": "timeseries"
     },
     {
@@ -247,8 +247,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -314,7 +314,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -351,8 +351,9 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
+            "axisSoftMax": 100,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -468,8 +469,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
@@ -596,7 +597,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -729,8 +730,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
@@ -857,7 +858,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1224,5 +1225,5 @@
   "timezone": "utc",
   "title": "09. Single table analysis",
   "uid": "9-single-table-analysis",
-  "version": 5
+  "version": 8
 }
