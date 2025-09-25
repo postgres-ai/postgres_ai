@@ -2124,7 +2124,7 @@ presets:
       pg_database_wraparound: 30
       pg_xlog_position: 30
       pg_table_bloat: 7200
-      table_size_detailed: 300
+      table_size_detailed: 30
       pg_btree_bloat: 7200
       pg_invalid_indexes: 7200
       redundant_indexes: 10800
