@@ -1388,7 +1388,8 @@ metrics:
           -- Additional calculated metrics
           (table_main_size_b + toast_main_size_b) as actual_data_size_b,
           (table_fsm_size_b + table_vm_size_b + toast_fsm_size_b + toast_vm_size_b) as metadata_size_b,
-          (table_indexes_size_b + toast_indexes_size_b) as total_indexes_size_b
+          (table_indexes_size_b + toast_indexes_size_b) as total_indexes_size_b,
+          (toast_main_size_b + toast_fsm_size_b + toast_vm_size_b + toast_indexes_size_b) as total_toast_size_b
         from table_sizes
         where table_main_size_b > 0 -- only include tables with actual data
         order by relation_total_size_b desc
@@ -1406,6 +1407,7 @@ metrics:
       - actual_data_size_b
       - metadata_size_b
       - total_indexes_size_b
+      - total_toast_size_b
     statement_timeout_seconds: 300
   pg_invalid_indexes:
     description: >
