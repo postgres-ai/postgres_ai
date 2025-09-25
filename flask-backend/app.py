@@ -484,10 +484,11 @@ def get_btree_bloat_csv():
         logger.error(f"Error processing btree bloat request: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/table_bloat/csv', methods=['GET'])
-def get_table_bloat_csv():
+@app.route('/table_info/csv', methods=['GET'])
+def get_table_info_csv():
     """
-    Get the most recent pg_table_bloat metrics as a CSV table.
+    Get comprehensive table information including bloat metrics and detailed size information as a CSV table.
+    Combines pg_table_bloat and table_size_detailed metrics for complete table analysis.
     """
     try:
         # Get query parameters
@@ -513,7 +514,9 @@ def get_table_bloat_csv():
         filter_str = '{' + ','.join(filters) + '}' if filters else ''
 
         # Metrics to fetch with last_over_time to get only the most recent value
+        # Include both bloat metrics and detailed size metrics
         metric_queries = [
+            # Bloat metrics
             f'last_over_time(pgwatch_pg_table_bloat_real_size_mib{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_extra_size{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_extra_pct{filter_str}[1d])',
@@ -521,6 +524,17 @@ def get_table_bloat_csv():
             f'last_over_time(pgwatch_pg_table_bloat_bloat_size{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_is_na{filter_str}[1d])',
+            # Detailed size metrics
+            f'last_over_time(pgwatch_table_size_detailed_table_main_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_table_fsm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_table_vm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_table_indexes_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_main_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_fsm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_vm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_indexes_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_total_relation_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_total_toast_size_b{filter_str}[1d])',
         ]
 
         prom = get_prometheus_client()
@@ -542,20 +556,45 @@ def get_table_bloat_csv():
                             'schemaname': metric_labels.get('schemaname', ''),
                             'tblname': metric_labels.get('tblname', ''),
                         }
+                    value = float(entry['value'][1])
+                    
+                    # Bloat metrics
                     if 'real_size_mib' in query:
-                        metric_results[key]['real_size_mib'] = float(entry['value'][1])
+                        metric_results[key]['real_size_mib'] = value
                     elif 'extra_size' in query and 'extra_pct' not in query:
-                        metric_results[key]['extra_size'] = float(entry['value'][1])
+                        metric_results[key]['extra_size'] = value
                     elif 'extra_pct' in query:
-                        metric_results[key]['extra_pct'] = float(entry['value'][1])
+                        metric_results[key]['extra_pct'] = value
                     elif 'fillfactor' in query:
-                        metric_results[key]['fillfactor'] = float(entry['value'][1])
+                        metric_results[key]['fillfactor'] = value
                     elif 'bloat_size' in query:
-                        metric_results[key]['bloat_size'] = float(entry['value'][1])
+                        metric_results[key]['bloat_size'] = value
                     elif 'bloat_pct' in query:
-                        metric_results[key]['bloat_pct'] = float(entry['value'][1])
+                        metric_results[key]['bloat_pct'] = value
                     elif 'is_na' in query:
-                        metric_results[key]['is_na'] = int(float(entry['value'][1]))
+                        metric_results[key]['is_na'] = int(value)
+                    
+                    # Size metrics (convert bytes to MiB for consistency)
+                    elif 'table_main_size_b' in query:
+                        metric_results[key]['table_main_size_mib'] = value / (1024 * 1024)
+                    elif 'table_fsm_size_b' in query:
+                        metric_results[key]['table_fsm_size_mib'] = value / (1024 * 1024)
+                    elif 'table_vm_size_b' in query:
+                        metric_results[key]['table_vm_size_mib'] = value / (1024 * 1024)
+                    elif 'table_indexes_size_b' in query:
+                        metric_results[key]['table_indexes_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_main_size_b' in query:
+                        metric_results[key]['toast_main_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_fsm_size_b' in query:
+                        metric_results[key]['toast_fsm_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_vm_size_b' in query:
+                        metric_results[key]['toast_vm_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_indexes_size_b' in query:
+                        metric_results[key]['toast_indexes_size_mib'] = value / (1024 * 1024)
+                    elif 'total_relation_size_b' in query:
+                        metric_results[key]['total_relation_size_mib'] = value / (1024 * 1024)
+                    elif 'total_toast_size_b' in query:
+                        metric_results[key]['total_toast_size_mib'] = value / (1024 * 1024)
             except Exception as e:
                 logger.warning(f"Failed to query: {query}, error: {e}")
                 continue
@@ -564,8 +603,14 @@ def get_table_bloat_csv():
         output = io.StringIO()
         fieldnames = [
             'database', 'schemaname', 'tblname',
+            # Bloat metrics
             'real_size_mib', 'extra_size', 'extra_pct', 'fillfactor',
-            'bloat_size', 'bloat_pct', 'is_na'
+            'bloat_size', 'bloat_pct', 'is_na',
+            # Size metrics (all in MiB)
+            'table_main_size_mib', 'table_fsm_size_mib', 'table_vm_size_mib', 
+            'table_indexes_size_mib', 'toast_main_size_mib', 'toast_fsm_size_mib',
+            'toast_vm_size_mib', 'toast_indexes_size_mib', 'total_relation_size_mib',
+            'total_toast_size_mib'
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -578,11 +623,11 @@ def get_table_bloat_csv():
         # Create response
         response = make_response(csv_content)
         response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = 'attachment; filename=table_bloat_latest.csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=table_info_latest.csv'
         return response
 
     except Exception as e:
-        logger.error(f"Error processing table bloat request: {e}")
+        logger.error(f"Error processing table info request: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

@@ -285,7 +285,7 @@ metrics:
           from
             pg_locks
           where
-            pid != pg_backend_pid()
+            pid <> pg_backend_pid()
             and database = (select oid from pg_database where datname = current_database())
           limit 5000
         )
@@ -368,7 +368,7 @@ metrics:
           category as tag_category,
           vartype as tag_vartype,
           case when setting ~ '^-?[0-9]+$' then setting::bigint else null end as numeric_value,
-          case when source != 'default' then 0 else 1 end as is_default,
+          case when source <> 'default' then 0 else 1 end as is_default,
           1 as configured
         from pg_settings
     gauges:
@@ -390,7 +390,7 @@ metrics:
                 from pg_class c
                           join pg_namespace n on n.oid = c.relnamespace
                 where relkind in ('p', 'r')
-                  and relpersistence != 't'
+                  and relpersistence <> 't'
                   and not n.nspname like any (array[E'pg\\_%', 'information_schema', E'\\_timescaledb%'])
                   and not exists(select * from pg_inherits where inhrelid = c.oid)
                   and exists(select * from pg_inherits where inhparent = c.oid)
@@ -414,7 +414,7 @@ metrics:
                         pg_table_size(relid)                                                                     as table_size_b,
                         abs(greatest(ceil(log((pg_table_size(relid) + 1) / 10 ^ 6)), 0))::text                   as tag_table_size_cardinality_mb, -- i.e. 0=<1MB, 1=<10MB, 2=<100MB,..
                         pg_total_relation_size(relid)                                                            as total_relation_size_b,
-                        case when reltoastrelid != 0 then pg_total_relation_size(reltoastrelid) else 0::int8 end as toast_size_b,
+                        case when reltoastrelid <> 0 then pg_total_relation_size(reltoastrelid) else 0::int8 end as toast_size_b,
                         (extract(epoch from now() - greatest(last_vacuum, last_autovacuum)))::int8               as seconds_since_last_vacuum,
                         (extract(epoch from now() - greatest(last_analyze, last_autoanalyze)))::int8             as seconds_since_last_analyze,
                         case when 'autovacuum_enabled=off' = ANY (c.reloptions) then 1 else 0 end                as no_autovacuum,
@@ -432,14 +432,14 @@ metrics:
                         autovacuum_count,
                         analyze_count,
                         autoanalyze_count,
-                        case when c.relkind != 'p' then age(c.relfrozenxid) else 0 end as tx_freeze_age
+                        case when c.relkind <> 'p' then age(c.relfrozenxid) else 0 end as tx_freeze_age
                 from pg_stat_user_tables ut
                           join
                       pg_class c on c.oid = ut.relid
                 where
                   -- leaving out fully locked tables as pg_relation_size also wants a lock and would wait
                     not exists(select 1 from pg_locks where relation = relid and mode = 'AccessExclusiveLock')
-                  and c.relpersistence != 't' -- and temp tables
+                  and c.relpersistence <> 't' -- and temp tables
             )
         
         select /* pgwatch_generated */
@@ -526,7 +526,7 @@ metrics:
                 from pg_class c
                           join pg_namespace n on n.oid = c.relnamespace
                 where relkind in ('p', 'r')
-                  and relpersistence != 't'
+                  and relpersistence <> 't'
                   and not n.nspname like any (array[E'pg\\_%', 'information_schema', E'\\_timescaledb%'])
                   and not exists(select * from pg_inherits where inhrelid = c.oid)
                   and exists(select * from pg_inherits where inhparent = c.oid)
@@ -550,7 +550,7 @@ metrics:
                         pg_table_size(relid)                                                                     as table_size_b,
                         abs(greatest(ceil(log((pg_table_size(relid) + 1) / 10 ^ 6)), 0))::text                   as tag_table_size_cardinality_mb, -- i.e. 0=<1MB, 1=<10MB, 2=<100MB,..
                         pg_total_relation_size(relid)                                                            as total_relation_size_b,
-                        case when c.reltoastrelid != 0 then pg_total_relation_size(c.reltoastrelid) else 0::int8 end as toast_size_b,
+                        case when c.reltoastrelid <> 0 then pg_total_relation_size(c.reltoastrelid) else 0::int8 end as toast_size_b,
                         (extract(epoch from now() - greatest(last_vacuum, last_autovacuum)))::int8               as seconds_since_last_vacuum,
                         (extract(epoch from now() - greatest(last_analyze, last_autoanalyze)))::int8             as seconds_since_last_analyze,
                         case when 'autovacuum_enabled=off' = ANY (c.reloptions) then 1 else 0 end                as no_autovacuum,
@@ -568,7 +568,7 @@ metrics:
                         autovacuum_count,
                         analyze_count,
                         autoanalyze_count,
-                        case when c.relkind != 'p' then age(c.relfrozenxid) else 0 end as tx_freeze_age,
+                        case when c.relkind <> 'p' then age(c.relfrozenxid) else 0 end as tx_freeze_age,
                         extract(epoch from now() - last_seq_scan)::int8 as last_seq_scan_s
                 from pg_stat_user_tables ut
                     join pg_class c on c.oid = ut.relid
@@ -578,7 +578,7 @@ metrics:
                 where
                   -- leaving out fully locked tables as pg_relation_size also wants a lock and would wait
                   not exists (select 1 from pg_locks where relation = relid and mode = 'AccessExclusiveLock')
-                  and c.relpersistence != 't' -- and temp tables
+                  and c.relpersistence <> 't' -- and temp tables
                 order by case when c.relkind = 'p' then 1e9::int else coalesce(c.relpages, 0) + coalesce(t.relpages, 0) + coalesce(tir.relpages, 0) end desc
                 limit 1500 /* NB! When changing the bottom final LIMIT also adjust this limit. Should be at least 5x bigger as approx sizes depend a lot on vacuum frequency.
                             The general idea is to reduce filesystem "stat"-ing on tables that won't make it to final output anyways based on approximate size */
@@ -1328,7 +1328,6 @@ metrics:
             current_database() as tag_datname,
             n.nspname as tag_schema,
             c.relname as tag_table_name,
-            n.nspname || '.' || c.relname as tag_table_full_name,
             c.oid as table_oid,
             c.reltoastrelid,
             -- Main table size components (bytes)
@@ -1336,32 +1335,17 @@ metrics:
             pg_relation_size(c.oid, 'fsm') as table_fsm_size_b,
             pg_relation_size(c.oid, 'vm') as table_vm_size_b,
             pg_indexes_size(c.oid) as table_indexes_size_b,
-            -- TOAST table components (if exists)
-            case 
-              when c.reltoastrelid != 0 then pg_relation_size(c.reltoastrelid, 'main')
-              else 0::int8
-            end as toast_main_size_b,
-            case 
-              when c.reltoastrelid != 0 then pg_relation_size(c.reltoastrelid, 'fsm')
-              else 0::int8
-            end as toast_fsm_size_b,
-            case 
-              when c.reltoastrelid != 0 then pg_relation_size(c.reltoastrelid, 'vm')
-              else 0::int8
-            end as toast_vm_size_b,
-            case 
-              when c.reltoastrelid != 0 then pg_indexes_size(c.reltoastrelid)
-              else 0::int8
-            end as toast_indexes_size_b,
-            -- Calculated totals for reference
-            pg_table_size(c.oid) as table_total_size_b,
-            pg_total_relation_size(c.oid) as relation_total_size_b,
-            -- Size cardinality for grouping (logarithmic scale)
+            pg_relation_size(c.reltoastrelid, 'main') as toast_main_size_b,
+            pg_relation_size(c.reltoastrelid, 'fsm') as toast_fsm_size_b,
+            pg_relation_size(c.reltoastrelid, 'vm') as toast_vm_size_b,
+            pg_indexes_size(c.reltoastrelid) as toast_indexes_size_b,
+            pg_total_relation_size(c.reltoastrelid) as toast_total_size_b,
+            pg_total_relation_size(c.oid) as total_relation_size_b,
             abs(greatest(ceil(log((pg_total_relation_size(c.oid) + 1) / 10 ^ 6)), 0))::text as tag_size_cardinality_mb
           from pg_class c
           join pg_namespace n on n.oid = c.relnamespace
-          where c.relkind in ('r', 'p') -- regular tables and partitioned tables
-            and n.nspname not in ('information_schema', 'pg_catalog', 'pg_toast')
+          where c.relkind in ('r', 'p', 'm') -- regular tables, partitioned tables, materialized views
+            and n.nspname not in ('information_schema', 'pg_toast')
             and not exists (
               select 1 from pg_locks 
               where relation = c.oid and mode = 'AccessExclusiveLock'
@@ -1373,7 +1357,6 @@ metrics:
           tag_datname,
           tag_schema,
           tag_table_name,
-          tag_table_full_name,
           tag_size_cardinality_mb,
           table_main_size_b,
           table_fsm_size_b,
@@ -1383,16 +1366,10 @@ metrics:
           toast_fsm_size_b,
           toast_vm_size_b,
           toast_indexes_size_b,
-          table_total_size_b,
-          relation_total_size_b,
-          -- Additional calculated metrics
-          (table_main_size_b + toast_main_size_b) as actual_data_size_b,
-          (table_fsm_size_b + table_vm_size_b + toast_fsm_size_b + toast_vm_size_b) as metadata_size_b,
-          (table_indexes_size_b + toast_indexes_size_b) as total_indexes_size_b,
+          total_relation_size_b,
           (toast_main_size_b + toast_fsm_size_b + toast_vm_size_b + toast_indexes_size_b) as total_toast_size_b
         from table_sizes
-        where table_main_size_b > 0 -- only include tables with actual data
-        order by relation_total_size_b desc
+        where total_relation_size_b > 0
     gauges:
       - table_main_size_b
       - table_fsm_size_b  
@@ -1402,13 +1379,12 @@ metrics:
       - toast_fsm_size_b
       - toast_vm_size_b
       - toast_indexes_size_b
-      - table_total_size_b
-      - relation_total_size_b
+      - total_relation_size_b
       - actual_data_size_b
       - metadata_size_b
       - total_indexes_size_b
       - total_toast_size_b
-    statement_timeout_seconds: 300
+    statement_timeout_seconds: 15
   pg_invalid_indexes:
     description: >
       This metric identifies invalid indexes in the database.
