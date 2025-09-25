@@ -1315,6 +1315,98 @@ metrics:
       - is_na
       - reltuples
     statement_timeout_seconds: 300
+  table_size_detailed:
+    description: >
+      This metric provides comprehensive table size analysis including the actual table size (main data fork only),
+      TOAST table size, index size, free space map (FSM) size, and visibility map (VM) size.
+      It helps administrators understand detailed storage breakdown for each table component.
+    sqls:
+      11: |-
+        with table_sizes as (
+          select
+            (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+            current_database() as tag_datname,
+            n.nspname as tag_schema,
+            c.relname as tag_table_name,
+            n.nspname || '.' || c.relname as tag_table_full_name,
+            c.oid as table_oid,
+            c.reltoastrelid,
+            -- Main table size components (bytes)
+            pg_relation_size(c.oid, 'main') as table_main_size_b,
+            pg_relation_size(c.oid, 'fsm') as table_fsm_size_b,
+            pg_relation_size(c.oid, 'vm') as table_vm_size_b,
+            pg_indexes_size(c.oid) as table_indexes_size_b,
+            -- TOAST table components (if exists)
+            case 
+              when c.reltoastrelid != 0 then pg_relation_size(c.reltoastrelid, 'main')
+              else 0::int8
+            end as toast_main_size_b,
+            case 
+              when c.reltoastrelid != 0 then pg_relation_size(c.reltoastrelid, 'fsm')
+              else 0::int8
+            end as toast_fsm_size_b,
+            case 
+              when c.reltoastrelid != 0 then pg_relation_size(c.reltoastrelid, 'vm')
+              else 0::int8
+            end as toast_vm_size_b,
+            case 
+              when c.reltoastrelid != 0 then pg_indexes_size(c.reltoastrelid)
+              else 0::int8
+            end as toast_indexes_size_b,
+            -- Calculated totals for reference
+            pg_table_size(c.oid) as table_total_size_b,
+            pg_total_relation_size(c.oid) as relation_total_size_b,
+            -- Size cardinality for grouping (logarithmic scale)
+            abs(greatest(ceil(log((pg_total_relation_size(c.oid) + 1) / 10 ^ 6)), 0))::text as tag_size_cardinality_mb
+          from pg_class c
+          join pg_namespace n on n.oid = c.relnamespace
+          where c.relkind in ('r', 'p') -- regular tables and partitioned tables
+            and n.nspname not in ('information_schema', 'pg_catalog', 'pg_toast')
+            and not exists (
+              select 1 from pg_locks 
+              where relation = c.oid and mode = 'AccessExclusiveLock'
+            )
+          order by pg_total_relation_size(c.oid) desc
+        )
+        select /* pgwatch_generated */
+          epoch_ns,
+          tag_datname,
+          tag_schema,
+          tag_table_name,
+          tag_table_full_name,
+          tag_size_cardinality_mb,
+          table_main_size_b,
+          table_fsm_size_b,
+          table_vm_size_b,
+          table_indexes_size_b,
+          toast_main_size_b,
+          toast_fsm_size_b,
+          toast_vm_size_b,
+          toast_indexes_size_b,
+          table_total_size_b,
+          relation_total_size_b,
+          -- Additional calculated metrics
+          (table_main_size_b + toast_main_size_b) as actual_data_size_b,
+          (table_fsm_size_b + table_vm_size_b + toast_fsm_size_b + toast_vm_size_b) as metadata_size_b,
+          (table_indexes_size_b + toast_indexes_size_b) as total_indexes_size_b
+        from table_sizes
+        where table_main_size_b > 0 -- only include tables with actual data
+        order by relation_total_size_b desc
+    gauges:
+      - table_main_size_b
+      - table_fsm_size_b  
+      - table_vm_size_b
+      - table_indexes_size_b
+      - toast_main_size_b
+      - toast_fsm_size_b
+      - toast_vm_size_b
+      - toast_indexes_size_b
+      - table_total_size_b
+      - relation_total_size_b
+      - actual_data_size_b
+      - metadata_size_b
+      - total_indexes_size_b
+    statement_timeout_seconds: 300
   pg_invalid_indexes:
     description: >
       This metric identifies invalid indexes in the database.
@@ -2030,6 +2122,7 @@ presets:
       pg_database_wraparound: 30
       pg_xlog_position: 30
       pg_table_bloat: 7200
+      table_size_detailed: 300
       pg_btree_bloat: 7200
       pg_invalid_indexes: 7200
       redundant_indexes: 10800
