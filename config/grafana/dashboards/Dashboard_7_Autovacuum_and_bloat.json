@@ -40,6 +40,7 @@
             "axisSoftMax": 7,
             "axisSoftMin": 1,
             "barAlignment": 0,
+            "axisSoftMin": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "points",
             "fillOpacity": 0,
