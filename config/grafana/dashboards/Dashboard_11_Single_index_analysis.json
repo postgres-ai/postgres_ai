@@ -1,0 +1,331 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 14,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "axisSoftMin": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Boguk ratio (index size / live tuples), baseline"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Boguk ratio (index size / live tuples), current"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "index_rebuild_scale_factor"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pg_index_pilot rebuild threshold  "
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "pgwatch_pg_class_total_relation_size_bytes{relname=\"$index_name\", schemaname=\"$schema_name\"} / pgwatch_pg_class_reltuples{relname=\"$index_name\", schemaname=\"$schema_name\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "",
+          "legendFormat": "Boguk ratio (index size / live tuples), current",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "pgwatch_pg_index_pilot_best_ratio{indexrelname=\"$index_name\", schemaname=\"$schema_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Boguk ratio (index size / live tuples), baseline",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "max by () (\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=~\"$index_name\", datname=~\"$datname\"}[1w]) * 8 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=~\"$index_name\", datname=\"*\"}[1w]) * 7 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=\"*\", datname=~\"$datname\"}[1w]) * 6 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=~\"$index_name\", datname=~\"$datname\"}[1w]) * 5 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=\"*\", datname=~\"$datname\"}[1w]) * 4 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=\"*\", datname=\"*\"}[1w]) * 3 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=~\"$index_name\", datname=\"*\"}[1w]) * 2 or\n  last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=\"*\", datname=\"*\"}[1w]) * 1\n) / \nmax by () (\n  8 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=~\"$index_name\", datname=~\"$datname\"}[1w]) * 0 + 1) or\n  7 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=~\"$index_name\", datname=\"*\"}[1w]) * 0 + 1) or\n  6 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=\"*\", datname=~\"$datname\"}[1w]) * 0 + 1) or\n  5 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=~\"$index_name\", datname=~\"$datname\"}[1w]) * 0 + 1) or\n  4 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=\"*\", datname=~\"$datname\"}[1w]) * 0 + 1) or\n  3 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=~\"$schema_name\", indexrelname=\"*\", datname=\"*\"}[1w]) * 0 + 1) or\n  2 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=~\"$index_name\", datname=\"*\"}[1w]) * 0 + 1) or\n  1 * (last_over_time(pgwatch_pg_index_pilot_config_config_value_normalized{config_key=\"index_rebuild_scale_factor\", schemaname=\"*\", indexrelname=\"*\", datname=\"*\"}[1w]) * 0 + 1)\n)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "index_rebuild_scale_factor",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "pg_index_pilot rebuild threshold  ",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Boguk ratio (index size / live tuples), baseline"
+                }
+              },
+              "operator": "*",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "index_rebuild_scale_factor"
+                }
+              }
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "workloaddb",
+          "value": "workloaddb"
+        },
+        "definition": "label_values(pgwatch_pg_index_pilot_best_ratio,datname)",
+        "label": "DB name",
+        "name": "datname",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_pg_index_pilot_best_ratio,datname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "test_pilot",
+          "value": "test_pilot"
+        },
+        "definition": "label_values(pgwatch_pg_index_pilot_estimated_tuples,schemaname)",
+        "name": "schema_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_pg_index_pilot_estimated_tuples,schemaname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "items_email_idx",
+          "value": "items_email_idx"
+        },
+        "definition": "label_values(pgwatch_pg_index_pilot_estimated_tuples{schemaname=\"$schema_name\"},indexrelname)",
+        "name": "index_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_pg_index_pilot_estimated_tuples{schemaname=\"$schema_name\"},indexrelname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-12h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "11. Single index analysis",
+  "uid": "aa0128c5-c5a0-4418-a99e-c941af10426e",
+  "version": 4
+}

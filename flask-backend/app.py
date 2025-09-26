@@ -484,10 +484,11 @@ def get_btree_bloat_csv():
         logger.error(f"Error processing btree bloat request: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/table_bloat/csv', methods=['GET'])
-def get_table_bloat_csv():
+@app.route('/table_info/csv', methods=['GET'])
+def get_table_info_csv():
     """
-    Get the most recent pg_table_bloat metrics as a CSV table.
+    Get comprehensive table information including bloat metrics, detailed size information, and I/O statistics as a CSV table.
+    Combines pg_table_bloat, table_size_detailed, and pg_statio_all_tables metrics for complete table analysis.
     """
     try:
         # Get query parameters
@@ -513,7 +514,9 @@ def get_table_bloat_csv():
         filter_str = '{' + ','.join(filters) + '}' if filters else ''
 
         # Metrics to fetch with last_over_time to get only the most recent value
+        # Include bloat metrics, detailed size metrics, and I/O metrics
         metric_queries = [
+            # Bloat metrics
             f'last_over_time(pgwatch_pg_table_bloat_real_size_mib{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_extra_size{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_extra_pct{filter_str}[1d])',
@@ -521,6 +524,26 @@ def get_table_bloat_csv():
             f'last_over_time(pgwatch_pg_table_bloat_bloat_size{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{filter_str}[1d])',
             f'last_over_time(pgwatch_pg_table_bloat_is_na{filter_str}[1d])',
+            # Detailed size metrics
+            f'last_over_time(pgwatch_table_size_detailed_table_main_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_table_fsm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_table_vm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_table_indexes_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_main_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_fsm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_vm_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_toast_indexes_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_total_relation_size_b{filter_str}[1d])',
+            f'last_over_time(pgwatch_table_size_detailed_total_toast_size_b{filter_str}[1d])',
+            # I/O metrics
+            f'last_over_time(pgwatch_pg_statio_all_tables_heap_blks_read{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_heap_blks_hit{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_idx_blks_read{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_idx_blks_hit{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_toast_blks_read{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_toast_blks_hit{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_tidx_blks_read{filter_str}[1d])',
+            f'last_over_time(pgwatch_pg_statio_all_tables_tidx_blks_hit{filter_str}[1d])',
         ]
 
         prom = get_prometheus_client()
@@ -542,30 +565,114 @@ def get_table_bloat_csv():
                             'schemaname': metric_labels.get('schemaname', ''),
                             'tblname': metric_labels.get('tblname', ''),
                         }
+                    value = float(entry['value'][1])
+                    
+                    # Bloat metrics
                     if 'real_size_mib' in query:
-                        metric_results[key]['real_size_mib'] = float(entry['value'][1])
+                        metric_results[key]['real_size_mib'] = value
                     elif 'extra_size' in query and 'extra_pct' not in query:
-                        metric_results[key]['extra_size'] = float(entry['value'][1])
+                        metric_results[key]['extra_size'] = value
                     elif 'extra_pct' in query:
-                        metric_results[key]['extra_pct'] = float(entry['value'][1])
+                        metric_results[key]['extra_pct'] = value
                     elif 'fillfactor' in query:
-                        metric_results[key]['fillfactor'] = float(entry['value'][1])
+                        metric_results[key]['fillfactor'] = value
                     elif 'bloat_size' in query:
-                        metric_results[key]['bloat_size'] = float(entry['value'][1])
+                        metric_results[key]['bloat_size'] = value
                     elif 'bloat_pct' in query:
-                        metric_results[key]['bloat_pct'] = float(entry['value'][1])
+                        metric_results[key]['bloat_pct'] = value
                     elif 'is_na' in query:
-                        metric_results[key]['is_na'] = int(float(entry['value'][1]))
+                        metric_results[key]['is_na'] = int(value)
+                    
+                    # Size metrics (convert bytes to MiB for consistency)
+                    elif 'table_main_size_b' in query:
+                        metric_results[key]['table_main_size_mib'] = value / (1024 * 1024)
+                    elif 'table_fsm_size_b' in query:
+                        metric_results[key]['table_fsm_size_mib'] = value / (1024 * 1024)
+                    elif 'table_vm_size_b' in query:
+                        metric_results[key]['table_vm_size_mib'] = value / (1024 * 1024)
+                    elif 'table_indexes_size_b' in query:
+                        metric_results[key]['table_indexes_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_main_size_b' in query:
+                        metric_results[key]['toast_main_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_fsm_size_b' in query:
+                        metric_results[key]['toast_fsm_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_vm_size_b' in query:
+                        metric_results[key]['toast_vm_size_mib'] = value / (1024 * 1024)
+                    elif 'toast_indexes_size_b' in query:
+                        metric_results[key]['toast_indexes_size_mib'] = value / (1024 * 1024)
+                    elif 'total_relation_size_b' in query:
+                        metric_results[key]['total_relation_size_mib'] = value / (1024 * 1024)
+                    elif 'total_toast_size_b' in query:
+                        metric_results[key]['total_toast_size_mib'] = value / (1024 * 1024)
+                    
+                    # I/O metrics
+                    elif 'heap_blks_read' in query:
+                        metric_results[key]['heap_blks_read'] = int(value)
+                    elif 'heap_blks_hit' in query:
+                        metric_results[key]['heap_blks_hit'] = int(value)
+                    elif 'idx_blks_read' in query:
+                        metric_results[key]['idx_blks_read'] = int(value)
+                    elif 'idx_blks_hit' in query:
+                        metric_results[key]['idx_blks_hit'] = int(value)
+                    elif 'toast_blks_read' in query:
+                        metric_results[key]['toast_blks_read'] = int(value)
+                    elif 'toast_blks_hit' in query:
+                        metric_results[key]['toast_blks_hit'] = int(value)
+                    elif 'tidx_blks_read' in query:
+                        metric_results[key]['tidx_blks_read'] = int(value)
+                    elif 'tidx_blks_hit' in query:
+                        metric_results[key]['tidx_blks_hit'] = int(value)
             except Exception as e:
                 logger.warning(f"Failed to query: {query}, error: {e}")
                 continue
+
+        # Calculate I/O hit ratios
+        for key, row in metric_results.items():
+            # Heap hit ratio
+            heap_total = row.get('heap_blks_read', 0) + row.get('heap_blks_hit', 0)
+            if heap_total > 0:
+                row['heap_hit_ratio'] = round(row.get('heap_blks_hit', 0) / heap_total * 100, 2)
+            else:
+                row['heap_hit_ratio'] = 0.0
+                
+            # Index hit ratio
+            idx_total = row.get('idx_blks_read', 0) + row.get('idx_blks_hit', 0)
+            if idx_total > 0:
+                row['idx_hit_ratio'] = round(row.get('idx_blks_hit', 0) / idx_total * 100, 2)
+            else:
+                row['idx_hit_ratio'] = 0.0
+                
+            # TOAST hit ratio
+            toast_total = row.get('toast_blks_read', 0) + row.get('toast_blks_hit', 0)
+            if toast_total > 0:
+                row['toast_hit_ratio'] = round(row.get('toast_blks_hit', 0) / toast_total * 100, 2)
+            else:
+                row['toast_hit_ratio'] = 0.0
+                
+            # TOAST index hit ratio
+            tidx_total = row.get('tidx_blks_read', 0) + row.get('tidx_blks_hit', 0)
+            if tidx_total > 0:
+                row['tidx_hit_ratio'] = round(row.get('tidx_blks_hit', 0) / tidx_total * 100, 2)
+            else:
+                row['tidx_hit_ratio'] = 0.0
 
         # Prepare CSV output
         output = io.StringIO()
         fieldnames = [
             'database', 'schemaname', 'tblname',
+            # Bloat metrics
             'real_size_mib', 'extra_size', 'extra_pct', 'fillfactor',
-            'bloat_size', 'bloat_pct', 'is_na'
+            'bloat_size', 'bloat_pct', 'is_na',
+            # Size metrics (all in MiB)
+            'table_main_size_mib', 'table_fsm_size_mib', 'table_vm_size_mib', 
+            'table_indexes_size_mib', 'toast_main_size_mib', 'toast_fsm_size_mib',
+            'toast_vm_size_mib', 'toast_indexes_size_mib', 'total_relation_size_mib',
+            'total_toast_size_mib',
+            # I/O metrics
+            'heap_blks_read', 'heap_blks_hit', 'heap_hit_ratio',
+            'idx_blks_read', 'idx_blks_hit', 'idx_hit_ratio',
+            'toast_blks_read', 'toast_blks_hit', 'toast_hit_ratio',
+            'tidx_blks_read', 'tidx_blks_hit', 'tidx_hit_ratio'
         ]
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
@@ -578,11 +685,11 @@ def get_table_bloat_csv():
         # Create response
         response = make_response(csv_content)
         response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = 'attachment; filename=table_bloat_latest.csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=table_info_latest.csv'
         return response
 
     except Exception as e:
-        logger.error(f"Error processing table bloat request: {e}")
+        logger.error(f"Error processing table info request: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
