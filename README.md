@@ -60,7 +60,7 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 - **Access (network and pg_hba)** to the Postgres database(s) you want to monitor
 
 **Database:**
-- Supports Postgres versions 14-17
+- Supports Postgres versions 14-18
 - **pg_stat_statements extension must be created** for the DB used for connection
 
 ## ⚠️ Security Notice
