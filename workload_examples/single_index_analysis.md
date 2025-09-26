@@ -34,8 +34,6 @@ alter sequence test_pilot.items_id_seq owned by test_pilot.items.id;
 
 create index items_updated_at_idx on test_pilot.items(items_updated_at_idx);
 create index items_category_idx on test_pilot.items(category);
-create index items_category_idx on test_pilot.items(category);
-create index items_category_idx on test_pilot.items(category);
 create index items_status_idx on test_pilot.items(status);
 create index items_created_at_idx on test_pilot.items(created_at);
 create index items_email_idx on test_pilot.items(email);
