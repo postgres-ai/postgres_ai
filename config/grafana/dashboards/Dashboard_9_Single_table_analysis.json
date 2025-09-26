@@ -22,6 +22,19 @@
   "links": [],
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 27,
+      "panels": [],
+      "title": "Size stats",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
@@ -103,10 +116,10 @@
         ]
       },
       "gridPos": {
-        "h": 14,
-        "w": 24,
+        "h": 13,
+        "w": 12,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 38,
       "options": {
@@ -299,10 +312,10 @@
         ]
       },
       "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 14
+        "h": 13,
+        "w": 12,
+        "x": 12,
+        "y": 1
       },
       "id": 39,
       "options": {
@@ -419,411 +432,17 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 28
-      },
-      "id": 40,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "Heap",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "tidx",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "TOAST",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "Index",
-          "range": true,
-          "refId": "D"
-        }
-      ],
-      "title": "Block hits distribution",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 42
-      },
-      "id": 41,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "Heap",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "tidx",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "TOAST",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "Index",
-          "range": true,
-          "refId": "D"
-        }
-      ],
-      "title": "Block reads distribution",
-      "type": "timeseries"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 14
       },
       "id": 31,
       "panels": [],
-      "title": "Bloat stats",
+      "title": "Estimated bloat stats",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 13,
-        "w": 24,
-        "x": 0,
-        "y": 57
-      },
-      "id": 32,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Max",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "pgwatch_pg_table_bloat_bloat_size{schemaname=\"$schema_name\", tblname=\"$table_name\"}",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "legendFormat": "{{schemaname}}.{{tblname}}",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Bloat size",
-      "type": "timeseries"
     },
     {
       "datasource": {
@@ -889,9 +508,9 @@
       },
       "gridPos": {
         "h": 13,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 70
+        "y": 15
       },
       "id": 33,
       "options": {
@@ -927,7 +546,111 @@
           "useBackend": false
         }
       ],
-      "title": "Bloat %",
+      "title": "Estimated bloat %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "pgwatch_pg_table_bloat_bloat_size{schemaname=\"$schema_name\", tblname=\"$table_name\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "legendFormat": "{{schemaname}}.{{tblname}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Estimated bloat size",
       "type": "timeseries"
     },
     {
@@ -936,7 +659,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 83
+        "y": 28
       },
       "id": 30,
       "panels": [],
@@ -1036,7 +759,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "HOT Updates"
+              "options": "HOT updates"
             },
             "properties": [
               {
@@ -1051,7 +774,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Non-HOT Updates"
+              "options": "Non-HOT updates"
             },
             "properties": [
               {
@@ -1067,9 +790,9 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 84
+        "y": 29
       },
       "id": 21,
       "options": {
@@ -1138,7 +861,7 @@
           "hide": false,
           "includeNullMetadata": true,
           "interval": "60",
-          "legendFormat": "HOT Updates",
+          "legendFormat": "HOT updates",
           "range": true,
           "refId": "C",
           "useBackend": false
@@ -1166,7 +889,7 @@
         {
           "id": "calculateField",
           "options": {
-            "alias": "Non-HOT Updates",
+            "alias": "Non-HOT updates",
             "binary": {
               "left": {
                 "matcher": {
@@ -1178,7 +901,7 @@
               "right": {
                 "matcher": {
                   "id": "byName",
-                  "options": "HOT Updates"
+                  "options": "HOT updates"
                 }
               }
             },
@@ -1328,9 +1051,9 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 94
+        "w": 12,
+        "x": 12,
+        "y": 29
       },
       "id": 37,
       "options": {
@@ -1422,7 +1145,7 @@
           "useBackend": false
         }
       ],
-      "title": "Tuple operations (%) (Aggregated)",
+      "title": "Tuple operations (%)",
       "transformations": [
         {
           "id": "calculateField",
@@ -1585,6 +1308,614 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_stat_user_tables_seq_tup_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "Fetched by sequential scans",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_stat_user_tables_idx_tup_fetch{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "Fetched by index scans",
+          "range": true,
+          "refId": "B",
+          "useBackend": false
+        }
+      ],
+      "title": "Live tuples fetch distribution",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "id": 43,
+      "panels": [],
+      "title": "IO stats",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Heap",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Index",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "TOAST",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "TOAST indexes",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Shared block hits",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {}
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "id": 45,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Heap",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Index",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "TOAST",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "TOAST indexes",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Shared block reads",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {}
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMax": 1,
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 76
+      },
+      "id": 46,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "\n  (irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]))/(irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + (irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "Shared blocks hit",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "\n  (irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]))/(irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + (irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])))",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Shared blocks read",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Shared block hit ratio",
+      "type": "timeseries"
+    },
+    {
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -1593,7 +1924,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 104
+        "y": 90
       },
       "id": 20,
       "options": {
@@ -1708,12 +2039,12 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "09. Single table analysis",
   "uid": "9-single-table-analysis",
-  "version": 21
+  "version": 43
 }

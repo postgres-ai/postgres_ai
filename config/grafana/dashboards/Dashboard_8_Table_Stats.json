@@ -113,7 +113,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -190,7 +190,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -214,7 +214,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -317,7 +317,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -394,7 +394,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -418,7 +418,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -521,7 +521,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -598,7 +598,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -622,7 +622,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -725,7 +725,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -802,7 +802,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -826,7 +826,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1187,7 +1187,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by tuples inserts per second",
+      "title": "Top $top_n tables by tuple inserts per second",
       "type": "timeseries"
     },
     {
@@ -1534,12 +1534,222 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 88
+      },
+      "id": 40,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_user_tables_seq_tup_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "{{schemaname}}.{{relname}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Top $top_n tables by sequential reads of live tuples",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 101
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_user_tables_idx_tup_fetch{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "{{schemaname}}.{{relname}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Top $top_n tables by index fetches of live tuples",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 114
       },
       "id": 30,
       "panels": [],
@@ -1603,15 +1813,15 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 13,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 89
+        "y": 115
       },
       "id": 31,
       "options": {
@@ -1636,7 +1846,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, \n  irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval])\n) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1646,7 +1856,111 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by block hits",
+      "title": "Top $top_n tables by total shared block hits",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 12,
+        "y": 115
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "topk($top_n, \n  (irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))/(irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + (irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))) \n) ",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "{{schemaname}}.{{relname}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Top $top_n tables by total shared block hit ratio",
       "type": "timeseries"
     },
     {
@@ -1706,15 +2020,15 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 13,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 102
+        "y": 128
       },
       "id": 37,
       "options": {
@@ -1739,7 +2053,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \nirate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval])) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1749,7 +2063,111 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by block reads",
+      "title": "Top $top_n tables by total shared block reads",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "noValue": "-",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 12,
+        "y": 128
+      },
+      "id": 43,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "topk($top_n, \n  (irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))/(irate(pgwatch_pg_statio_all_tables_heap_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + (irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]) + \n  irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))) \n) ",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "{{schemaname}}.{{relname}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Top $top_n tables by total shared block read ratio",
       "type": "timeseries"
     },
     {
@@ -1809,7 +2227,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -1817,7 +2235,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 115
+        "y": 141
       },
       "id": 36,
       "options": {
@@ -1842,7 +2260,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_heap_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))* on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1852,7 +2270,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by heap block hits",
+      "title": "Top $top_n tables by table (without TOAST) shared block hits",
       "type": "timeseries"
     },
     {
@@ -1912,7 +2330,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -1920,7 +2338,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 128
+        "y": 154
       },
       "id": 32,
       "options": {
@@ -1955,7 +2373,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by heap block reads",
+      "title": "Top $top_n tables by table (without TOAST) shared block reads",
       "type": "timeseries"
     },
     {
@@ -2015,213 +2433,7 @@
               }
             ]
           },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 13,
-        "w": 24,
-        "x": 0,
-        "y": 141
-      },
-      "id": 33,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "{{schemaname}}.{{relname}}",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Top $top_n tables by index block hits",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 13,
-        "w": 24,
-        "x": 0,
-        "y": 154
-      },
-      "id": 34,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "{{schemaname}}.{{relname}}",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Top $top_n tables by index block reads",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -2254,7 +2466,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))* on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2264,7 +2476,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by TOAST block hits",
+      "title": "Top $top_n tables by TOAST shared block hits",
       "type": "timeseries"
     },
     {
@@ -2324,7 +2536,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -2367,7 +2579,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by TOAST block reads",
+      "title": "Top $top_n tables by TOAST shared block reads",
       "type": "timeseries"
     },
     {
@@ -2427,7 +2639,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -2437,7 +2649,7 @@
         "x": 0,
         "y": 193
       },
-      "id": 40,
+      "id": 33,
       "options": {
         "legend": {
           "calcs": [
@@ -2447,9 +2659,7 @@
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Mean",
-          "sortDesc": true
+          "showLegend": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -2462,7 +2672,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_user_tables_seq_scan{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval])) * on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2472,7 +2682,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by sequential scans",
+      "title": "Top $top_n tables by index shared block hits",
       "type": "timeseries"
     },
     {
@@ -2532,7 +2742,7 @@
               }
             ]
           },
-          "unit": "ops"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -2542,7 +2752,7 @@
         "x": 0,
         "y": 206
       },
-      "id": 41,
+      "id": 34,
       "options": {
         "legend": {
           "calcs": [
@@ -2552,9 +2762,7 @@
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Mean",
-          "sortDesc": true
+          "showLegend": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -2567,7 +2775,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_user_tables_idx_scan{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))* on() group_left() last_over_time(pgwatch_settings_numeric_value{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", setting_name=\"block_size\"}[1d])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -2577,7 +2785,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by index scans",
+      "title": "Top $top_n tables by index shared block reads",
       "type": "timeseries"
     },
     {
@@ -2598,7 +2806,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "<h1>\n  Brought to you by <a href=\"https://postgres.ai\">Postgres AI</a>\n  <img src=\"https://postgres.ai/img/logo.svg\" alt=\"Postgres.AI\" style=\"height: 2em; vertical-align: middle; margin-left: 0.3em;\">\n</h1>\n",
+        "content": "<h1>\n  Brought to you by <a href=\"https://postgres.ai\">PostgresAI</a>\n  <img src=\"https://postgres.ai/img/logo.svg\" alt=\"Postgres.AI\" style=\"height: 2em; vertical-align: middle; margin-left: 0.3em;\">\n</h1>\n",
         "mode": "html"
       },
       "pluginVersion": "12.0.2",
@@ -2719,12 +2927,12 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "08. Aggregated table analysis",
   "uid": "92657f2a-985b-4d1a-99ed-2fac6e0c53e2",
-  "version": 56
+  "version": 97
 }

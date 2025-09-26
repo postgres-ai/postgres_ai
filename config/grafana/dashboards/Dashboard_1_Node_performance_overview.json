@@ -3453,6 +3453,267 @@
             "axisPlacement": "auto",
             "axisSoftMin": 0,
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inserts"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Deletes"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HOT updates"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Non-HOT updates"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 133
+      },
+      "id": 45,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "sortBy": "Max",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_ins{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "60",
+          "legendFormat": "Inserts",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "interval": "60",
+          "legendFormat": "Updates",
+          "range": true,
+          "refId": "B",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "interval": "60",
+          "legendFormat": "HOT updates",
+          "range": true,
+          "refId": "C",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_del{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "interval": "60",
+          "legendFormat": "Deletes",
+          "range": true,
+          "refId": "D",
+          "useBackend": false
+        }
+      ],
+      "title": "Tuple operations",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Non-HOT updates",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Updates"
+                }
+              },
+              "operator": "-",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "HOT updates"
+                }
+              }
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Updates": true
+            },
+            "includeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "Hot Updates": "HOT Updates"
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.5,
             "drawStyle": "bars",
             "fillOpacity": 100,
@@ -3503,7 +3764,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 133
+        "y": 146
       },
       "id": 32,
       "options": {
@@ -3640,7 +3901,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 133
+        "y": 146
       },
       "id": 33,
       "options": {
@@ -3738,7 +3999,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 141
+        "y": 154
       },
       "id": 34,
       "options": {
@@ -3835,7 +4096,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 141
+        "y": 154
       },
       "id": 35,
       "options": {
@@ -3933,7 +4194,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 149
+        "y": 162
       },
       "id": 41,
       "options": {
@@ -3997,6 +4258,138 @@
         }
       ],
       "title": "bgwriter and checkpointer",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMax": 7,
+            "axisSoftMin": 1,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "options": {
+                "1": {
+                  "index": 0,
+                  "text": "Initial"
+                },
+                "2": {
+                  "index": 1,
+                  "text": "Scanning heap"
+                },
+                "3": {
+                  "index": 2,
+                  "text": "Vacuuming indexes"
+                },
+                "4": {
+                  "index": 3,
+                  "text": "Vacuuming heap"
+                },
+                "5": {
+                  "index": 4,
+                  "text": "Cleaning up indexes"
+                },
+                "6": {
+                  "index": 5,
+                  "text": "Truncating heap"
+                },
+                "7": {
+                  "index": 6,
+                  "text": "Final cleanup"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 172
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "(\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"7\"}) * 0 + 7 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"6\"}) * 0 + 6 or\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"5\"}) * 0 + 5 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"4\"}) * 0 + 4 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"3\"}) * 0 + 3 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"2\"}) * 0 + 2 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"1\"}) * 0 + 1\n)",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "",
+          "legendFormat": "{{schema_name}}.{{table_name}} - {{vacuum_mode}}",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Vacuum timeline",
       "type": "timeseries"
     },
     {
@@ -4084,7 +4477,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 159
+        "y": 183
       },
       "id": 44,
       "options": {
@@ -4196,138 +4589,6 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMax": 7,
-            "axisSoftMin": 1,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "points",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 0,
-          "mappings": [
-            {
-              "options": {
-                "1": {
-                  "index": 0,
-                  "text": "Initial"
-                },
-                "2": {
-                  "index": 1,
-                  "text": "Scanning heap"
-                },
-                "3": {
-                  "index": 2,
-                  "text": "Vacuuming indexes"
-                },
-                "4": {
-                  "index": 3,
-                  "text": "Vacuuming heap"
-                },
-                "5": {
-                  "index": 4,
-                  "text": "Cleaning up indexes"
-                },
-                "6": {
-                  "index": 5,
-                  "text": "Truncating heap"
-                },
-                "7": {
-                  "index": 6,
-                  "text": "Final cleanup"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 24,
-        "x": 0,
-        "y": 173
-      },
-      "id": 42,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "(\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"7\"}) * 0 + 7 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"6\"}) * 0 + 6 or\n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"5\"}) * 0 + 5 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"4\"}) * 0 + 4 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"3\"}) * 0 + 3 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"2\"}) * 0 + 2 or \n    group by (schema_name, table_name, vacuum_mode) (\n        pgwatch_pg_vacuum_progress_index_vacuum_count{phase=\"1\"}) * 0 + 1\n)",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "",
-          "legendFormat": "{{schema_name}}.{{table_name}} - {{vacuum_mode}}",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Vacuum timeline",
-      "type": "timeseries"
-    },
-    {
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -4336,7 +4597,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 184
+        "y": 197
       },
       "id": 40,
       "options": {
@@ -4415,12 +4676,12 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-24h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "01. Single node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 13
+  "version": 24
 }
