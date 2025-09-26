@@ -526,6 +526,7 @@
           "expr": "irate(pgwatch_pg_statio_all_tables_tidx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
+          "interval": "20",
           "legendFormat": "tidx",
           "range": true,
           "refId": "B"
@@ -539,6 +540,7 @@
           "expr": "irate(pgwatch_pg_statio_all_tables_toast_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
+          "interval": "20",
           "legendFormat": "TOAST",
           "range": true,
           "refId": "C"
@@ -552,6 +554,7 @@
           "expr": "irate(pgwatch_pg_statio_all_tables_idx_blks_hit{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
+          "interval": "20",
           "legendFormat": "Index",
           "range": true,
           "refId": "D"
@@ -668,6 +671,7 @@
           "expr": "irate(pgwatch_pg_statio_all_tables_tidx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
+          "interval": "20",
           "legendFormat": "tidx",
           "range": true,
           "refId": "B"
@@ -681,6 +685,7 @@
           "expr": "irate(pgwatch_pg_statio_all_tables_toast_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
+          "interval": "20",
           "legendFormat": "TOAST",
           "range": true,
           "refId": "C"
@@ -694,6 +699,7 @@
           "expr": "irate(pgwatch_pg_statio_all_tables_idx_blks_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "hide": false,
           "instant": false,
+          "interval": "20",
           "legendFormat": "Index",
           "range": true,
           "refId": "D"
@@ -1702,12 +1708,12 @@
     ]
   },
   "time": {
-    "from": "now-12h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "09. Single table analysis",
   "uid": "9-single-table-analysis",
-  "version": 19
+  "version": 21
 }
