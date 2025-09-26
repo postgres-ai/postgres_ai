@@ -2091,8 +2091,6 @@ metrics:
           tidx_blks_hit
         from
           pg_statio_all_tables
-        where
-          heap_blks_read > 0 or idx_blks_read > 0 or toast_blks_read > 0 or tidx_blks_read > 0
     gauges:
       - '*'
 
