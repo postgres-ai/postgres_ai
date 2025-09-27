@@ -20,23 +20,24 @@ drop sequence if exists test_pilot.items_id_seq;
 create sequence test_pilot.items_id_seq as bigint;
 
 create table test_pilot.items (
-  id         bigint primary key default nextval('test_pilot.items_id_seq'::regclass),
-  email      text                     not null,
-  status     text                     not null,
-  data       jsonb,
-  created_at timestamptz              not null default now(),
-  amount     numeric(12,2)            not null default 0,
-  category   integer                  not null default 0,
+  id bigint primary key default nextval('test_pilot.items_id_seq'::regclass),
+  email text not null,
+  status text not null,
+  data jsonb,
+  created_at timestamptz not null default now(),
+  amount numeric(12,2) not null default 0,
+  category integer not null default 0,
   updated_at timestamptz
 );
 
 alter sequence test_pilot.items_id_seq owned by test_pilot.items.id;
 
-create index items_category_idx    on test_pilot.items(category);
-create index items_status_idx      on test_pilot.items(status);
-create index items_created_at_idx  on test_pilot.items(created_at);
-create index items_email_idx       on test_pilot.items(email);
-create index idx_items_data_gin    on test_pilot.items using gin (data);
+create index items_updated_at_idx on test_pilot.items(updated_at);
+create index items_category_idx on test_pilot.items(category);
+create index items_status_idx on test_pilot.items(status);
+create index items_created_at_idx on test_pilot.items(created_at);
+create index items_email_idx on test_pilot.items(email);
+create index idx_items_data_gin on test_pilot.items using gin (data);
 
 insert into test_pilot.items (email, status, data, created_at, amount, category, updated_at)
 select
