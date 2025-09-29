@@ -64,6 +64,8 @@ services:
         source: ./config/prometheus/prometheus.yml
         target: /etc/prometheus/prometheus.yml
         read_only: true
+        is_directory: false
+        content: ""
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
