@@ -16,10 +16,6 @@ services:
       echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
       sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
       echo 'Generated sources.yml files for both postgres and prometheus'
-
-      # --- PROMETHEUS CONFIG: always ensure it's a FILE, not a dir ---
-      rm -rf /app/config/prometheus/prometheus.yml &&
-      cat > /app/config/prometheus/prometheus.yml <<'YAML'
       "
 
   # Target Database - The PostgreSQL database being monitored
@@ -61,11 +57,13 @@ services:
   # Prometheus Sink - Storage for metrics in Prometheus format
   sink-prometheus:
     image: prom/prometheus:v3.4.2
-    container_name: sink-prometheus
     ports:
       - "59090:9090"
     volumes:
-      - ./config/prometheus:/etc/prometheus
+      - type: bind
+        source: ./config/prometheus/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -74,8 +72,6 @@ services:
       - "--web.console.templates=/etc/prometheus/consoles"
       - "--storage.tsdb.retention.time=200h"
       - "--web.enable-lifecycle"
-    depends_on:
-      - sources-generator
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
@@ -132,6 +128,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./config/grafana/provisioning/grafana.ini:/etc/grafana/grafana.ini
     depends_on:
       - sink-postgres
       - sink-prometheus
