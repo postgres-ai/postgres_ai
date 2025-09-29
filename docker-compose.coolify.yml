@@ -113,8 +113,18 @@ services:
       - sources-generator
       - sink-prometheus
     volumes:
-      - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+      - type: bind
+        source: ./config/pgwatch-prometheus/sources.yml
+        target: /etc/pgwatch/sources.yml
+        read_only: true
+        is_directory: false
+        content: ""
+      - type: bind
+        source: ./config/pgwatch-prometheus/metrics.yml
+        target: /etc/pgwatch/metrics.yml
+        read_only: true
+        is_directory: false
+        content: ""
 
   # Grafana with datasources - Visualization layer
   grafana:
