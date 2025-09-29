@@ -16,6 +16,10 @@ services:
       echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
       sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
       echo 'Generated sources.yml files for both postgres and prometheus'
+
+      # --- PROMETHEUS CONFIG: always ensure it's a FILE, not a dir ---
+      rm -rf /app/config/prometheus/prometheus.yml &&
+      cat > /app/config/prometheus/prometheus.yml <<'YAML'
       "
 
   # Target Database - The PostgreSQL database being monitored
@@ -70,6 +74,8 @@ services:
       - "--web.console.templates=/etc/prometheus/consoles"
       - "--storage.tsdb.retention.time=200h"
       - "--web.enable-lifecycle"
+    depends_on:
+      - sources-generator
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
