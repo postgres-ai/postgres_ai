@@ -1,0 +1,190 @@
+services:
+  # Sources Generator - Generates sources.yml files from instances.yaml template
+  sources-generator:
+    image: alpine:3.22.0
+    container_name: sources-generator
+    working_dir: /app
+    volumes:
+      - ./instances.yml:/app/instances.yaml
+      - ./config:/app/config
+    command: >
+      sh -c "
+      mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
+      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch-postgres/sources.yml &&
+      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch-postgres/sources.yml &&
+      echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
+      echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
+      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
+      echo 'Generated sources.yml files for both postgres and prometheus'
+      "
+
+  # Target Database - The PostgreSQL database being monitored
+  target-db:
+    image: postgres:15
+    container_name: target-db
+    environment:
+      POSTGRES_DB: target_database
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_preload_libraries=pg_stat_statements",
+        "-c",
+        "pg_stat_statements.track=all",
+      ]
+    ports:
+      - "55432:5432"
+    volumes:
+      - target_db_data:/var/lib/postgresql/data
+      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Postgres Sink - Storage for metrics in PostgreSQL format
+  sink-postgres:
+    image: postgres:15
+    container_name: sink-postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "55433:5432"
+    volumes:
+      - sink_postgres_data:/var/lib/postgresql/data
+      - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Prometheus Sink - Storage for metrics in Prometheus format
+  sink-prometheus:
+    image: prom/prometheus:v3.4.2
+    container_name: sink-prometheus
+    ports:
+      - "59090:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=200h"
+      - "--web.enable-lifecycle"
+
+  # PGWatch Instance 1 - Monitoring service (Postgres sink)
+  pgwatch-postgres:
+    image: cybertecpostgresql/pgwatch:3
+    container_name: pgwatch-postgres
+    command:
+      [
+        "--sources=/etc/pgwatch/sources.yml",
+        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements",
+        "--web-addr=:8080",
+      ]
+    ports:
+      - "58080:8080"
+    depends_on:
+      - sources-generator
+      - sink-postgres
+    volumes:
+      - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
+      - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+
+  # PGWatch Instance 2 - Monitoring service (Prometheus sink)
+  pgwatch-prometheus:
+    image: cybertecpostgresql/pgwatch:3
+    container_name: pgwatch-prometheus
+    command:
+      [
+        "--sources=/etc/pgwatch/sources.yml",
+        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sink=prometheus://0.0.0.0:9091/pgwatch",
+        "--web-addr=:8089",
+      ]
+    ports:
+      - "58089:8089"
+      - "59091:9091"
+    depends_on:
+      - sources-generator
+      - sink-prometheus
+    volumes:
+      - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
+      - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+
+  # Grafana with datasources - Visualization layer
+  grafana:
+    image: grafana/grafana:12.0.2
+    container_name: grafana-with-datasources
+    environment:
+      GF_SECURITY_ADMIN_USER: monitor
+      GF_SECURITY_ADMIN_PASSWORD: demo
+      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - sink-postgres
+      - sink-prometheus
+  flask-backend:
+    build:
+      context: ./flask-backend
+      dockerfile: Dockerfile
+    container_name: flask-pgss-api
+    environment:
+      - FLASK_ENV=production
+      - PROMETHEUS_URL=http://sink-prometheus:9090
+    depends_on:
+      - sink-prometheus
+    ports:
+      - "55000:5000"
+
+  # PostgreSQL Reports Generator - Runs reports after 1 hour
+  postgres-reports:
+    image: python:3.11-slim
+    container_name: postgres-reports
+    working_dir: /app
+    volumes:
+      - ./reporter/postgres_reports.py:/app/postgres_reports.py
+      - ./reporter/requirements.txt:/app/requirements.txt
+      - ./.pgwatch-config:/app/.pgwatch-config
+      - ./instances.yml:/app/instances.yml
+    environment:
+      - PROMETHEUS_URL=http://sink-prometheus:9090
+    depends_on:
+      - sink-prometheus
+      - pgwatch-prometheus
+    command: >
+      sh -c "
+      echo 'Installing Python dependencies...' &&
+      pip install -r requirements.txt &&
+      pip install pyyaml &&
+      echo 'Waiting 30 minutes before generating reports...' &&
+      sleep 1800 &&
+      echo 'Starting PostgreSQL reports generation...' &&
+      while true; do
+        echo 'Extracting cluster and node name from instances.yml...' &&
+        CLUSTER=$$(python3 -c \"import yaml; data=yaml.safe_load(open('instances.yml')); print(data[0]['custom_tags']['cluster'])\") &&
+        NODE_NAME=$$(python3 -c \"import yaml; data=yaml.safe_load(open('instances.yml')); print(data[0]['custom_tags']['node_name'])\") &&
+        echo \"Using cluster: $$CLUSTER, node: $$NODE_NAME\" &&
+        echo 'Generating PostgreSQL reports...' &&
+        if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
+          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --cluster \"$$CLUSTER\" --node-name \"$$NODE_NAME\" --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY --project postgres-ai-monitoring
+        else
+          echo 'No API key configured, generating reports without upload...' &&
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --cluster \"$$CLUSTER\" --node-name \"$$NODE_NAME\" --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
+        fi &&
+        echo 'Reports generated. Sleeping for 24 hours...' &&
+        sleep 86400
+      done
+      "
+
+volumes:
+  target_db_data:
+  sink_postgres_data:
+  prometheus_data:
+  grafana_data:
