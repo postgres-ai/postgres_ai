@@ -63,7 +63,7 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 - Supports Postgres versions 14-18
 - **pg_stat_statements extension must be created** for the DB used for connection
 
-## 🔐 Environment Configuration
+## Environment configuration
 
 **Important:** As of v2.0, all credentials are managed via environment variables for security.
 
@@ -84,7 +84,7 @@ nano .env
 ./postgres_ai quickstart --api-key=your_key
 ```
 
-📖 **See [SECURITY_SETUP.md](SECURITY_SETUP.md)** for complete environment variable documentation, security best practices, and production deployment guidelines.
+See `.env.example` for complete environment variable documentation and security best practices.
 
 ## ⚠️ Security Notice
 
