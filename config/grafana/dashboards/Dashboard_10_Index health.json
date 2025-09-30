@@ -18,9 +18,22 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 10,
+  "id": 17,
   "links": [],
   "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 62,
+      "panels": [],
+      "title": "Detailed table view",
+      "type": "row"
+    },
     {
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
@@ -50,15 +63,96 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "bytes"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bloat %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.width",
+                "value": 88
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fillfactor"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.width",
+                "value": 83
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Index"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 252
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Index Size"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bloat size"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 97
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Table"
+            },
+            "properties": [
+              {
+                "id": "custom.width"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 15,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 24,
       "options": {
@@ -71,7 +165,13 @@
           ],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Index Size"
+          }
+        ]
       },
       "pluginVersion": "12.0.2",
       "targets": [
@@ -220,11 +320,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 16
       },
       "id": 19,
       "panels": [],
-      "title": "Size stats",
+      "title": "Index size stats",
       "type": "row"
     },
     {
@@ -247,7 +347,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -265,7 +365,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -312,7 +412,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 17
       },
       "id": 23,
       "options": {
@@ -338,9 +438,9 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, pgwatch_pg_btree_bloat_real_size_mib{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})*1024*1024",
+          "expr": "topk($top_n, pgwatch_pg_class_total_relation_size_bytes{relkind=\"105\", schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"})",
           "interval": "20",
-          "legendFormat": "{{schemaname}}.{{tblname}}.{{idxname}}",
+          "legendFormat": "{{schemaname}}.{{relname}}",
           "range": true,
           "refId": "A"
         }
@@ -412,7 +512,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 17
       },
       "id": 51,
       "options": {
@@ -456,11 +556,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 30
       },
       "id": 52,
       "panels": [],
-      "title": "Bloat stats",
+      "title": "B-tree index estimated bloat stats",
       "type": "row"
     },
     {
@@ -548,7 +648,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 31
       },
       "id": 2,
       "options": {
@@ -604,7 +704,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -622,7 +722,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -669,7 +769,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 31
       },
       "id": 22,
       "options": {
@@ -711,7 +811,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 44
       },
       "id": 18,
       "panels": [],
@@ -783,7 +883,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 44
+        "y": 45
       },
       "id": 55,
       "options": {
@@ -888,7 +988,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 44
+        "y": 45
       },
       "id": 56,
       "options": {
@@ -993,7 +1093,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 58
       },
       "id": 57,
       "options": {
@@ -1039,11 +1139,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 71
       },
       "id": 58,
       "panels": [],
-      "title": "IO stats",
+      "title": "Index IO stats",
       "type": "row"
     },
     {
@@ -1111,7 +1211,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 71
+        "y": 72
       },
       "id": 59,
       "options": {
@@ -1216,7 +1316,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 71
+        "y": 72
       },
       "id": 60,
       "options": {
@@ -1323,7 +1423,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 85
       },
       "id": 61,
       "options": {
@@ -1372,7 +1472,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 99
       },
       "id": 21,
       "options": {
@@ -1396,13 +1496,13 @@
     "list": [
       {
         "current": {
-          "text": "5",
-          "value": "5"
+          "text": "10",
+          "value": "10"
         },
         "name": "top_n",
         "options": [
           {
-            "selected": false,
+            "selected": true,
             "text": "10",
             "value": "10"
           },
@@ -1422,8 +1522,8 @@
       },
       {
         "current": {
-          "text": "local",
-          "value": "local"
+          "text": "default",
+          "value": "default"
         },
         "definition": "label_values(pgwatch_settings_configured,cluster)",
         "label": "Cluster name",
@@ -1440,8 +1540,8 @@
       },
       {
         "current": {
-          "text": "node-01",
-          "value": "node-01"
+          "text": "postgres_ai",
+          "value": "postgres_ai"
         },
         "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
@@ -1458,8 +1558,8 @@
       },
       {
         "current": {
-          "text": "target_database",
-          "value": "target_database"
+          "text": "workloaddb",
+          "value": "workloaddb"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -1476,8 +1576,8 @@
       },
       {
         "current": {
-          "text": "test_pilot",
-          "value": "test_pilot"
+          "text": "All",
+          "value": "$__all"
         },
         "definition": "label_values(pgwatch_pg_stat_all_indexes_idx_scan,schemaname)",
         "includeAll": true,
@@ -1495,12 +1595,12 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "utc",
   "title": "10. Aggregated index analysis",
   "uid": "db3b37d1-1540-4f7e-95c9-4082f2ca349e",
-  "version": 9
+  "version": 13
 }
