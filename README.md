@@ -57,11 +57,11 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 **Infrastructure:**
 - **Linux machine** with Docker installed (separate from your database server)
 - **Docker access** - the user running `postgres_ai` must have Docker permissions
-- **Access (network and pg_hba)** to the Postgres database(s) you want to monitor
+- **Access (network and `pg_hba`)** to the Postgres database(s) you want to monitor
 
 **Database:**
 - Supports Postgres versions 14-18
-- **pg_stat_statements extension must be created** for the DB used for connection
+- **`pg_stat_statements` extension must be created** for the DB used for connection
 
 ## Environment configuration
 
@@ -216,8 +216,8 @@ After running quickstart:
 - **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitor`; password shown at end of quickstart, or from `GF_SECURITY_ADMIN_PASSWORD` in `.env`)
 
 Technical URLs (for advanced users):
-- **Demo DB**: postgresql://postgres:changeme@localhost:55432/target_database (credentials from `.env` if configured)
-- **Monitoring**: http://localhost:58080 (PGWatch)
+- **Demo DB**: `postgresql://postgres:changeme@localhost:55432/target_database` (credentials from `.env` if configured)
+- **Monitoring**: http://localhost:58080 (`pgwatch-postgres`)
 - **Metrics**: http://localhost:59090 (Prometheus)
 
 ## 📖 Help
