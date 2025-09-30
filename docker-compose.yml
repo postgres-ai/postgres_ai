@@ -94,18 +94,11 @@ services:
   pgwatch-postgres:
     image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-postgres
-    environment:
-      PGWATCH_MONITOR_USER: ${PGWATCH_MONITOR_USER:-pgwatch}
-      PGWATCH_MONITOR_PASSWORD: ${PGWATCH_MONITOR_PASSWORD:-pgwatchadmin}
     command:
-      - sh
-      - -c
-      - |
-        /pgwatch \
-          --sources=/etc/pgwatch/sources.yml \
-          --metrics=/etc/pgwatch/metrics.yml \
-          --sink=postgresql://$${PGWATCH_MONITOR_USER}:$${PGWATCH_MONITOR_PASSWORD}@sink-postgres:5432/measurements \
-          --web-addr=:8080
+      - --sources=/etc/pgwatch/sources.yml
+      - --metrics=/etc/pgwatch/metrics.yml
+      - --sink=postgresql://${PGWATCH_MONITOR_USER:-pgwatch}:${PGWATCH_MONITOR_PASSWORD:-pgwatchadmin}@sink-postgres:5432/measurements
+      - --web-addr=:8080
     ports:
       - "58080:8080"
     depends_on:

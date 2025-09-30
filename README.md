@@ -63,6 +63,29 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 - Supports Postgres versions 14-18
 - **pg_stat_statements extension must be created** for the DB used for connection
 
+## 🔐 Environment Configuration
+
+**Important:** As of v2.0, all credentials are managed via environment variables for security.
+
+**For demo/development (quickstart handles this automatically):**
+```bash
+./postgres_ai quickstart --demo  # Uses secure defaults
+```
+
+**For production deployments:**
+```bash
+# 1. Copy environment template
+cp .env.example .env
+
+# 2. Edit with your secure passwords
+nano .env
+
+# 3. Start services
+./postgres_ai quickstart --api-key=your_key
+```
+
+📖 **See [SECURITY_SETUP.md](SECURITY_SETUP.md)** for complete environment variable documentation, security best practices, and production deployment guidelines.
+
 ## ⚠️ Security Notice
 
 **WARNING: Security is your responsibility!**
@@ -190,10 +213,10 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 
 After running quickstart:
 
-- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitoring`; password is shown at the end of quickstart)
+- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitor`; password shown at end of quickstart, or from `GF_SECURITY_ADMIN_PASSWORD` in `.env`)
 
 Technical URLs (for advanced users):
-- **Demo DB**: postgresql://postgres:postgres@localhost:55432/target_database
+- **Demo DB**: postgresql://postgres:changeme@localhost:55432/target_database (credentials from `.env` if configured)
 - **Monitoring**: http://localhost:58080 (PGWatch)
 - **Metrics**: http://localhost:59090 (Prometheus)
 
