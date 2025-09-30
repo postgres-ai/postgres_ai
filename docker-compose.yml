@@ -26,17 +26,21 @@ services:
     image: alpine:3.22.0
     container_name: sources-generator
     working_dir: /app
+    environment:
+      TARGET_MONITOR_USER: ${TARGET_MONITOR_USER:-monitor}
+      TARGET_MONITOR_PASSWORD: ${TARGET_MONITOR_PASSWORD:-changeme}
     volumes:
       - ./instances.yml:/app/instances.yaml
       - ./config:/app/config
     command: >
       sh -c "
+      apk add --no-cache gettext &&
       mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
       echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch-postgres/sources.yml &&
-      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch-postgres/sources.yml &&
+      envsubst < /app/instances.yaml | sed 's/~sink_type~/postgresql/g' >> /app/config/pgwatch-postgres/sources.yml &&
       echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
       echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
-      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
+      envsubst < /app/instances.yaml | sed 's/~sink_type~/prometheus/g' >> /app/config/pgwatch-prometheus/sources.yml &&
       echo 'Generated sources.yml files for both postgres and prometheus'
       "
 

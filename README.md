@@ -65,7 +65,7 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 
 ## Environment configuration
 
-**Important:** As of v0.10, all credentials are managed via environment variables for security.
+**Important:** All credentials are managed via environment variables for security.
 
 **For demo/development (quickstart handles this automatically):**
 ```bash
@@ -78,7 +78,7 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 cp .env.example .env
 
 # 2. Edit with your secure passwords
-nano .env
+vi .env
 
 # 3. Start services
 ./postgres_ai quickstart --api-key=your_key

@@ -2,14 +2,13 @@
 # This file defines the PostgreSQL instances to monitor
 #
 # SECURITY NOTE:
-# - Update credentials to match your target database configuration
-# - The default user/password (monitor/monitor_pass) is created by init.sql
-# - To use different credentials, update .env file with:
-#   TARGET_MONITOR_USER and TARGET_MONITOR_PASSWORD
+# - Credentials use environment variables processed by sources-generator
+# - Default credentials (monitor/changeme) match TARGET_MONITOR_USER/PASSWORD in .env
+# - Update .env file to customize credentials
 # - The ~sink_type~ placeholder is replaced by sources-generator at runtime
 
 - name: target-database
-  conn_str: postgresql://monitor:monitor_pass@target-db:5432/target_database
+  conn_str: postgresql://${TARGET_MONITOR_USER}:${TARGET_MONITOR_PASSWORD}@target-db:5432/target_database
   preset_metrics: full
   custom_metrics:
   is_enabled: true
