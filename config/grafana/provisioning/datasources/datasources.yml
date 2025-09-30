@@ -7,9 +7,9 @@ datasources:
     uid: P031DD592934B2F1F
     url: sink-postgres:5432
     database: measurements
-    user: pgwatch
+    user: ${PGWATCH_MONITOR_USER}
     secureJsonData:
-      password: pgwatchadmin
+      password: ${PGWATCH_MONITOR_PASSWORD}
     jsonData:
       sslmode: disable
       postgresVersion: 1500

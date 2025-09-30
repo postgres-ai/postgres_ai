@@ -1,4 +1,26 @@
 services:
+  # Init SQL Generator - Generates init.sql from templates with environment variables
+  init-sql-generator:
+    image: alpine:3.22.0
+    container_name: init-sql-generator
+    working_dir: /app
+    environment:
+      PGWATCH_MONITOR_USER: ${PGWATCH_MONITOR_USER:-pgwatch}
+      PGWATCH_MONITOR_PASSWORD: ${PGWATCH_MONITOR_PASSWORD:-pgwatchadmin}
+      TARGET_MONITOR_USER: ${TARGET_MONITOR_USER:-monitor}
+      TARGET_MONITOR_PASSWORD: ${TARGET_MONITOR_PASSWORD:-monitor_pass}
+    volumes:
+      - ./config:/app/config
+    command: >
+      sh -c "
+      apk add --no-cache gettext &&
+      echo 'Generating sink-postgres init.sql...' &&
+      envsubst < /app/config/sink-postgres/init-template.sql > /app/config/sink-postgres/init.sql &&
+      echo 'Generating target-db init.sql...' &&
+      envsubst < /app/config/target-db/init-template.sql > /app/config/target-db/init.sql &&
+      echo 'Generated all init.sql files from templates'
+      "
+
   # Sources Generator - Generates sources.yml files from instances.yaml template
   sources-generator:
     image: alpine:3.22.0
@@ -23,12 +45,14 @@ services:
     image: postgres:15
     container_name: target-db
     environment:
-      POSTGRES_DB: target_database
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-target_database}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
     ports:
       - "55432:5432"
+    depends_on:
+      - init-sql-generator
     volumes:
       - target_db_data:/var/lib/postgresql/data
       - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -38,11 +62,13 @@ services:
     image: postgres:15
     container_name: sink-postgres
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${SINK_POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${SINK_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${SINK_POSTGRES_PASSWORD:-changeme}
     ports:
       - "55433:5432"
+    depends_on:
+      - init-sql-generator
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
       - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -68,7 +94,18 @@ services:
   pgwatch-postgres:
     image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-postgres
-    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
+    environment:
+      PGWATCH_MONITOR_USER: ${PGWATCH_MONITOR_USER:-pgwatch}
+      PGWATCH_MONITOR_PASSWORD: ${PGWATCH_MONITOR_PASSWORD:-pgwatchadmin}
+    command:
+      - sh
+      - -c
+      - |
+        /pgwatch \
+          --sources=/etc/pgwatch/sources.yml \
+          --metrics=/etc/pgwatch/metrics.yml \
+          --sink=postgresql://$${PGWATCH_MONITOR_USER}:$${PGWATCH_MONITOR_PASSWORD}@sink-postgres:5432/measurements \
+          --web-addr=:8080
     ports:
       - "58080:8080"
     depends_on:
@@ -98,9 +135,11 @@ services:
     image: grafana/grafana:12.0.2
     container_name: grafana-with-datasources
     environment:
-      GF_SECURITY_ADMIN_USER: monitor
-      GF_SECURITY_ADMIN_PASSWORD: demo
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-monitor}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-changeme}
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+      PGWATCH_MONITOR_USER: ${PGWATCH_MONITOR_USER:-pgwatch}
+      PGWATCH_MONITOR_PASSWORD: ${PGWATCH_MONITOR_PASSWORD:-pgwatchadmin}
     ports:
       - "3000:3000"
     volumes:

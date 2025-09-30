@@ -1,3 +1,13 @@
+# PGWatch Instances Configuration
+# This file defines the PostgreSQL instances to monitor
+#
+# SECURITY NOTE:
+# - Update credentials to match your target database configuration
+# - The default user/password (monitor/monitor_pass) is created by init.sql
+# - To use different credentials, update .env file with:
+#   TARGET_MONITOR_USER and TARGET_MONITOR_PASSWORD
+# - The ~sink_type~ placeholder is replaced by sources-generator at runtime
+
 - name: target-database
   conn_str: postgresql://monitor:monitor_pass@target-db:5432/target_database
   preset_metrics: full

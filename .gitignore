@@ -15,6 +15,7 @@ Thumbs.db
 *~
 
 # Docker generated files
+.env
 .env.local
 .env.*.local
 
@@ -28,9 +29,11 @@ pids
 *.seed
 *.pid.lock
 
-# Generated config files (these are created by the sources-generator)
+# Generated config files (created by init-sql-generator and sources-generator)
 config/pgwatch-postgres/sources.yml
 config/pgwatch-prometheus/sources.yml
+config/sink-postgres/init.sql
+config/target-db/init.sql
 
 # Volume data (if accidentally committed)
 data/
