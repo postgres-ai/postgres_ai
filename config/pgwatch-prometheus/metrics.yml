@@ -2068,6 +2068,57 @@ metrics:
     gauges:
       - config_value_normalized
 
+  pg_stat_all_indexes:
+    description: >
+      Retrieves index statistics from the PostgreSQL `pg_stat_all_indexes` view, providing insights into index usage and performance.
+      It returns index scan counts, tuple read and fetch counts, and other statistics broken down by schema, table, and index.
+      This metric helps administrators monitor index usage patterns and identify which indexes are being used effectively.
+      Compatible with all PostgreSQL versions.
+    sqls:
+      11: |-
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          schemaname as tag_schemaname,
+          relname as tag_relname,
+          indexrelname as tag_indexrelname,
+          idx_scan,
+          idx_tup_read,
+          idx_tup_fetch
+        from
+          pg_stat_all_indexes
+        where
+          schemaname not in ('pg_catalog', 'information_schema')
+        order by idx_scan desc
+        limit 5000
+    gauges:
+      - '*'
+
+  pg_statio_all_indexes:
+    description: >
+      Retrieves index I/O statistics from the PostgreSQL `pg_statio_all_indexes` view, providing insights into I/O operations for all indexes.
+      It returns block-level read and hit statistics for index operations broken down by schema, table, and index.
+      This metric helps administrators monitor index-level I/O performance and identify which indexes are generating the most I/O activity.
+      Compatible with all PostgreSQL versions.
+    sqls:
+      11: |-
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          schemaname as tag_schemaname,
+          relname as tag_relname,
+          indexrelname as tag_indexrelname,
+          idx_blks_read,
+          idx_blks_hit
+        from
+          pg_statio_all_indexes
+        where
+          schemaname not in ('pg_catalog', 'information_schema')
+        order by idx_blks_read + idx_blks_hit desc
+        limit 5000
+    gauges:
+      - '*'
+
   pg_statio_all_tables:
     description: >
       Retrieves table-level I/O statistics from the PostgreSQL `pg_statio_all_tables` view, providing insights into I/O operations for all tables.
@@ -2119,6 +2170,8 @@ presets:
       pg_stat_statements: 30
       pg_stat_replication: 30
       pg_statio_all_tables: 30
+      pg_stat_all_indexes: 30
+      pg_statio_all_indexes: 30
       pg_total_relation_size: 30
       pg_blocked: 30
       pg_long_running_transactions: 30
