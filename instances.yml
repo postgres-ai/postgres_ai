@@ -8,7 +8,7 @@
 # - The ~sink_type~ placeholder is replaced by sources-generator at runtime
 
 - name: target-database
-  conn_str: postgresql://${TARGET_MONITOR_USER}:${TARGET_MONITOR_PASSWORD}@target-db:5432/target_database
+  conn_str: postgresql://${TARGET_MONITOR_USER}:${TARGET_MONITOR_PASSWORD}@target-db:5432/target_database?sslmode=disable
   preset_metrics: full
   custom_metrics:
   is_enabled: true
