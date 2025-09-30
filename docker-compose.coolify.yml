@@ -92,8 +92,18 @@ services:
       - sources-generator
       - sink-postgres
     volumes:
-      - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+      - type: bind
+        source: ./config/pgwatch-postgres/sources.yml
+        target: /etc/pgwatch/sources.yml
+        read_only: true
+        is_directory: false
+        content: ""
+      - type: bind
+        source: ./config/pgwatch-postgres/metrics.yml
+        target: /etc/pgwatch/metrics.yml
+        read_only: true
+        is_directory: false
+        content: ""
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
   pgwatch-prometheus:
