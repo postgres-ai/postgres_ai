@@ -65,7 +65,7 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 
 ## Environment configuration
 
-**Important:** As of v2.0, all credentials are managed via environment variables for security.
+**Important:** As of v0.10, all credentials are managed via environment variables for security.
 
 **For demo/development (quickstart handles this automatically):**
 ```bash
