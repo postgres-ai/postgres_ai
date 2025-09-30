@@ -156,6 +156,9 @@ Now, start it and wait for a few minutes. To obtain a PostgresAI access token fo
 # Production setup with your Access token
 ./postgres_ai quickstart --api-key=your_access_token
 ```
+
+**Important for production:** Before running quickstart, configure secure credentials by copying `.env.example` to `.env` and editing passwords. See the [Environment configuration](#environment-configuration) section above.
+
 **Note:** You can also add your database instance in the same command:
 ```bash
 ./postgres_ai quickstart --api-key=your_access_token --add-instance="postgresql://user:pass@host:port/DB"
