@@ -99,7 +99,7 @@ services:
     container_name: grafana-with-datasources
     environment:
       GF_SECURITY_ADMIN_USER: monitor
-      GF_SECURITY_ADMIN_PASSWORD: demo
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-demo}
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
     ports:
       - "3000:3000"
