@@ -20,10 +20,10 @@ aws_region = "us-east-1"
 # Environment
 environment = "production"
 
-instance_type = "t3.large"
+instance_type = "t3.medium"
 
 # EBS volume size for data (GiB)
-data_volume_size = 100
+data_volume_size = 50
 
 
 # SECURITY

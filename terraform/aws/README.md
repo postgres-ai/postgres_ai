@@ -8,8 +8,8 @@ Single EC2 instance with Docker Compose.
 
 Terraform creates:
 - VPC with public subnet
-- EC2 instance (t3.large, Ubuntu 22.04 LTS)
-- EBS volume (100GB gp3, encrypted)
+- EC2 instance (t3.medium, Ubuntu 22.04 LTS)
+- EBS volume (50 GiB gp3, encrypted)
 - Security Group (SSH + Grafana ports)
 - Elastic IP (optional)
 
@@ -239,7 +239,7 @@ Suitable for:
 - Proof of concept
 
 ```hcl
-instance_type = "t3.large"  # 2 vCPU, 8 GiB RAM (default)
+instance_type = "t3.medium"  # 2 vCPU, 8 GiB RAM (default)
 ```
 
 Suitable for:

@@ -46,7 +46,7 @@ terraform apply
 The AWS deployment creates:
 
 1. **Compute**
-   - Single EC2 instance (t3.large recommended)
+   - Single EC2 instance (t3.medium default)
    - Ubuntu 22.04 LTS (Jammy) with Docker and Docker Compose
    - Systemd service for automatic startup
 
@@ -75,8 +75,8 @@ The AWS deployment creates:
 
 Recommended instance types based on workload:
 
-- **t3.medium**: 2 vCPU, 4 GiB RAM - suitable for 1-3 databases
-- **t3.large**: 2 vCPU, 8 GiB RAM - suitable for 3-10 databases (recommended)
+- **t3.medium**: 2 vCPU, 4 GiB RAM - suitable for 1-3 databases (default)
+- **t3.large**: 2 vCPU, 8 GiB RAM - suitable for 3-10 databases
 - **t3.xlarge**: 4 vCPU, 16 GiB RAM - suitable for 10+ databases
 
 Additional options:

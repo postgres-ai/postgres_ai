@@ -19,7 +19,7 @@ variable "instance_type" {
 variable "data_volume_size" {
   description = "Size of EBS data volume in GiB"
   type        = number
-  default     = 100
+  default     = 50
 }
 
 variable "ssh_key_name" {
