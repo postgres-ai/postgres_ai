@@ -19,7 +19,7 @@ cd terraform/aws
 
 # Configure
 cp terraform.tfvars.example terraform.tfvars
-vim terraform.tfvars  # Set ssh_key_name and grafana_password
+vim terraform.tfvars  # Set ssh_key_name 
 
 # Validate
 ./validate.sh
@@ -39,7 +39,7 @@ terraform output ssh_command
 ```bash
 # Grafana dashboard
 open $(terraform output -raw grafana_url)
-# Login: monitor / <your grafana_password>
+# Login: monitor / demo (or your custom password)
 
 # SSH
 ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw public_ip)

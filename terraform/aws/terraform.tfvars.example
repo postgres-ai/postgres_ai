@@ -7,9 +7,6 @@
 # SSH key for EC2 access (create in AWS Console or CLI)
 ssh_key_name = "your-key-name"
 
-# Grafana password (minimum 8 characters)
-grafana_password = "YourSecurePassword123!"
-
 
 # AWS SETTINGS
 # -------------------------
@@ -79,6 +76,9 @@ monitoring_instances = [
 #
 # If not set, reports will be generated locally without upload
 # postgres_ai_api_key = "your-api-key-here"
+
+# Grafana admin password (defaults to 'demo')
+# grafana_password = "YourSecurePassword123!"
 
 # Enable demo database (for testing)
 # enable_demo_db = false

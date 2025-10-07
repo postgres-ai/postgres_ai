@@ -25,20 +25,37 @@ See [QUICKSTART.md](QUICKSTART.md) for step-by-step guide.
 
 ```hcl
 # terraform.tfvars
-ssh_key_name     = "postgres-ai-key"
-grafana_password = "SecurePassword123!"
+ssh_key_name = "postgres-ai-key"
+
+# Optional: Set custom Grafana password (defaults to 'demo')
+# grafana_password = "YourSecurePassword123!"
 ```
 
 ### Minimal production setup
 
 ```hcl
+# terraform.tfvars
+
+# REQUIRED PARAMETERS
+ssh_key_name = "your-key-name"
+
+# AWS SETTINGS
 aws_region = "us-east-1"
 environment = "production"
-grafana_password = "SecurePassword123!"
+instance_type = "t3.medium"
 
-# Optional: API key for uploading reports to PostgresAI
-# Get it from: https://console.postgres.ai → Your Org → Manage → Access Tokens
-postgres_ai_api_key = "your-api-key-here"
+# STORAGE
+data_volume_size = 50 # GiB
+
+# SECURITY (restrict access!)
+allowed_ssh_cidr = ["0.0.0.0/0"] # WARNING: Allows access from anywhere
+allowed_cidr_blocks = ["0.0.0.0/0"] # WARNING: Allows access from anywhere
+
+# OPTIONAL PARAMETERS
+# grafana_password = "YourSecurePassword123!" # Defaults to 'demo'
+# postgres_ai_api_key = "your-api-key" # For uploading reports
+# enable_demo_db = false # true for testing
+# use_elastic_ip = true # Stable IP address
 
 monitoring_instances = [
   {
@@ -57,20 +74,20 @@ monitoring_instances = [
 # AWS
 aws_region = "us-east-1"
 environment = "production"
-instance_type = "t3.large"
+instance_type = "t3.medium"
 
 # Storage
-data_volume_size = 100
+data_volume_size = 50
 
 # Security (restrict access in production)
 allowed_ssh_cidr = ["203.0.113.0/24"]
 allowed_cidr_blocks = ["203.0.113.0/24"]
 
 # Required
-ssh_key_name = "postgres-ai-key"
-grafana_password = "SecurePassword123!"
+ssh_key_name = "ssh-key"
 
 # Optional
+grafana_password = "SecurePassword123!" # Defaults to 'demo'
 postgres_ai_api_key = "your-api-key"
 enable_demo_db = false
 use_elastic_ip = true

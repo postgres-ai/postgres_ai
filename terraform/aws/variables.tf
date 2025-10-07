@@ -46,8 +46,9 @@ variable "use_elastic_ip" {
 }
 
 variable "grafana_password" {
-  description = "Grafana admin password"
+  description = "Grafana admin password (optional, defaults to 'demo')"
   type        = string
+  default     = "demo"
   sensitive   = true
 }
 

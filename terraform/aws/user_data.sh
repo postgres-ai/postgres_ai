@@ -74,6 +74,11 @@ grafana_password=${grafana_password}
 %{ if enable_demo_db }demo_mode=true%{ else }demo_mode=false%{ endif }
 EOF
 
+# Create .env file for docker-compose
+cat > .env <<ENV_EOF
+GRAFANA_PASSWORD=${grafana_password}
+ENV_EOF
+
 # Configure monitoring instances
 %{ if length(monitoring_instances) > 0 }
 cat > instances.yml <<'INSTANCES_EOF'
@@ -134,6 +139,11 @@ systemctl start postgres-ai
 
 # Wait for services to be healthy
 sleep 30
+
+# Reset Grafana admin password to match terraform config
+echo "Setting Grafana admin password..."
+cd /home/postgres_ai/postgres_ai
+docker exec grafana-with-datasources grafana-cli admin reset-admin-password "${grafana_password}" 2>/dev/null || true
 
 echo "Installation complete!"
 echo "Access Grafana at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):3000"
