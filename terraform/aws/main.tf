@@ -25,17 +25,17 @@ provider "aws" {
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
-  
+
   filter {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
-  
+
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
-  
+
   filter {
     name   = "root-device-type"
     values = ["ebs"]
@@ -135,7 +135,7 @@ resource "aws_security_group" "main" {
 resource "aws_ebs_volume" "data" {
   availability_zone = aws_subnet.main.availability_zone
   size              = var.data_volume_size
-  type              = "gp3"
+  type              = var.data_volume_type
   encrypted         = true
 
   tags = {
@@ -155,7 +155,7 @@ resource "aws_instance" "main" {
 
   root_block_device {
     volume_size = 30
-    volume_type = "gp3"
+    volume_type = var.root_volume_type
     encrypted   = true
   }
 

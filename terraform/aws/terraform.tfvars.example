@@ -22,6 +22,10 @@ instance_type = "t3.medium"
 # EBS volume size for data (GiB)
 data_volume_size = 50
 
+# Storage types
+# data_volume_type = "gp3"  # gp3 (SSD), st1 (HDD throughput optimized, min 125 GiB), sc1 (HDD cold, min 125 GiB)
+# root_volume_type = "gp3"  # gp3 (SSD), gp2 (older SSD)
+
 
 # SECURITY
 # -------------------------

@@ -22,6 +22,18 @@ variable "data_volume_size" {
   default     = 50
 }
 
+variable "data_volume_type" {
+  description = "EBS volume type for data disk (gp3 for SSD, st1 for HDD throughput optimized, sc1 for HDD cold)"
+  type        = string
+  default     = "gp3"
+}
+
+variable "root_volume_type" {
+  description = "EBS volume type for root disk (gp3 for SSD, gp2 for older SSD)"
+  type        = string
+  default     = "gp3"
+}
+
 variable "ssh_key_name" {
   description = "Name of SSH key pair for EC2 access"
   type        = string
