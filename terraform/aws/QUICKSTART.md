@@ -75,9 +75,6 @@ ssh ubuntu@IP "sudo cat /var/log/user-data.log"
 # Restart services
 ssh ubuntu@IP "sudo systemctl restart postgres-ai"
 
-# Create backup
-aws ec2 create-snapshot --volume-id $(terraform output -raw data_volume_id)
-
 # Destroy
 terraform destroy
 ```
