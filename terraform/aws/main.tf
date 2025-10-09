@@ -208,8 +208,8 @@ resource "aws_eip" "main" {
 }
 
 # Generate instances.yml from template
-resource "local_file" "instances_config" {
-  sensitive_content = templatefile("${path.module}/instances.yml.tpl", {
+resource "local_sensitive_file" "instances_config" {
+  content = templatefile("${path.module}/instances.yml.tpl", {
     monitoring_instances = var.monitoring_instances
     enable_demo_db       = var.enable_demo_db
   })
@@ -219,7 +219,7 @@ resource "local_file" "instances_config" {
 # Deploy instances.yml to EC2 when config changes
 resource "terraform_data" "deploy_config" {
   triggers_replace = {
-    config_hash = local_file.instances_config.content_md5
+    config_hash = local_sensitive_file.instances_config.content_md5
   }
 
   depends_on = [aws_instance.main, aws_volume_attachment.data]
@@ -228,7 +228,7 @@ resource "terraform_data" "deploy_config" {
     inline = [
       "if ! sudo test -f /home/postgres_ai/postgres_ai/postgres_ai; then echo 'Skipping - installation not complete'; exit 0; fi",
       "cat > /tmp/instances.yml << 'EOF'",
-      local_file.instances_config.content,
+      local_sensitive_file.instances_config.content,
       "EOF",
       "sudo mv /tmp/instances.yml /home/postgres_ai/postgres_ai/instances.yml",
       "sudo chown postgres_ai:postgres_ai /home/postgres_ai/postgres_ai/instances.yml",
