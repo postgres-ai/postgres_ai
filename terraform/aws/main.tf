@@ -164,11 +164,21 @@ resource "aws_instance" "main" {
   }
 
   user_data = templatefile("${path.module}/user_data.sh", {
-    grafana_password     = var.grafana_password
-    postgres_ai_api_key  = var.postgres_ai_api_key
-    monitoring_instances = var.monitoring_instances
-    enable_demo_db       = var.enable_demo_db
+    grafana_password    = var.grafana_password
+    postgres_ai_api_key = var.postgres_ai_api_key
+    enable_demo_db      = var.enable_demo_db
+    instances_yml       = templatefile("${path.module}/instances.yml.tpl", {
+      monitoring_instances = var.monitoring_instances
+      enable_demo_db       = var.enable_demo_db
+    })
   })
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+    instance_metadata_tags      = "enabled"
+  }
 
   tags = {
     Name = "${var.environment}-postgres-ai-monitoring"
@@ -199,7 +209,7 @@ resource "aws_eip" "main" {
 
 # Generate instances.yml from template
 resource "local_file" "instances_config" {
-  content = templatefile("${path.module}/instances.yml.tpl", {
+  sensitive_content = templatefile("${path.module}/instances.yml.tpl", {
     monitoring_instances = var.monitoring_instances
     enable_demo_db       = var.enable_demo_db
   })
