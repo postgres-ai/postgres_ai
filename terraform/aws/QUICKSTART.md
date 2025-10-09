@@ -12,15 +12,39 @@ chmod 400 ~/.ssh/postgres-ai-key.pem
 aws configure
 ```
 
-## Deploy
+## Configure
 
 ```bash
 cd terraform/aws
 
-# Configure
+# Copy example config
 cp terraform.tfvars.example terraform.tfvars
-vim terraform.tfvars  # Set ssh_key_name 
+vim terraform.tfvars
+```
 
+Set required parameters:
+- `ssh_key_name` - your AWS SSH key name
+- `grafana_password` - custom password (optional, defaults to "demo")
+
+## Add monitoring instances
+
+Edit `terraform.tfvars` to add PostgreSQL instances to monitor:
+
+```hcl
+monitoring_instances = [
+  {
+    name        = "prod-db"
+    conn_str    = "postgresql://monitor:pass@db.example.com:5432/postgres"
+    environment = "production"
+    cluster     = "main"
+    node_name   = "primary"
+  }
+]
+```
+
+## Deploy
+
+```bash
 # Validate
 ./validate.sh
 
@@ -43,27 +67,6 @@ open $(terraform output -raw grafana_url)
 
 # SSH
 ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw public_ip)
-```
-
-## Add monitoring instances
-
-Edit `terraform.tfvars`:
-
-```hcl
-monitoring_instances = [
-  {
-    name        = "prod-db"
-    conn_str    = "postgresql://monitor:pass@db.example.com:5432/postgres"
-    environment = "production"
-    cluster     = "main"
-    node_name   = "primary"
-  }
-]
-```
-
-Apply changes:
-```bash
-terraform apply
 ```
 
 ## Operations

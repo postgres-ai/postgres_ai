@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -190,6 +194,44 @@ resource "aws_eip" "main" {
 
   tags = {
     Name = "${var.environment}-postgres-ai-eip"
+  }
+}
+
+# Generate instances.yml from template
+resource "local_file" "instances_config" {
+  content = templatefile("${path.module}/instances.yml.tpl", {
+    monitoring_instances = var.monitoring_instances
+    enable_demo_db       = var.enable_demo_db
+  })
+  filename = "${path.module}/.terraform/instances.yml"
+}
+
+# Deploy instances.yml to EC2 when config changes
+resource "terraform_data" "deploy_config" {
+  triggers_replace = {
+    config_hash = local_file.instances_config.content_md5
+  }
+
+  depends_on = [aws_instance.main, aws_volume_attachment.data]
+
+  provisioner "remote-exec" {
+    inline = [
+      "if ! sudo test -f /home/postgres_ai/postgres_ai/postgres_ai; then echo 'Skipping - installation not complete'; exit 0; fi",
+      "cat > /tmp/instances.yml << 'EOF'",
+      local_file.instances_config.content,
+      "EOF",
+      "sudo mv /tmp/instances.yml /home/postgres_ai/postgres_ai/instances.yml",
+      "sudo chown postgres_ai:postgres_ai /home/postgres_ai/postgres_ai/instances.yml",
+      "sudo -u postgres_ai /home/postgres_ai/postgres_ai/postgres_ai update-config",
+      "echo 'Config updated successfully'"
+    ]
+    
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("~/.ssh/${var.ssh_key_name}.pem")
+      host        = var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip
+    }
   }
 }
 
