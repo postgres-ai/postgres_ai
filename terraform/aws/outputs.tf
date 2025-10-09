@@ -54,13 +54,14 @@ Deployment complete
 
 Grafana URL: http://${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}:3000
 Username: monitor
-Password: (from terraform.tfvars)
+Password: see terraform.tfvars
 
 Monitoring: ${length(var.monitoring_instances)} instance(s)
-API key: ${var.postgres_ai_api_key != "" ? "configured" : "not configured"}
+API key: see terraform.tfvars
 
 SSH: ssh -i ~/.ssh/${var.ssh_key_name}.pem ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
-Backup: aws ec2 create-snapshot --volume-id ${aws_ebs_volume.data.id}
+
+For detailed deployment info: terraform output deployment_info
 
 EOT
 }
