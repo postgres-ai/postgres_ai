@@ -1,0 +1,56 @@
+# GCP Configuration
+project_id = "your-gcp-project-id"
+region = "us-central1"
+zone = ""  # Optional, defaults to first available zone in region
+
+# Environment
+environment = "production"
+
+# Required parameters
+
+# SSH public key for instance access
+# Generate with: ssh-keygen -t rsa -b 4096
+# Get public key: cat ~/.ssh/id_rsa.pub
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ... user@hostname"
+
+# Optional parameters
+
+# Grafana admin password (defaults to 'demo' if not set)
+# grafana_password = "your-secure-password-here"
+
+# PostgresAI API key for report uploads
+# Get your key at: https://console.postgres.ai
+# postgres_ai_api_key = "your-api-key-here"
+
+# Storage
+# data_volume_size = 50  # GiB
+# data_disk_type = "pd-standard"  # pd-standard (HDD), pd-ssd (SSD), pd-balanced
+# boot_disk_type = "pd-standard"  # pd-standard (HDD), pd-ssd (SSD), pd-balanced
+
+# Network Configuration
+# use_static_ip = true
+
+# Security
+# ssh_source_ranges = ["0.0.0.0/0"]        # Allow SSH from anywhere
+# grafana_source_ranges = ["0.0.0.0/0"]    # Allow Grafana from anywhere
+
+# For production, restrict to your IP:
+# ssh_source_ranges = ["203.0.113.0/24"]
+# grafana_source_ranges = ["203.0.113.0/24"]
+
+# Demo mode (optional)
+# enable_demo_db = false
+
+# Monitoring instances (optional)
+# Add your Postgres instances to monitor
+monitoring_instances = [
+  {
+    name = "production-db-1"
+    conn_str = "postgresql://monitor:password@db.example.com:5432/postgres"
+    environment = "production"
+    cluster = "main"
+    node_name = "primary"
+  },
+
+]
+
