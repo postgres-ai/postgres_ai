@@ -93,7 +93,7 @@ EOF
 
 # Create .env file for docker-compose
 cat > .env <<ENV_EOF
-GRAFANA_PASSWORD=${grafana_password}
+GF_SECURITY_ADMIN_PASSWORD=${grafana_password}
 ENV_EOF
 
 # Ensure secure permissions
