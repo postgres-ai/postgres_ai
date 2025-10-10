@@ -8,98 +8,100 @@ Single EC2 instance with Docker Compose.
 
 Terraform creates:
 - VPC with public subnet
-- EC2 instance (t3.medium, Ubuntu 22.04 LTS)
-- EBS volume (50 GiB gp3, encrypted)
+- EC2 instance (Ubuntu 22.04 LTS)
+- EBS volumes (configurable types: gp3, st1, sc1, encrypted)
 - Security Group (SSH + Grafana ports)
 - Elastic IP (optional)
 
-On first boot, EC2 instance clones this repository and runs `docker-compose up` to start all monitoring services.
+On first boot, EC2 instance clones the specified version of this repository and runs `docker-compose up` to start all monitoring services.
 
 ## Quick start
 
 See [QUICKSTART.md](QUICKSTART.md) for step-by-step guide.
 
-## Configuration
+### Validation
 
-### Minimal setup
+```bash
+# Check prerequisites
+terraform version
+aws sts get-caller-identity
 
-```hcl
-# terraform.tfvars
-ssh_key_name = "postgres-ai-key"
-
-# Optional: Set custom Grafana password (defaults to 'demo')
-# grafana_password = "YourSecurePassword123!"
+# Validate configuration
+terraform init
+terraform validate
+terraform plan
 ```
 
-### Minimal production setup
+## Configuration
+
+### Required parameters
+
+All parameters in `terraform.tfvars` must be explicitly set (uncommented):
 
 ```hcl
 # terraform.tfvars
 
 # REQUIRED PARAMETERS
-ssh_key_name = "your-key-name"
+ssh_key_name         = "your-key-name"
+aws_region           = "us-east-1"
+environment          = "production"
+instance_type        = "t3.medium"
+data_volume_size     = 50
+data_volume_type     = "gp3"  # gp3 (SSD), st1 (HDD), sc1 (HDD)
+root_volume_type     = "gp3"
+allowed_ssh_cidr     = ["203.0.113.0/24"]
+allowed_cidr_blocks  = ["203.0.113.0/24"]
+use_elastic_ip       = true
+grafana_password     = "YourSecurePassword123!"
+```
 
-# AWS SETTINGS
-aws_region = "us-east-1"
-environment = "production"
-instance_type = "t3.medium"
+### Optional parameters
 
-# STORAGE
-data_volume_size = 50 # GiB
-
-# SECURITY (restrict access!)
-allowed_ssh_cidr = ["0.0.0.0/0"] # WARNING: Allows access from anywhere
-allowed_cidr_blocks = ["0.0.0.0/0"] # WARNING: Allows access from anywhere
-
-# OPTIONAL PARAMETERS
-# grafana_password = "YourSecurePassword123!" # Defaults to 'demo'
-# postgres_ai_api_key = "your-api-key" # For uploading reports
-# enable_demo_db = false # true for testing
-# use_elastic_ip = true # Stable IP address
+```hcl
+# OPTIONAL (have defaults)
+postgres_ai_api_key = "your-api-key"  # For uploading reports
+enable_demo_db      = false           # Demo database (default: true)
+postgres_ai_version = "main"          # Git branch/tag (default: "main")
 
 monitoring_instances = [
   {
-    name = "main-db"
-    conn_str = "postgresql://monitor:pass@db.example.com:5432/postgres"
+    name        = "main-db"
+    conn_str    = "postgresql://monitor:pass@db.example.com:5432/postgres"
     environment = "production"
-    cluster = "main"
-    node_name = "primary"
+    cluster     = "main"
+    node_name   = "primary"
   }
 ]
 ```
 
-### Full configuration
+### Full example
 
 ```hcl
-# AWS
-aws_region = "us-east-1"
-environment = "production"
-instance_type = "t3.medium"
+# REQUIRED
+ssh_key_name         = "postgres-ai-key"
+aws_region           = "us-east-1"
+environment          = "production"
+instance_type        = "t3.medium"
+data_volume_size     = 100
+data_volume_type     = "gp3"
+root_volume_type     = "gp3"
+allowed_ssh_cidr     = ["203.0.113.0/24"]
+allowed_cidr_blocks  = ["203.0.113.0/24"]
+use_elastic_ip       = true
+grafana_password     = "SecurePassword123!"
 
-# Storage
-data_volume_size = 50
+# OPTIONAL
+postgres_ai_api_key  = "your-api-key"
+enable_demo_db       = false
+postgres_ai_version  = "v0.9"
 
-# Security (restrict access in production)
-allowed_ssh_cidr = ["203.0.113.0/24"]
-allowed_cidr_blocks = ["203.0.113.0/24"]
-
-# Required
-ssh_key_name = "ssh-key"
-
-# Optional
-grafana_password = "SecurePassword123!" # Defaults to 'demo'
-postgres_ai_api_key = "your-api-key"
-enable_demo_db = false
-use_elastic_ip = true
-
-# Monitoring instances
 monitoring_instances = [
   {
-    name = "prod-db"
-    conn_str = "postgresql://monitor:pass@db.example.com:5432/postgres"
+    name        = "prod-db"
+    conn_str    = "postgresql://monitor:pass@db.example.com:5432/postgres"
     environment = "production"
-    cluster = "main"
-    node_name = "primary"
+    cluster     = "main"
+    node_name   = "primary"
   }
 ]
 ```
@@ -111,7 +113,7 @@ monitoring_instances = [
 ```bash
 terraform output ssh_command
 # Or directly:
-ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw public_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw external_ip)
 ```
 
 ### Service management
@@ -132,14 +134,19 @@ sudo systemctl restart postgres-ai
 
 ### Add monitoring instance
 
-Method 1: Update terraform.tfvars and run `terraform apply`
+Method 1: Update `terraform.tfvars` and apply changes:
+```bash
+# Edit terraform.tfvars, add to monitoring_instances array
+terraform apply
+# Automatically updates instances.yml and restarts pgwatch services
+```
 
-Method 2: Manual configuration on server:
+Method 2: Manual configuration (avoids credentials in state):
 ```bash
 ssh ubuntu@your-ip
 cd /home/postgres_ai/postgres_ai
 sudo -u postgres_ai vim instances.yml
-sudo docker-compose restart
+sudo -u postgres_ai ./postgres_ai update-config
 ```
 
 ### Backup
@@ -247,16 +254,16 @@ ssh ubuntu@your-ip "sudo resize2fs /dev/nvme1n1"
 Choose instance type based on monitoring workload:
 
 ```hcl
-instance_type = "t3.medium"  # 2 vCPU, 4 GiB RAM
+instance_type = "t3.small"  # 2 vCPU, 2 GiB RAM
 ```
 
 Suitable for:
-- Monitoring 1-3 small databases
+- Monitoring 1-2 small databases
 - Dev/test environments
 - Proof of concept
 
 ```hcl
-instance_type = "t3.medium"  # 2 vCPU, 8 GiB RAM (default)
+instance_type = "t3.medium"  # 2 vCPU, 4 GiB RAM
 ```
 
 Suitable for:
@@ -271,6 +278,28 @@ Suitable for:
 - Monitoring 10+ databases
 - High-frequency metric collection
 
+## Storage options
+
+### Volume types
+
+```hcl
+# SSD (recommended for production)
+data_volume_type = "gp3"  # General Purpose SSD
+root_volume_type = "gp3"
+
+# HDD (lower cost for testing)
+data_volume_type = "st1"  # Throughput Optimized HDD (min 125 GiB)
+data_volume_type = "sc1"  # Cold HDD (min 125 GiB)
+```
+
+### Volume sizing
+
+```hcl
+data_volume_size = 50   # Small deployments
+data_volume_size = 100  # Medium deployments
+data_volume_size = 500  # Large deployments
+```
+
 ## Custom domain
 
 ```bash
@@ -284,7 +313,7 @@ aws route53 change-resource-record-sets \
         "Name": "monitoring.example.com",
         "Type": "A",
         "TTL": 300,
-        "ResourceRecords": [{"Value": "'"$(terraform output -raw public_ip)"'"}]
+        "ResourceRecords": [{"Value": "'"$(terraform output -raw external_ip)"'"}]
       }
     }]
   }'
@@ -315,3 +344,30 @@ This deployment is appropriate for:
 - Teams with Linux administration skills
 
 For production-critical systems requiring high availability, consider managed services (RDS, ECS Fargate) instead.
+
+## Security considerations
+
+### Credentials in Terraform state
+
+All credentials (passwords, connection strings) are stored in plain text in `terraform.tfstate`. This is acceptable for:
+- Development and testing
+- One-off monitoring deployments
+- When state files are properly secured
+
+For production deployments:
+- Use remote state with encryption (S3 + KMS)
+- Use environment variables: `export TF_VAR_grafana_password=...`
+- Configure monitoring instances manually after deployment (Method 2)
+- Store state in private repositories only
+
+### IMDSv2
+
+EC2 instances are configured to require IMDSv2 (Instance Metadata Service v2) for enhanced security against SSRF attacks.
+
+### Cleanup
+
+After destroying infrastructure, remove local state files:
+```bash
+terraform destroy
+rm -rf .terraform/ terraform.tfstate*
+```

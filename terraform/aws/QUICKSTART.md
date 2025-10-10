@@ -22,9 +22,17 @@ cp terraform.tfvars.example terraform.tfvars
 vim terraform.tfvars
 ```
 
-Set required parameters:
+Uncomment and set all required parameters:
 - `ssh_key_name` - your AWS SSH key name
-- `grafana_password` - custom password (optional, defaults to "demo")
+- `aws_region` - AWS region
+- `environment` - environment name
+- `instance_type` - EC2 instance type (e.g., t3.medium)
+- `data_volume_size` - data disk size in GiB
+- `data_volume_type` / `root_volume_type` - volume types (gp3, st1, sc1)
+- `allowed_ssh_cidr` / `allowed_cidr_blocks` - CIDR blocks for access
+- `use_elastic_ip` - allocate Elastic IP (true/false)
+- `grafana_password` - Grafana admin password
+- `postgres_ai_version` - git branch/tag (optional, defaults to "main")
 
 ## Add monitoring instances
 
@@ -45,12 +53,14 @@ monitoring_instances = [
 ## Deploy
 
 ```bash
-# Validate
-./validate.sh
+# Initialize and validate
+terraform init
+terraform validate
+
+# Review changes
+terraform plan
 
 # Deploy
-terraform init
-terraform plan
 terraform apply
 
 # Get access info
@@ -63,10 +73,10 @@ terraform output ssh_command
 ```bash
 # Grafana dashboard
 open $(terraform output -raw grafana_url)
-# Login: monitor / demo (or your custom password)
+# Login: monitor / <password from terraform.tfvars>
 
 # SSH
-ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw public_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw external_ip)
 ```
 
 ## Operations
@@ -94,4 +104,18 @@ ssh ubuntu@IP "sudo systemctl status postgres-ai"
 # Check containers
 ssh ubuntu@IP "sudo docker ps"
 ```
+
+## Security notes
+
+Credentials (passwords, connection strings) are stored in `terraform.tfstate` in plain text. For one-off/dev deployments this is acceptable if you clean up after `terraform destroy`:
+
+```bash
+terraform destroy
+rm -rf .terraform/ terraform.tfstate*
+```
+
+For production deployments, consider:
+- Using environment variables: `export TF_VAR_grafana_password=...`
+- Remote state with encryption (S3 + encryption)
+- Configuring monitoring instances manually after deployment
 
