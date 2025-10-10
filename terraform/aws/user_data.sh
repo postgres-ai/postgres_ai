@@ -29,17 +29,33 @@ usermod -aG docker postgres_ai
 if [ ! -d /data ]; then
     mkdir -p /data
     
-    # Wait for volume to be attached
-    sleep 10
+    # Wait for volume to be attached with proper polling
+    echo "Waiting for EBS volume to attach..."
+    MAX_RETRIES=60  # 5 minutes total (60 * 5 seconds)
+    RETRY=0
+    DEVICE=""
     
-    # Check if volume exists and format if needed
-    if [ -e /dev/nvme1n1 ]; then
-        DEVICE=/dev/nvme1n1
-    elif [ -e /dev/xvdf ]; then
-        DEVICE=/dev/xvdf
-    else
-        echo "Data volume not found, using root volume"
-        DEVICE=""
+    while [ $RETRY -lt $MAX_RETRIES ]; do
+        if [ -e /dev/nvme1n1 ]; then
+            DEVICE=/dev/nvme1n1
+            echo "Volume found at $DEVICE"
+            break
+        elif [ -e /dev/xvdf ]; then
+            DEVICE=/dev/xvdf
+            echo "Volume found at $DEVICE"
+            break
+        fi
+        
+        RETRY=$((RETRY + 1))
+        # Log progress every 10 attempts (50 seconds)
+        if [ $((RETRY % 10)) -eq 0 ]; then
+            echo "Still waiting for volume... (attempt $RETRY/$MAX_RETRIES)"
+        fi
+        sleep 5
+    done
+    
+    if [ -z "$DEVICE" ]; then
+        echo "WARNING: EBS volume not attached after 5 minutes, using root volume"
     fi
     
     if [ -n "$DEVICE" ]; then
@@ -62,12 +78,13 @@ chown -R postgres_ai:postgres_ai /data
 
 # Clone postgres_ai repository
 cd /home/postgres_ai
-sudo -u postgres_ai git clone https://gitlab.com/postgres-ai/postgres_ai.git
+sudo -u postgres_ai git clone --branch ${postgres_ai_version} https://gitlab.com/postgres-ai/postgres_ai.git
 
 # Configure postgres_ai
 cd postgres_ai
 
-# Create configuration
+# Create configuration with secure permissions
+umask 077  # Ensure files are created with 600 permissions
 cat > .pgwatch-config <<EOF
 grafana_password=${grafana_password}
 %{ if postgres_ai_api_key != "" }api_key=${postgres_ai_api_key}%{ endif }
@@ -76,34 +93,15 @@ EOF
 
 # Create .env file for docker-compose
 cat > .env <<ENV_EOF
-GRAFANA_PASSWORD=${grafana_password}
+GF_SECURITY_ADMIN_PASSWORD=${grafana_password}
 ENV_EOF
 
-# Configure monitoring instances
-%{ if length(monitoring_instances) > 0 }
-cat > instances.yml <<'INSTANCES_EOF'
-%{ for instance in monitoring_instances ~}
-- name: ${instance.name}
-  conn_str: ${instance.conn_str}
-  preset_metrics: full
-  custom_metrics:
-  is_enabled: true
-  group: default
-  custom_tags:
-    env: ${instance.environment}
-    cluster: ${instance.cluster}
-    node_name: ${instance.node_name}
-    sink_type: ~sink_type~
-%{ endfor ~}
-INSTANCES_EOF
-%{ else }
-# No monitoring instances configured - will use empty or default config
-cat > instances.yml <<'INSTANCES_EOF'
-# PostgreSQL instances to monitor
-# Add your instances using: ./postgres_ai add-instance
+# Ensure secure permissions
+chmod 600 .pgwatch-config .env
 
-INSTANCES_EOF
-%{ endif }
+# Configure monitoring instances from template
+cat > instances.yml <<'INSTANCES_EOF'
+${instances_yml}INSTANCES_EOF
 
 # Set ownership
 chown -R postgres_ai:postgres_ai /home/postgres_ai/postgres_ai
@@ -143,7 +141,7 @@ sleep 30
 # Reset Grafana admin password to match terraform config
 echo "Setting Grafana admin password..."
 cd /home/postgres_ai/postgres_ai
-docker exec grafana-with-datasources grafana-cli admin reset-admin-password "${grafana_password}" 2>/dev/null || true
+docker exec grafana-with-datasources grafana-cli admin reset-admin-password "${grafana_password}"
 
 echo "Installation complete!"
 echo "Access Grafana at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):3000"

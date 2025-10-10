@@ -26,7 +26,14 @@ services:
       POSTGRES_DB: target_database
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_preload_libraries=pg_stat_statements",
+        "-c",
+        "pg_stat_statements.track=all",
+      ]
     ports:
       - "55432:5432"
     volumes:
@@ -57,18 +64,24 @@ services:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=200h"
+      - "--web.enable-lifecycle"
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
     image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-postgres
-    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements", "--web-addr=:8080"]
+    command:
+      [
+        "--sources=/etc/pgwatch/sources.yml",
+        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements",
+        "--web-addr=:8080",
+      ]
     ports:
       - "58080:8080"
     depends_on:
@@ -82,7 +95,13 @@ services:
   pgwatch-prometheus:
     image: cybertecpostgresql/pgwatch:3
     container_name: pgwatch-prometheus
-    command: ["--sources=/etc/pgwatch/sources.yml", "--metrics=/etc/pgwatch/metrics.yml", "--sink=prometheus://0.0.0.0:9091/pgwatch", "--web-addr=:8089"]
+    command:
+      [
+        "--sources=/etc/pgwatch/sources.yml",
+        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sink=prometheus://0.0.0.0:9091/pgwatch",
+        "--web-addr=:8089",
+      ]
     ports:
       - "58089:8089"
       - "59091:9091"
@@ -99,7 +118,7 @@ services:
     container_name: grafana-with-datasources
     environment:
       GF_SECURITY_ADMIN_USER: monitor
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-demo}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-demo}
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
     ports:
       - "3000:3000"
