@@ -82,6 +82,6 @@ variable "enable_demo_db" {
 variable "postgres_ai_version" {
   description = "postgres_ai version (git tag or branch)"
   type        = string
-  default     = "main"
+  default     = "0.9"
 }
 
