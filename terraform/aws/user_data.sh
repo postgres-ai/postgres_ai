@@ -78,7 +78,7 @@ chown -R postgres_ai:postgres_ai /data
 
 # Clone postgres_ai repository
 cd /home/postgres_ai
-sudo -u postgres_ai git clone https://gitlab.com/postgres-ai/postgres_ai.git
+sudo -u postgres_ai git clone --branch ${postgres_ai_version} https://gitlab.com/postgres-ai/postgres_ai.git
 
 # Configure postgres_ai
 cd postgres_ai

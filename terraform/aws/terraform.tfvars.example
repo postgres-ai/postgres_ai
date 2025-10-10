@@ -45,6 +45,9 @@
 # OPTIONAL PARAMETERS
 # -------------------------
 
+# postgres_ai version (optional, defaults to 'main')
+# postgres_ai_version = "0.9" # branch or specific tag like "0.9"
+
 # PostgreSQL instances to monitor (optional, can be empty for initial setup)
 # monitoring_instances = [
 #   {

@@ -164,10 +164,11 @@ resource "aws_instance" "main" {
   }
 
   user_data = templatefile("${path.module}/user_data.sh", {
-    grafana_password    = var.grafana_password
-    postgres_ai_api_key = var.postgres_ai_api_key
-    enable_demo_db      = var.enable_demo_db
-    instances_yml       = templatefile("${path.module}/instances.yml.tpl", {
+    grafana_password     = var.grafana_password
+    postgres_ai_api_key  = var.postgres_ai_api_key
+    enable_demo_db       = var.enable_demo_db
+    postgres_ai_version  = var.postgres_ai_version
+    instances_yml        = templatefile("${path.module}/instances.yml.tpl", {
       monitoring_instances = var.monitoring_instances
       enable_demo_db       = var.enable_demo_db
     })
