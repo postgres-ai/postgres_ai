@@ -220,7 +220,9 @@ resource "local_sensitive_file" "instances_config" {
 # Deploy instances.yml to EC2 when config changes
 resource "terraform_data" "deploy_config" {
   triggers_replace = {
-    config_hash = local_sensitive_file.instances_config.content_md5
+    config_hash          = local_sensitive_file.instances_config.content_md5
+    monitoring_instances = jsonencode(var.monitoring_instances)
+    enable_demo_db       = var.enable_demo_db
   }
 
   depends_on = [aws_instance.main, aws_volume_attachment.data]
