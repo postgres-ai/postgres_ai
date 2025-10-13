@@ -37,7 +37,7 @@ Uncomment and set all required parameters:
 
 Optional parameters:
 - `grafana_bind_host` - Grafana port binding (defaults to `"127.0.0.1:"` for SSH tunnel)
-- `postgres_ai_version` - git branch/tag (defaults to "0.9")
+- `postgres_ai_version` - git branch/tag (defaults to "0.10")
 
 ## Add monitoring instances
 

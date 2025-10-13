@@ -61,7 +61,7 @@ grafana_password     = "YourSecurePassword123!"
 # OPTIONAL (have defaults)
 postgres_ai_api_key   = "your-api-key"    # For uploading reports
 enable_demo_db        = false             # Demo database (default: false)
-postgres_ai_version   = "0.9"             # Git branch/tag (default: "0.9")
+postgres_ai_version   = "0.10"            # Git branch/tag (default: "0.10")
 bind_host             = "127.0.0.1:"      # Internal services on localhost (default, most secure)
 # bind_host           = ""                # OR: Bind to all interfaces
 grafana_bind_host     = "127.0.0.1:"      # Grafana on localhost only (default, use SSH tunnel)
@@ -97,7 +97,7 @@ grafana_password     = "SecurePassword123!"
 # OPTIONAL
 postgres_ai_api_key  = "your-api-key"
 enable_demo_db       = false
-postgres_ai_version  = "0.9"
+postgres_ai_version  = "0.10"
 bind_host            = "127.0.0.1:"      # Default
 grafana_bind_host    = "127.0.0.1:"      # Default
 

@@ -82,7 +82,7 @@ variable "enable_demo_db" {
 variable "postgres_ai_version" {
   description = "postgres_ai version (git tag or branch)"
   type        = string
-  default     = "0.9"
+  default     = "0.10"
 }
 
 variable "bind_host" {

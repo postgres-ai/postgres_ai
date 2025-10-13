@@ -42,7 +42,7 @@ output "grafana_access_hint" {
   Your configuration uses SSH tunnel for security.
   
   Step 1: Create SSH tunnel
-    ssh -i ~/.ssh/${var.ssh_key_name}.pem -L 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
+    ssh -i ~/.ssh/${var.ssh_key_name}.pem -NL 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
   
   Step 2: Open browser
     http://localhost:3000
