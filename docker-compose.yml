@@ -90,6 +90,7 @@ services:
     volumes:
       - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
       - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+    restart: unless-stopped
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
   pgwatch-prometheus:
@@ -111,6 +112,7 @@ services:
     volumes:
       - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
       - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+    restart: unless-stopped
 
   # Grafana with datasources - Visualization layer
   grafana:
@@ -130,6 +132,7 @@ services:
     depends_on:
       - sink-postgres
       - sink-prometheus
+    restart: unless-stopped
   flask-backend:
     build:
       context: ./flask-backend
@@ -142,7 +145,7 @@ services:
       - sink-prometheus
     ports:
       - "${BIND_HOST:-}55000:5000"
-
+    restart: unless-stopped
   # PostgreSQL Reports Generator - Runs reports after 1 hour
   postgres-reports:
     image: python:3.11-slim
