@@ -49,8 +49,8 @@ instance_type        = "t3.medium"
 data_volume_size     = 50
 data_volume_type     = "gp3"  # gp3 (SSD), st1 (HDD), sc1 (HDD)
 root_volume_type     = "gp3"
-allowed_ssh_cidr     = ["203.0.113.0/24"]
-allowed_cidr_blocks  = ["203.0.113.0/24"]
+allowed_ssh_cidr     = ["YOUR_IP/32"]  # Replace with your actual IP address
+allowed_cidr_blocks  = []              # Empty list = no direct access, SSH tunnel required (most secure)
 use_elastic_ip       = true
 grafana_password     = "YourSecurePassword123!"
 ```
@@ -59,9 +59,13 @@ grafana_password     = "YourSecurePassword123!"
 
 ```hcl
 # OPTIONAL (have defaults)
-postgres_ai_api_key = "your-api-key"  # For uploading reports
-enable_demo_db      = false           # Demo database (default: true)
-postgres_ai_version = "main"          # Git branch/tag (default: "main")
+postgres_ai_api_key   = "your-api-key"    # For uploading reports
+enable_demo_db        = false             # Demo database (default: false)
+postgres_ai_version   = "0.10"            # Git branch/tag (default: "0.10")
+bind_host             = "127.0.0.1:"      # Internal services on localhost (default, most secure)
+# bind_host           = ""                # OR: Bind to all interfaces
+grafana_bind_host     = "127.0.0.1:"      # Grafana on localhost only (default, use SSH tunnel)
+# grafana_bind_host   = ""                # OR: Grafana accessible from outside
 
 monitoring_instances = [
   {
@@ -85,15 +89,17 @@ instance_type        = "t3.medium"
 data_volume_size     = 100
 data_volume_type     = "gp3"
 root_volume_type     = "gp3"
-allowed_ssh_cidr     = ["203.0.113.0/24"]
-allowed_cidr_blocks  = ["203.0.113.0/24"]
+allowed_ssh_cidr     = ["YOUR_IP/32"]  # Replace with your actual IP
+allowed_cidr_blocks  = []              # Empty list = no direct access (most secure)
 use_elastic_ip       = true
 grafana_password     = "SecurePassword123!"
 
 # OPTIONAL
 postgres_ai_api_key  = "your-api-key"
 enable_demo_db       = false
-postgres_ai_version  = "v0.9"
+postgres_ai_version  = "0.10"
+bind_host            = "127.0.0.1:"      # Default
+grafana_bind_host    = "127.0.0.1:"      # Default
 
 monitoring_instances = [
   {
@@ -113,7 +119,34 @@ monitoring_instances = [
 ```bash
 terraform output ssh_command
 # Or directly:
-ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw external_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw public_ip)
+```
+
+### Grafana access
+
+Terraform automatically detects the correct access method based on your configuration:
+
+```bash
+# Get access instructions for your setup
+terraform output grafana_access_hint
+```
+
+**Option 1: SSH tunnel (when `allowed_cidr_blocks = []` or `grafana_bind_host = "127.0.0.1:"`)**
+
+```bash
+# Create SSH tunnel
+ssh -i ~/.ssh/postgres-ai-key.pem -NL 3000:localhost:3000 ubuntu@$(terraform output -raw public_ip)
+
+# Open browser
+open http://localhost:3000
+# Login: monitor / <your grafana_password>
+```
+
+**Option 2: Direct access (when `allowed_cidr_blocks = ["YOUR_IP/32"]` and `grafana_bind_host = ""`)**
+
+```bash
+# Open browser
+open $(terraform output -raw grafana_url)
 ```
 
 ### Service management
@@ -176,14 +209,25 @@ sudo docker-compose up -d
 
 ### Recommendations
 
-1. Restrict SSH access:
+1. **Most secure setup (SSH tunnel only)**:
 ```hcl
-allowed_ssh_cidr = ["your.ip.address/32"]
+allowed_ssh_cidr     = ["your.ip.address/32"]
+allowed_cidr_blocks  = []  # Empty list = no direct access to Grafana from anywhere
+bind_host            = "127.0.0.1:"
+grafana_bind_host    = "127.0.0.1:"
 ```
 
-2. Restrict Grafana access:
+Access Grafana via SSH tunnel:
+```bash
+ssh -i ~/.ssh/key.pem -NL 3000:localhost:3000 ubuntu@instance-ip
+```
+
+2. **Production with direct Grafana access**:
 ```hcl
-allowed_cidr_blocks = ["your.office.ip/24"]
+allowed_ssh_cidr     = ["YOUR_OFFICE_IP/24"]  # Replace with your office network
+allowed_cidr_blocks  = ["YOUR_OFFICE_IP/24"]  # Replace with your office network
+bind_host            = "127.0.0.1:"           # Internal services protected
+grafana_bind_host    = ""                     # Grafana accessible
 ```
 
 3. Use AWS Systems Manager instead of SSH:
@@ -192,6 +236,13 @@ aws ssm start-session --target $(terraform output -raw instance_id)
 ```
 
 4. Automate backups with AWS Backup or cron.
+
+### Port binding configuration
+
+- `bind_host = "127.0.0.1:"` - Internal services only on localhost (recommended)
+- `bind_host = ""` - Internal services on all interfaces
+- `grafana_bind_host = "127.0.0.1:"` - Grafana only via SSH tunnel (default)
+- `grafana_bind_host = ""` - Grafana accessible from network
 
 ## Monitoring
 
@@ -231,6 +282,13 @@ ssh ubuntu@your-ip "sudo docker ps -a"
 ### No access to Grafana
 
 ```bash
+# Check if allowed_cidr_blocks is empty (SSH tunnel required)
+grep allowed_cidr_blocks terraform.tfvars
+
+# If empty, use SSH tunnel
+ssh -i ~/.ssh/key.pem -NL 3000:localhost:3000 ubuntu@your-ip
+# Then open http://localhost:3000
+
 # Check Security Group
 aws ec2 describe-security-groups \
   --group-ids $(terraform output -raw security_group_id)

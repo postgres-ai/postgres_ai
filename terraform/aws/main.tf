@@ -46,7 +46,7 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# VPC (simplified - use default or create minimal)
+# VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -113,13 +113,17 @@ resource "aws_security_group" "main" {
     cidr_blocks = var.allowed_ssh_cidr
   }
 
-  # Grafana
-  ingress {
-    description = "Grafana"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_cidr_blocks
+  # Grafana (optional, only if allowed_cidr_blocks is not empty)
+  # If empty, use SSH tunnel: ssh -i ~/.ssh/key.pem -NL 3000:localhost:3000 ubuntu@<instance-ip>
+  dynamic "ingress" {
+    for_each = length(var.allowed_cidr_blocks) > 0 ? [1] : []
+    content {
+      description = "Grafana"
+      from_port   = 3000
+      to_port     = 3000
+      protocol    = "tcp"
+      cidr_blocks = var.allowed_cidr_blocks
+    }
   }
 
   # Allow all outbound
@@ -168,6 +172,8 @@ resource "aws_instance" "main" {
     postgres_ai_api_key  = var.postgres_ai_api_key
     enable_demo_db       = var.enable_demo_db
     postgres_ai_version  = var.postgres_ai_version
+    bind_host            = var.bind_host
+    grafana_bind_host    = var.grafana_bind_host
     instances_yml        = templatefile("${path.module}/instances.yml.tpl", {
       monitoring_instances = var.monitoring_instances
       enable_demo_db       = var.enable_demo_db
