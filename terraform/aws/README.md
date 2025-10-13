@@ -53,7 +53,6 @@ allowed_ssh_cidr     = ["YOUR_IP/32"]  # Replace with your actual IP address
 allowed_cidr_blocks  = []              # Empty for SSH tunnel only (most secure)
 use_elastic_ip       = true
 grafana_password     = "YourSecurePassword123!"
-bind_host            = "127.0.0.1:"  # Bind internal services to localhost
 ```
 
 ### Optional parameters
@@ -63,6 +62,8 @@ bind_host            = "127.0.0.1:"  # Bind internal services to localhost
 postgres_ai_api_key   = "your-api-key"    # For uploading reports
 enable_demo_db        = false             # Demo database (default: false)
 postgres_ai_version   = "0.9"             # Git branch/tag (default: "0.9")
+bind_host             = "127.0.0.1:"      # Internal services on localhost (default, most secure)
+# bind_host           = ""                # OR: Bind to all interfaces
 grafana_bind_host     = "127.0.0.1:"      # Grafana on localhost only (default, use SSH tunnel)
 # grafana_bind_host   = ""                # OR: Grafana accessible from outside
 
@@ -92,13 +93,13 @@ allowed_ssh_cidr     = ["YOUR_IP/32"]  # Replace with your actual IP
 allowed_cidr_blocks  = []              # SSH tunnel only (most secure)
 use_elastic_ip       = true
 grafana_password     = "SecurePassword123!"
-bind_host            = "127.0.0.1:"
 
 # OPTIONAL
 postgres_ai_api_key  = "your-api-key"
 enable_demo_db       = false
 postgres_ai_version  = "0.9"
-grafana_bind_host    = "127.0.0.1:"  # Default, SSH tunnel only
+bind_host            = "127.0.0.1:"      # Default
+grafana_bind_host    = "127.0.0.1:"      # Default
 
 monitoring_instances = [
   {
@@ -118,27 +119,30 @@ monitoring_instances = [
 ```bash
 terraform output ssh_command
 # Or directly:
-ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw external_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw public_ip)
 ```
 
 ### Grafana access
 
-**Option 1: SSH tunnel (default, most secure)**
+Terraform automatically detects the correct access method based on your configuration:
 
-When `allowed_cidr_blocks = []`:
+```bash
+# Get access instructions for your setup
+terraform output grafana_access_hint
+```
+
+**Option 1: SSH tunnel (when `allowed_cidr_blocks = []` or `grafana_bind_host = "127.0.0.1:"`)**
 
 ```bash
 # Create SSH tunnel
-ssh -i ~/.ssh/postgres-ai-key.pem -L 3000:localhost:3000 ubuntu@$(terraform output -raw external_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem -L 3000:localhost:3000 ubuntu@$(terraform output -raw public_ip)
 
 # Open browser
 open http://localhost:3000
 # Login: monitor / <your grafana_password>
 ```
 
-**Option 2: Direct access**
-
-When `allowed_cidr_blocks = ["YOUR_IP/32"]`:
+**Option 2: Direct access (when `allowed_cidr_blocks = ["YOUR_IP/32"]` and `grafana_bind_host = ""`)**
 
 ```bash
 # Open browser

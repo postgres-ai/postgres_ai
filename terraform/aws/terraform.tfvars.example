@@ -42,8 +42,8 @@
 # Allocate Elastic IP for stable address
 # use_elastic_ip = true
 
-# Port binding configuration
-# bind_host = "127.0.0.1:"  # Bind internal services to localhost only (most secure, recommended)
+# Port binding configuration (optional, defaults to most secure)
+# bind_host = "127.0.0.1:"  # Bind internal services to localhost only (default, most secure)
 # bind_host = ""            # OR: Bind to all interfaces (needed if accessing services remotely)
 
 # grafana_bind_host = "127.0.0.1:" # Grafana only via SSH tunnel (default, most secure)
