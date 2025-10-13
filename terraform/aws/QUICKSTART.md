@@ -29,10 +29,15 @@ Uncomment and set all required parameters:
 - `instance_type` - EC2 instance type (e.g., t3.medium)
 - `data_volume_size` - data disk size in GiB
 - `data_volume_type` / `root_volume_type` - volume types (gp3, st1, sc1)
-- `allowed_ssh_cidr` / `allowed_cidr_blocks` - CIDR blocks for access
+- `allowed_ssh_cidr` - CIDR blocks for SSH access (use `["YOUR_IP/32"]`, get IP: `curl ifconfig.me`)
+- `allowed_cidr_blocks` - CIDR blocks for Grafana (use `[]` for SSH tunnel only - most secure)
 - `use_elastic_ip` - allocate Elastic IP (true/false)
 - `grafana_password` - Grafana admin password
-- `postgres_ai_version` - git branch/tag (optional, defaults to "main")
+- `bind_host` - port binding for internal services (use `"127.0.0.1:"`)
+
+Optional parameters:
+- `grafana_bind_host` - Grafana port binding (defaults to `"127.0.0.1:"` for SSH tunnel)
+- `postgres_ai_version` - git branch/tag (defaults to "0.9")
 
 ## Add monitoring instances
 
@@ -70,12 +75,30 @@ terraform output ssh_command
 
 ## Access
 
+### Grafana
+
+**If `allowed_cidr_blocks = []` (SSH tunnel, most secure):**
+
+```bash
+# Create SSH tunnel
+ssh -i ~/.ssh/postgres-ai-key.pem -L 3000:localhost:3000 ubuntu@$(terraform output -raw external_ip)
+
+# Open browser
+open http://localhost:3000
+# Login: monitor / <password from terraform.tfvars>
+```
+
+**If `allowed_cidr_blocks = ["YOUR_IP/32"]` (direct access):**
+
 ```bash
 # Grafana dashboard
 open $(terraform output -raw grafana_url)
 # Login: monitor / <password from terraform.tfvars>
+```
 
-# SSH
+### SSH
+
+```bash
 ssh -i ~/.ssh/postgres-ai-key.pem ubuntu@$(terraform output -raw external_ip)
 ```
 

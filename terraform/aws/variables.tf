@@ -93,5 +93,6 @@ variable "bind_host" {
 variable "grafana_bind_host" {
   description = "Bind host for Grafana port (127.0.0.1: for localhost only, empty for all interfaces)"
   type        = string
+  default     = "127.0.0.1:"
 }
 
