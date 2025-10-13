@@ -48,6 +48,13 @@
 # postgres_ai version (optional, defaults to actual)
 # postgres_ai_version = "0.9" # branch or specific tag like "0.9"
 
+# Port binding configuration (required)
+# bind_host = "127.0.0.1:"  # Bind internal services to localhost only (most secure)
+# bind_host = ""            # Bind to all interfaces (needed if accessing services remotely)
+
+# grafana_bind_host = ""           # Grafana accessible from outside (controlled by Security Group)
+# grafana_bind_host = "127.0.0.1:" # Grafana only via SSH tunnel
+
 # PostgreSQL instances to monitor (optional, can be empty for initial setup)
 # monitoring_instances = [
 #   {

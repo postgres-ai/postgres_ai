@@ -85,3 +85,13 @@ variable "postgres_ai_version" {
   default     = "0.9"
 }
 
+variable "bind_host" {
+  description = "Bind host for internal service ports (127.0.0.1: for localhost only, empty for all interfaces)"
+  type        = string
+}
+
+variable "grafana_bind_host" {
+  description = "Bind host for Grafana port (127.0.0.1: for localhost only, empty for all interfaces)"
+  type        = string
+}
+
