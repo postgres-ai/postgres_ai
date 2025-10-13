@@ -5,73 +5,68 @@
 # -------------------------
 
 # SSH key for EC2 access (create in AWS Console or CLI)
-ssh_key_name = "your-key-name"
-
-
-# AWS SETTINGS
-# -------------------------
+# ssh_key_name = "your-key-name"
 
 # AWS region
-aws_region = "us-east-1"
+# aws_region = "us-east-1"
 
-# Environment
-environment = "production"
+# Environment name
+# environment = "production"
 
-instance_type = "t3.medium"
+# EC2 instance type
+# instance_type = "t3.medium"
 
 # EBS volume size for data (GiB)
-data_volume_size = 50
+# data_volume_size = 50
 
 # Storage types
 # data_volume_type = "gp3"  # gp3 (SSD), st1 (HDD throughput optimized, min 125 GiB), sc1 (HDD cold, min 125 GiB)
 # root_volume_type = "gp3"  # gp3 (SSD), gp2 (older SSD)
 
-
-# SECURITY
-# -------------------------
+# Grafana admin password
+# grafana_password = "YourSecurePassword123!"
 
 # CIDR blocks for SSH access (restrict to your IP in production)
-allowed_ssh_cidr = [
-  "0.0.0.0/0"  # WARNING: Allows access from anywhere
-  # "203.0.113.0/24"  # Replace with your office/VPN IP
-]
+# allowed_ssh_cidr = [
+#   "0.0.0.0/0"  # WARNING: Allows access from anywhere
+#   # "203.0.113.0/24"  # Replace with your office/VPN IP
+# ]
 
 # CIDR blocks for Grafana access (restrict to your IP in production)
-allowed_cidr_blocks = [
-  "0.0.0.0/0"  # WARNING: Allows access from anywhere
-  # "203.0.113.0/24"  # Replace with your office/VPN IP
-]
+# allowed_cidr_blocks = [
+#   "0.0.0.0/0"  # WARNING: Allows access from anywhere
+#   # "203.0.113.0/24"  # Replace with your office/VPN IP
+# ]
 
 # Allocate Elastic IP for stable address
-use_elastic_ip = true
-
-
-# POSTGRESQL MONITORING
-# -------------------------
-
-# PostgreSQL instances to monitor
-monitoring_instances = [
-  {
-    name        = "production-db"
-    conn_str    = "postgresql://monitor:password@db.example.com:5432/postgres"
-    environment = "production"
-    cluster     = "main"
-    node_name   = "primary"
-  },
-  # {
-  #   name        = "production-replica"
-  #   conn_str    = "postgresql://monitor:password@replica.example.com:5432/postgres"
-  #   environment = "production"
-  #   cluster     = "main"
-  #   node_name   = "replica-1"
-  # }
-]
+# use_elastic_ip = true
 
 
 # OPTIONAL PARAMETERS
 # -------------------------
 
-# PostgresAI API key (for uploading reports to cloud)
+# postgres_ai version (optional, defaults to actual)
+# postgres_ai_version = "0.9" # branch or specific tag like "0.9"
+
+# PostgreSQL instances to monitor (optional, can be empty for initial setup)
+# monitoring_instances = [
+#   {
+#     name        = "production-db"
+#     conn_str    = "postgresql://monitor:password@db.example.com:5432/postgres"
+#     environment = "production"
+#     cluster     = "main"
+#     node_name   = "primary"
+#   },
+#   {
+#     name        = "production-replica"
+#     conn_str    = "postgresql://monitor:password@replica.example.com:5432/postgres"
+#     environment = "production"
+#     cluster     = "main"
+#     node_name   = "replica-1"
+#   }
+# ]
+
+# PostgresAI API key (optional, for uploading reports to cloud)
 # 
 # How to get API key:
 # 1. Register at https://console.postgres.ai
@@ -81,33 +76,27 @@ monitoring_instances = [
 # If not set, reports will be generated locally without upload
 # postgres_ai_api_key = "your-api-key-here"
 
-# Grafana admin password (defaults to 'demo')
-# grafana_password = "YourSecurePassword123!"
-
-# Enable demo database (for testing)
+# Enable demo database (optional, for testing)
 # enable_demo_db = false
 
 
 # CONFIGURATION EXAMPLES
 # -------------------------
 
-# Minimal configuration (for testing):
+# Testing with demo database:
+# ----------------------------
+# Leave monitoring_instances commented out
+# Set: enable_demo_db = true (optional parameter)
+
+# Production with multiple databases:
 # ------------------------------------
-# instance_type = "t3.medium"
-# data_volume_size = 50
-# enable_demo_db = true
-# monitoring_instances = []
+# Uncomment and fill monitoring_instances with your databases
+# Set: instance_type = "t3.xlarge" for better performance
+# Set: data_volume_size = 200 for more storage
+# Restrict: allowed_ssh_cidr and allowed_cidr_blocks to your network
 
-# Production configuration:
-# -------------------------
-# instance_type = "t3.xlarge"
-# data_volume_size = 200
-# allowed_ssh_cidr = ["10.0.0.0/8"]
-# allowed_cidr_blocks = ["10.0.0.0/8"]
-# use_elastic_ip = true
-
-# Minimal configuration (dev/test):
-# ----------------------------------
-# instance_type = "t3.small"  # WARNING: May be slow for production use
-# data_volume_size = 30
-# use_elastic_ip = false
+# Development/staging:
+# --------------------
+# Set: instance_type = "t3.small" (may be slow)
+# Set: data_volume_size = 30 (minimal storage)
+# Set: use_elastic_ip = false (save costs)
