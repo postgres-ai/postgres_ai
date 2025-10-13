@@ -26,27 +26,36 @@
 # Grafana admin password
 # grafana_password = "YourSecurePassword123!"
 
-# CIDR blocks for SSH access (restrict to your IP in production)
+# CIDR blocks for SSH access
+# Get your IP: curl ifconfig.me
 # allowed_ssh_cidr = [
-#   "0.0.0.0/0"  # WARNING: Allows access from anywhere
-#   # "203.0.113.0/24"  # Replace with your office/VPN IP
+#   "0.0.0.0/0"       # WARNING: Allows access from anywhere - NOT RECOMMENDED
+#   # "1.2.3.4/32"    # RECOMMENDED: Replace with YOUR actual IP address
 # ]
 
-# CIDR blocks for Grafana access (restrict to your IP in production)
-# allowed_cidr_blocks = [
-#   "0.0.0.0/0"  # WARNING: Allows access from anywhere
-#   # "203.0.113.0/24"  # Replace with your office/VPN IP
-# ]
+# CIDR blocks for Grafana access
+# IMPORTANT: Empty list [] = NO direct access (SSH tunnel required, most secure)
+# allowed_cidr_blocks = []            # No direct access, SSH tunnel only (recommended)
+# allowed_cidr_blocks = ["1.2.3.4/32"]  # Replace with YOUR actual IP for direct access
+# allowed_cidr_blocks = ["0.0.0.0/0"]   # WARNING: Allows access from anywhere - NOT RECOMMENDED
 
 # Allocate Elastic IP for stable address
 # use_elastic_ip = true
+
+# Port binding configuration (optional, defaults to most secure)
+# bind_host = "127.0.0.1:"  # Bind internal services to localhost only (default, most secure)
+# bind_host = ""            # OR: Bind to all interfaces (needed if accessing services remotely)
+
+# grafana_bind_host = "127.0.0.1:" # Grafana only via SSH tunnel (default, most secure)
+# grafana_bind_host = ""           # OR: Grafana accessible from outside (controlled by Security Group)
+
 
 
 # OPTIONAL PARAMETERS
 # -------------------------
 
 # postgres_ai version (optional, defaults to actual)
-# postgres_ai_version = "0.9" # branch or specific tag like "0.9"
+# postgres_ai_version = "0.10" # branch or specific tag like "0.10"
 
 # PostgreSQL instances to monitor (optional, can be empty for initial setup)
 # monitoring_instances = [
