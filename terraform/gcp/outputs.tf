@@ -35,14 +35,13 @@ output "grafana_credentials" {
 output "deployment_info" {
   description = "Deployment information"
   value = {
-    machine_type         = var.machine_type
-    region               = var.region
-    zone                 = local.zone
-    external_ip          = var.use_static_ip ? google_compute_address.main[0].address : google_compute_instance.main.network_interface[0].access_config[0].nat_ip
-    data_volume          = "${var.data_volume_size} GiB"
-    api_key_configured   = var.postgres_ai_api_key != ""
-    monitoring_instances = length(var.monitoring_instances)
-    demo_mode            = var.enable_demo_db
+    machine_type       = var.machine_type
+    region             = var.region
+    zone               = local.zone
+    external_ip        = var.use_static_ip ? google_compute_address.main[0].address : google_compute_instance.main.network_interface[0].access_config[0].nat_ip
+    data_volume        = "${var.data_volume_size} GiB"
+    api_key_configured = var.postgres_ai_api_key != ""
+    demo_mode          = var.enable_demo_db
   }
   sensitive = true
 }
@@ -55,15 +54,13 @@ Deployment complete
 
 Grafana URL: http://${var.use_static_ip ? google_compute_address.main[0].address : google_compute_instance.main.network_interface[0].access_config[0].nat_ip}:3000
 Username: monitor
-Password: see terraform.tfvars
-
-Monitoring: ${length(var.monitoring_instances)} instance(s)
-API key: see terraform.tfvars
+Password: see configuration
 
 SSH: gcloud compute ssh ubuntu@${google_compute_instance.main.name} --zone=${local.zone}
 
-For detailed deployment info: terraform output deployment_info
+${length(var.monitoring_instances) == 0 ? "To configure monitoring instances (Marketplace deployments):\n1. SSH to the instance\n2. Edit /home/postgres_ai/postgres_ai/instances.yml\n3. Run: sudo -u postgres_ai /home/postgres_ai/postgres_ai/postgres_ai update-config" : "Monitoring: ${length(var.monitoring_instances)} instance(s) configured"}
 
 EOT
+  sensitive = false
 }
 

@@ -2,6 +2,8 @@
 
 Deploy postgres_ai monitoring stack on Google Cloud Platform using Compute Engine.
 
+> **Note for GCP Marketplace users**: After deployment from Marketplace, monitoring instances must be configured manually (see "Configure monitoring instances" section below).
+
 ## Architecture
 
 Single Compute Engine instance running Docker Compose with all monitoring components:
@@ -134,17 +136,9 @@ terraform output -json grafana_credentials
 gcloud compute ssh ubuntu@production-postgres-ai-monitoring --zone=us-central1-a
 ```
 
-## Monitoring setup
+## Configure monitoring instances
 
-### Add Postgres instance
-
-Create monitoring user:
-
-```sql
-create user monitoring with password 'secure_password';
-grant pg_monitor to monitoring;
-grant connect on database postgres to monitoring;
-```
+### Method 1: Terraform (before deployment)
 
 Add to `terraform.tfvars`:
 
@@ -152,7 +146,7 @@ Add to `terraform.tfvars`:
 monitoring_instances = [
   {
     name = "my-db"
-    conn_str = "host=10.0.0.5 port=5432 user=monitoring dbname=postgres password=secure_password sslmode=require"
+    conn_str = "postgresql://monitoring:password@host:5432/postgres"
     environment = "production"
     cluster = "main"
     node_name = "primary"
@@ -160,10 +154,52 @@ monitoring_instances = [
 ]
 ```
 
-Apply changes:
-
+Deploy:
 ```bash
 terraform apply
+```
+
+### Method 2: Manual (after deployment, for Marketplace)
+
+1. Create monitoring user on your Postgres instance:
+
+```sql
+create user monitoring with password 'secure_password';
+grant pg_monitor to monitoring;
+grant connect on database postgres to monitoring;
+```
+
+2. SSH to monitoring instance:
+
+```bash
+gcloud compute ssh ubuntu@<instance-name> --zone=<zone>
+```
+
+3. Edit instances.yml:
+
+```bash
+sudo -u postgres_ai vim /home/postgres_ai/postgres_ai/instances.yml
+```
+
+Add your instances:
+
+```yaml
+- name: my-db
+  conn_str: postgresql://monitoring:password@host:5432/postgres
+  preset_metrics: full
+  custom_metrics:
+    ts_enabled: true
+  group: default
+  custom_tags:
+    env: production
+    cluster: main
+    node_name: primary
+```
+
+4. Apply configuration:
+
+```bash
+sudo -u postgres_ai /home/postgres_ai/postgres_ai/postgres_ai update-config
 ```
 
 ### PostgresAI reports

@@ -1,56 +1,123 @@
-# GCP Configuration
-project_id = "your-gcp-project-id"
-region = "us-central1"
-zone = ""  # Optional, defaults to first available zone in region
+# GCP Deployment Configuration
+# Copy to terraform.tfvars and customize
 
-# Environment
-environment = "production"
+# REQUIRED PARAMETERS
+# -------------------------
 
-# Required parameters
+# GCP project ID (get from: gcloud config get-value project)
+# project_id = "your-gcp-project-id"
 
 # SSH public key for instance access
-# Generate with: ssh-keygen -t rsa -b 4096
-# Get public key: cat ~/.ssh/id_rsa.pub
-ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ... user@hostname"
+# Generate with: ssh-keygen -t rsa -b 4096 -f ~/.ssh/gcp-postgres-ai
+# Get public key: cat ~/.ssh/gcp-postgres-ai.pub
+# ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ... user@hostname"
 
-# Optional parameters
 
-# Grafana admin password (defaults to 'demo' if not set)
-# grafana_password = "your-secure-password-here"
+# GCP SETTINGS
+# -------------------------
 
-# PostgresAI API key for report uploads
-# Get your key at: https://console.postgres.ai
-# postgres_ai_api_key = "your-api-key-here"
+# GCP region
+# region = "us-central1"
 
-# Storage
-# data_volume_size = 50  # GiB
+# GCP zone (optional, defaults to first available zone in region)
+# zone = "us-central1-a"
+
+# Environment
+# environment = "production"
+
+# Instance type
+# machine_type = "e2-medium"
+
+# Disk size for data (GiB)
+# data_volume_size = 50
+
+# Storage and image
 # data_disk_type = "pd-standard"  # pd-standard (HDD), pd-ssd (SSD), pd-balanced
 # boot_disk_type = "pd-standard"  # pd-standard (HDD), pd-ssd (SSD), pd-balanced
 
-# Network Configuration
+# NETWORK
+# subnet_cidr = "10.0.1.0/24"
+
+# SECURITY
+# -------------------------
+
+# CIDR blocks for SSH access (restrict to your IP in production)
+# ssh_source_ranges = [
+#   "0.0.0.0/0"  # WARNING: Allows access from anywhere
+#   # "203.0.113.0/24"  # Replace with your office/VPN IP
+# ]
+
+# CIDR blocks for Grafana access (restrict to your IP in production)
+# grafana_source_ranges = [
+#   "0.0.0.0/0"  # WARNING: Allows access from anywhere
+#   # "203.0.113.0/24"  # Replace with your office/VPN IP
+# ]
+
+# Allocate static IP for stable address
 # use_static_ip = true
 
-# Security
-# ssh_source_ranges = ["0.0.0.0/0"]        # Allow SSH from anywhere
-# grafana_source_ranges = ["0.0.0.0/0"]    # Allow Grafana from anywhere
 
-# For production, restrict to your IP:
-# ssh_source_ranges = ["203.0.113.0/24"]
-# grafana_source_ranges = ["203.0.113.0/24"]
+# POSTGRESQL MONITORING
+# -------------------------
 
-# Demo mode (optional)
+# OPTIONAL PARAMETERS
+# -------------------------
+
+# postgres_ai version (optional, defaults to 'main')
+# postgres_ai_version = "0.9"  # branch or tag
+
+# PostgreSQL instances to monitor (optional)
+# monitoring_instances = [
+#   {
+#     name        = "production-db"
+#     conn_str    = "postgresql://monitor:password@db.example.com:5432/postgres"
+#     environment = "production"
+#     cluster     = "main"
+#     node_name   = "primary"
+#   },
+# ]
+
+
+# OPTIONAL PARAMETERS
+# -------------------------
+
+# PostgresAI API key (for uploading reports to cloud)
+# 
+# How to get API key:
+# 1. Register at https://console.postgres.ai
+# 2. Go to: Your Organization → Manage → Access Tokens
+# 3. Create new token and copy it here
+#
+# If not set, reports will be generated locally without upload
+# postgres_ai_api_key = "your-api-key-here"
+
+# Grafana admin password (required)
+# grafana_password = "YourSecurePassword123!"
+
+# Enable demo database (optional)
 # enable_demo_db = false
 
-# Monitoring instances (optional)
-# Add your Postgres instances to monitor
-monitoring_instances = [
-  {
-    name = "production-db-1"
-    conn_str = "postgresql://monitor:password@db.example.com:5432/postgres"
-    environment = "production"
-    cluster = "main"
-    node_name = "primary"
-  },
 
-]
+# CONFIGURATION EXAMPLES
+# -------------------------
 
+# Minimal configuration (for testing):
+# ------------------------------------
+# machine_type = "e2-medium"
+# data_volume_size = 50
+# enable_demo_db = true
+# monitoring_instances = []
+
+# Production configuration:
+# -------------------------
+# machine_type = "e2-standard-4"
+# data_volume_size = 200
+# ssh_source_ranges = ["10.0.0.0/8"]
+# grafana_source_ranges = ["10.0.0.0/8"]
+# use_static_ip = true
+
+# Minimal configuration (dev/test):
+# ----------------------------------
+# machine_type = "e2-small"  # WARNING: May be slow for production use
+# data_volume_size = 30
+# use_static_ip = false

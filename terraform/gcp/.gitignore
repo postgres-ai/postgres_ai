@@ -26,8 +26,11 @@ Thumbs.db
 
 # Backup files
 *.bak
-*.backup
+*.backupgsutil cp 
 
 # SSH keys
 *.pem
 *.key
+
+
+/dist/*

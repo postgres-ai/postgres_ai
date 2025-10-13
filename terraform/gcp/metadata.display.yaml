@@ -1,0 +1,116 @@
+apiVersion: blueprints.cloud.google.com/v1alpha1
+kind: BlueprintMetadata
+metadata:
+  name: gcp-deployment-for-postgres-ai-monitoring-display
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  info:
+    title: GCP deployment for postgres_ai monitoring
+    source:
+      repo: git@gitlab.com:postgres-ai/postgres_ai.git
+      sourceType: git
+      dir: /terraform/gcp
+  ui:
+    input:
+      variables:
+        goog_cm_deployment_name:
+          name: goog_cm_deployment_name
+          title: Goog Cm Deployment Name
+        postgres_ai_version:
+          name: postgres_ai_version
+          title: PostgresAI Version
+          enumValueLabels:
+            - label: "0.9"
+              value: "0.9"
+        boot_disk_type:
+          name: boot_disk_type
+          title: Boot Disk Type
+          enumValueLabels:
+            - label: pd-balanced
+              value: pd-balanced
+            - label: pd-ssd
+              value: pd-ssd
+            - label: pd-standard
+              value: pd-standard
+        boot_disk_size:
+          name: boot_disk_size
+          title: Boot Disk Size
+        data_disk_type:
+          name: data_disk_type
+          title: Data Disk Type
+          enumValueLabels:
+            - label: pd-ssd
+              value: pd-ssd
+            - label: pd-balanced
+              value: pd-balanced
+            - label: pd-standard
+              value: pd-standard
+        data_volume_size:
+          name: data_volume_size
+          title: Data Volume Size
+        enable_demo_db:
+          name: enable_demo_db
+          title: Enable Demo Db
+        environment:
+          name: environment
+          title: Environment
+        grafana_password:
+          name: grafana_password
+          title: Grafana Password
+        grafana_source_ranges:
+          name: grafana_source_ranges
+          title: Grafana Source Ranges
+        project_id:
+          name: project_id
+          title: Project Id
+        machine_type:
+          name: machine_type
+          title: Machine Type
+          enumValueLabels:
+            - label: e2-standard-2 (2 vCPU, 8 GiB RAM) 
+              value: e2-standard-2
+            - label: e2-standard-4 (4 vCPU, 16 GiB RAM)
+              value: e2-standard-4
+            - label: e2-medium (2 vCPU, 4 GiB RAM)
+              value: e2-medium
+            - label: n2-standard-2 (2 vCPU, 8 GiB RAM)
+              value: n2-standard-2
+            - label: n2-standard-4 (4 vCPU, 16 GiB RAM)
+              value: n2-standard-4
+            - label: n2-standard-8 (8 vCPU, 32 GiB RAM)
+              value: n2-standard-8
+        postgres_ai_api_key:
+          name: postgres_ai_api_key
+          title: PostgresAI API Key
+        region:
+          name: region
+          title: Region
+          xGoogleProperty:
+            type: ET_GCE_REGION
+        source_image:
+          name: source_image
+          title: Source Image
+          enumValueLabels:
+            - label: postgres_ai-monitoring
+              value: projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-9-x86-64-20251010
+          xGoogleProperty:
+            type: ET_GCE_DISK_IMAGE    
+        ssh_public_key:
+          name: ssh_public_key
+          title: Ssh Public Key
+        ssh_source_ranges:
+          name: ssh_source_ranges
+          title: SSH Source Ranges
+        subnet_cidr:
+          name: subnet_cidr
+          title: Subnet Cidr
+        use_static_ip:
+          name: use_static_ip
+          title: Use Static Ip
+        zone:
+          name: zone
+          title: Zone
+          tooltip: Must be in the same region as specified above (e.g., if region is us-central1, zone should be us-central1-a, us-central1-b, etc.)
+          xGoogleProperty:
+            type: ET_GCE_ZONE

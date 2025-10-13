@@ -1,0 +1,115 @@
+apiVersion: blueprints.cloud.google.com/v1alpha1
+kind: BlueprintMetadata
+metadata:
+  name: gcp-deployment-for-postgres-ai-monitoring
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  info:
+    title: GCP deployment for postgres_ai monitoring
+    source:
+      repo: git@gitlab.com:postgres-ai/postgres_ai.git
+      sourceType: git
+      dir: /terraform/gcp
+    description: {}
+  content: {}
+  interfaces:
+    variables:
+      - name: goog_cm_deployment_name
+        description: Deployment name from GCP Marketplace (auto-generated)
+        varType: string
+        required: true
+      - name: project_id
+        description: GCP project ID
+        varType: string
+        required: true
+      - name: region
+        description: GCP region
+        varType: string
+        required: true
+      - name: zone
+        description: GCP zone (must be in the same region as specified above)
+        varType: string
+        required: true
+      - name: environment
+        description: Environment name
+        varType: string
+        required: true
+      - name: machine_type
+        description: Compute Engine machine type
+        varType: string
+        required: true
+      - name: data_volume_size
+        description: Size of persistent data disk in GiB
+        varType: number
+        required: true
+      - name: data_disk_type
+        description: Type of data disk (pd-standard for HDD, pd-ssd for SSD, pd-balanced for balanced)
+        varType: string
+        required: true
+      - name: boot_disk_type
+        description: Type of boot disk (pd-standard for HDD, pd-ssd for SSD, pd-balanced for balanced)
+        varType: string
+        required: true
+      - name: boot_disk_size
+        description: Boot disk size in GiB
+        varType: number
+        defaultValue: 30
+      - name: source_image
+        description: GCE image for boot disk (packer-built image for Marketplace)
+        varType: string
+        required: true
+        defaultValue: projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-9-x86-64-20251010
+      - name: subnet_cidr
+        description: CIDR block for subnet
+        varType: string
+        required: true
+      - name: ssh_source_ranges
+        description: CIDR blocks allowed to SSH
+        varType: list(string)
+        required: true
+      - name: grafana_source_ranges
+        description: CIDR blocks allowed to access Grafana
+        varType: list(string)
+        required: true
+      - name: use_static_ip
+        description: Use static external IP address
+        varType: bool
+        required: true
+      - name: ssh_public_key
+        description: SSH public key for instance access
+        varType: string
+        required: true
+      - name: grafana_password
+        description: Grafana admin password
+        varType: string
+        required: true
+      - name: postgres_ai_api_key
+        description: PostgresAI API key for report uploads
+        varType: string
+        defaultValue: ""
+      - name: enable_demo_db
+        description: Enable demo Postgres database for testing
+        varType: bool
+        defaultValue: false
+      - name: postgres_ai_version
+        description: postgres_ai version (git tag or branch)
+        varType: string
+        defaultValue: 0.9
+    outputs:
+      - name: data_disk_name
+        description: Name of the data disk
+      - name: deployment_info
+        description: Deployment information
+      - name: external_ip
+        description: External IP address
+      - name: grafana_credentials
+        description: Grafana credentials
+      - name: grafana_url
+        description: Grafana URL
+      - name: instance_name
+        description: Name of the Compute Engine instance
+      - name: next_steps
+        description: Next steps after deployment
+      - name: ssh_command
+        description: SSH command to connect

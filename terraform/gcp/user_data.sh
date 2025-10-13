@@ -55,46 +55,28 @@ if [ -b "$DATA_DISK" ]; then
   chown postgres_ai:postgres_ai /mnt/data
 fi
 
-# Clone repository
+# Clone repository (specific version)
 cd /home/postgres_ai
 if [ ! -d "postgres_ai" ]; then
-  git clone https://github.com/postgres-ai/postgres_ai.git
+  git clone --branch ${postgres_ai_version} https://github.com/postgres-ai/postgres_ai.git
 fi
 cd postgres_ai
 chown -R postgres_ai:postgres_ai /home/postgres_ai
 
-# Create .env file for docker-compose
+# Create .env file for docker-compose with secure permissions
+umask 077
 cat > .env <<ENV_EOF
-GRAFANA_PASSWORD=${grafana_password}
+GF_SECURITY_ADMIN_PASSWORD=${grafana_password}
 ENV_EOF
 
-# Configure monitoring instances
-%{ if length(monitoring_instances) > 0 }
+# Configure monitoring instances via injected template
 cat > instances.yml <<'INSTANCES_EOF'
-%{ for instance in monitoring_instances ~}
-- name: ${instance.name}
-  conn_str: ${instance.conn_str}
-  preset_metrics: full
-  custom_metrics:
-  is_enabled: true
-  group: default
-  custom_tags:
-    env: ${instance.environment}
-    cluster: ${instance.cluster}
-    node_name: ${instance.node_name}
-    sink_type: ~sink_type~
-%{ endfor ~}
-INSTANCES_EOF
-%{ else }
-cat > instances.yml <<'INSTANCES_EOF'
-# PostgreSQL instances to monitor
-# Add your instances using: ./postgres_ai add-instance
+${instances_yml}INSTANCES_EOF
 
-INSTANCES_EOF
-%{ endif }
-
-# Configure .pgwatch-config
+# Configure .pgwatch-config with secure permissions
 cat > .pgwatch-config <<'PGWATCH_EOF'
+# Ensure secure permissions on sensitive files
+chmod 600 .env .pgwatch-config
 prometheus:
   sink_db_conn_str: "host=sink-postgres port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
   instance_conn_str: "host=pgwatch-prometheus port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
@@ -154,10 +136,21 @@ systemctl start postgres-ai
 # Wait for services to be healthy
 sleep 30
 
-# Reset Grafana admin password to match terraform config
+# Reset Grafana admin password to match terraform config (API via stdin)
 echo "Setting Grafana admin password..."
 cd /home/postgres_ai/postgres_ai
-docker exec grafana-with-datasources grafana-cli admin reset-admin-password "${grafana_password}" 2>/dev/null || true
+for i in {1..30}; do
+  if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+cat <<API_EOF | curl -X PUT http://localhost:3000/api/admin/users/1/password \
+  -H "Content-Type: application/json" \
+  -u admin:admin \
+  -d @- > /dev/null 2>&1 || true
+{"password":"${grafana_password}"}
+API_EOF
 
 echo "Installation complete!"
 echo "Access Grafana at: http://$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google"):3000"
