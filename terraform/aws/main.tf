@@ -114,7 +114,7 @@ resource "aws_security_group" "main" {
   }
 
   # Grafana (optional, only if allowed_cidr_blocks is not empty)
-  # If empty, use SSH tunnel: ssh -i ~/.ssh/key.pem -L 3000:localhost:3000 ubuntu@<instance-ip>
+  # If empty, use SSH tunnel: ssh -i ~/.ssh/key.pem -NL 3000:localhost:3000 ubuntu@<instance-ip>
   dynamic "ingress" {
     for_each = length(var.allowed_cidr_blocks) > 0 ? [1] : []
     content {

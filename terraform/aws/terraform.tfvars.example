@@ -34,10 +34,10 @@
 # ]
 
 # CIDR blocks for Grafana access
-# allowed_cidr_blocks = [
-#   "0.0.0.0/0"       # WARNING: Allows access from anywhere - NOT RECOMMENDED
-#   # "1.2.3.4/32"    # Replace with YOUR actual IP (or leave empty [] for SSH tunnel)
-# ]
+# IMPORTANT: Empty list [] = NO direct access (SSH tunnel required, most secure)
+# allowed_cidr_blocks = []            # No direct access, SSH tunnel only (recommended)
+# allowed_cidr_blocks = ["1.2.3.4/32"]  # Replace with YOUR actual IP for direct access
+# allowed_cidr_blocks = ["0.0.0.0/0"]   # WARNING: Allows access from anywhere - NOT RECOMMENDED
 
 # Allocate Elastic IP for stable address
 # use_elastic_ip = true

@@ -30,7 +30,7 @@ Uncomment and set all required parameters:
 - `data_volume_size` - data disk size in GiB
 - `data_volume_type` / `root_volume_type` - volume types (gp3, st1, sc1)
 - `allowed_ssh_cidr` - CIDR blocks for SSH access (use `["YOUR_IP/32"]`, get IP: `curl ifconfig.me`)
-- `allowed_cidr_blocks` - CIDR blocks for Grafana (use `[]` for SSH tunnel only - most secure)
+- `allowed_cidr_blocks` - CIDR blocks for Grafana (use `[]` to disable direct access = SSH tunnel only, most secure)
 - `use_elastic_ip` - allocate Elastic IP (true/false)
 - `grafana_password` - Grafana admin password
 - `bind_host` - port binding for internal services (optional, defaults to `"127.0.0.1:"`)
@@ -88,7 +88,7 @@ terraform output grafana_access_hint
 
 ```bash
 # Create SSH tunnel
-ssh -i ~/.ssh/postgres-ai-key.pem -L 3000:localhost:3000 ubuntu@$(terraform output -raw public_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem -NL 3000:localhost:3000 ubuntu@$(terraform output -raw public_ip)
 
 # Open browser
 open http://localhost:3000

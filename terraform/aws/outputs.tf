@@ -39,7 +39,7 @@ output "grafana_access_hint" {
   
   Grafana Access: SSH Tunnel Required
   
-  Your configuration uses SSH tunnel for security.
+  Your configuration disables direct access (allowed_cidr_blocks is empty).
   
   Step 1: Create SSH tunnel
     ssh -i ~/.ssh/${var.ssh_key_name}.pem -NL 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
@@ -93,7 +93,7 @@ output "next_steps" {
 Deployment complete
 
 Grafana Access: SSH Tunnel Required
-  Step 1: ssh -i ~/.ssh/${var.ssh_key_name}.pem -L 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
+  Step 1: ssh -i ~/.ssh/${var.ssh_key_name}.pem -NL 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
   Step 2: Open http://localhost:3000
   Login: monitor / (see terraform.tfvars)
 

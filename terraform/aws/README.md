@@ -50,7 +50,7 @@ data_volume_size     = 50
 data_volume_type     = "gp3"  # gp3 (SSD), st1 (HDD), sc1 (HDD)
 root_volume_type     = "gp3"
 allowed_ssh_cidr     = ["YOUR_IP/32"]  # Replace with your actual IP address
-allowed_cidr_blocks  = []              # Empty for SSH tunnel only (most secure)
+allowed_cidr_blocks  = []              # Empty list = no direct access, SSH tunnel required (most secure)
 use_elastic_ip       = true
 grafana_password     = "YourSecurePassword123!"
 ```
@@ -90,7 +90,7 @@ data_volume_size     = 100
 data_volume_type     = "gp3"
 root_volume_type     = "gp3"
 allowed_ssh_cidr     = ["YOUR_IP/32"]  # Replace with your actual IP
-allowed_cidr_blocks  = []              # SSH tunnel only (most secure)
+allowed_cidr_blocks  = []              # Empty list = no direct access (most secure)
 use_elastic_ip       = true
 grafana_password     = "SecurePassword123!"
 
@@ -135,7 +135,7 @@ terraform output grafana_access_hint
 
 ```bash
 # Create SSH tunnel
-ssh -i ~/.ssh/postgres-ai-key.pem -L 3000:localhost:3000 ubuntu@$(terraform output -raw public_ip)
+ssh -i ~/.ssh/postgres-ai-key.pem -NL 3000:localhost:3000 ubuntu@$(terraform output -raw public_ip)
 
 # Open browser
 open http://localhost:3000
@@ -212,14 +212,14 @@ sudo docker-compose up -d
 1. **Most secure setup (SSH tunnel only)**:
 ```hcl
 allowed_ssh_cidr     = ["your.ip.address/32"]
-allowed_cidr_blocks  = []  # No direct Grafana access
+allowed_cidr_blocks  = []  # Empty list = no direct access to Grafana from anywhere
 bind_host            = "127.0.0.1:"
 grafana_bind_host    = "127.0.0.1:"
 ```
 
 Access Grafana via SSH tunnel:
 ```bash
-ssh -i ~/.ssh/key.pem -L 3000:localhost:3000 ubuntu@instance-ip
+ssh -i ~/.ssh/key.pem -NL 3000:localhost:3000 ubuntu@instance-ip
 ```
 
 2. **Production with direct Grafana access**:
@@ -286,7 +286,7 @@ ssh ubuntu@your-ip "sudo docker ps -a"
 grep allowed_cidr_blocks terraform.tfvars
 
 # If empty, use SSH tunnel
-ssh -i ~/.ssh/key.pem -L 3000:localhost:3000 ubuntu@your-ip
+ssh -i ~/.ssh/key.pem -NL 3000:localhost:3000 ubuntu@your-ip
 # Then open http://localhost:3000
 
 # Check Security Group
