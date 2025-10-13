@@ -26,6 +26,9 @@ datasources:
       queryTimeout: '5s'
       timeInterval: '5s'
       httpMethod: 'POST'
+  
+# CloudWatch datasource will be added here if AWS credentials are configured
+~CLOUDWATCH_DATASOURCE~
 
   - name: Infinity
     type: yesoreyeram-infinity-datasource

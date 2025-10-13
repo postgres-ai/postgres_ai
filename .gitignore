@@ -28,9 +28,10 @@ pids
 *.seed
 *.pid.lock
 
-# Generated config files (these are created by the sources-generator)
+# Generated config files (these are created by the sources-generator and datasource-generator)
 config/pgwatch-postgres/sources.yml
 config/pgwatch-prometheus/sources.yml
+config/grafana/provisioning/datasources/datasources.processed.yml
 
 # Volume data (if accidentally committed)
 data/

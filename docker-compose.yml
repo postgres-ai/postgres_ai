@@ -18,6 +18,45 @@ services:
       echo 'Generated sources.yml files for both postgres and prometheus'
       "
 
+  # Datasource Generator - Generates datasources.yml with optional CloudWatch configuration
+  datasource-generator:
+    image: alpine:3.22.0
+    container_name: datasource-generator
+    working_dir: /app
+    volumes:
+      - ./.pgwatch-config:/app/.pgwatch-config:ro
+      - ./config/grafana/provisioning/datasources/datasources.yml:/app/datasources.template:ro
+      - ./config/grafana/provisioning/datasources:/app/output
+    command: >
+      sh -c "
+      echo 'Processing Grafana datasources configuration...' &&
+      if [ -f /app/.pgwatch-config ] && grep -q '^aws_access_key=' /app/.pgwatch-config && grep -q '^aws_secret_key=' /app/.pgwatch-config; then
+        AWS_ACCESS_KEY=$$(grep '^aws_access_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
+        AWS_SECRET_KEY=$$(grep '^aws_secret_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
+        AWS_REGION=$$(grep '^aws_region=' /app/.pgwatch-config | cut -d'=' -f2-) &&
+        AWS_REGION=$${AWS_REGION:-us-east-1} &&
+        echo 'AWS credentials found, enabling CloudWatch datasource' &&
+        grep -B 9999 '~CLOUDWATCH_DATASOURCE~' /app/datasources.template | grep -v '~CLOUDWATCH_DATASOURCE~' > /app/output/datasources.processed.yml &&
+        echo '  - name: CloudWatch-RDS' >> /app/output/datasources.processed.yml &&
+        echo '    type: cloudwatch' >> /app/output/datasources.processed.yml &&
+        echo '    access: proxy' >> /app/output/datasources.processed.yml &&
+        echo '    jsonData:' >> /app/output/datasources.processed.yml &&
+        echo '      authType: keys' >> /app/output/datasources.processed.yml &&
+        echo \"      defaultRegion: $$AWS_REGION\" >> /app/output/datasources.processed.yml &&
+        echo '      customMetricsNamespaces: AWS/RDS' >> /app/output/datasources.processed.yml &&
+        echo '    secureJsonData:' >> /app/output/datasources.processed.yml &&
+        echo \"      accessKey: $$AWS_ACCESS_KEY\" >> /app/output/datasources.processed.yml &&
+        echo \"      secretKey: $$AWS_SECRET_KEY\" >> /app/output/datasources.processed.yml &&
+        echo '    isDefault: false' >> /app/output/datasources.processed.yml &&
+        echo '    editable: true' >> /app/output/datasources.processed.yml &&
+        grep -A 9999 '~CLOUDWATCH_DATASOURCE~' /app/datasources.template | grep -v '~CLOUDWATCH_DATASOURCE~' >> /app/output/datasources.processed.yml
+      else
+        echo 'AWS credentials not configured, CloudWatch datasource disabled' &&
+        grep -v '~CLOUDWATCH_DATASOURCE~' /app/datasources.template > /app/output/datasources.processed.yml
+      fi &&
+      echo 'Datasources configuration generated successfully'
+      "
+
   # Target Database - The PostgreSQL database being monitored
   target-db:
     image: postgres:15
@@ -105,10 +144,12 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./config/grafana/provisioning/datasources/datasources.processed.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards
       - ./config/grafana/provisioning/grafana.ini:/etc/grafana/grafana.ini
     depends_on:
+      - datasource-generator
       - sink-postgres
       - sink-prometheus
   flask-backend:

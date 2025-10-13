@@ -78,6 +78,11 @@ show_help() {
     echo "  show-key                       Show current API key (masked)"
     echo "  remove-key                     Remove stored API key"
     echo ""
+    echo "AWS CLOUDWATCH MANAGEMENT:"
+    echo "  add-aws-credentials <access_key> <secret_key> [region]    Add AWS credentials for CloudWatch datasource"
+    echo "  show-aws-credentials           Show current AWS credentials (masked)"
+    echo "  remove-aws-credentials         Remove stored AWS credentials"
+    echo ""
     echo "GRAFANA PASSWORD MANAGEMENT:"
     echo "  generate-grafana-password      Generate secure password for Grafana"
     echo "  show-grafana-credentials       Show current Grafana credentials"
@@ -118,6 +123,11 @@ show_help() {
     echo "  $0 add-instance              # Interactively add a new PostgreSQL instance"
     echo "  $0 test-instance prod-db     # Test connection to 'prod-db' instance"
     echo "  $0 remove-instance old-db    # Remove 'old-db' instance"
+    echo ""
+    echo "AWS CLOUDWATCH EXAMPLES:"
+    echo "  $0 add-aws-credentials AKIAIOSFODNN7EXAMPLE wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY us-east-1"
+    echo "  $0 show-aws-credentials      # Display masked AWS credentials"
+    echo "  $0 remove-aws-credentials    # Disable CloudWatch datasource"
     echo ""
     echo "WORKFLOW:"
     echo "  QUICKSTART (RECOMMENDED):"
@@ -678,6 +688,94 @@ remove_api_key() {
 get_api_key() {
     if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
         grep "^api_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2
+    fi
+}
+
+# Add AWS credentials to configuration
+add_aws_credentials() {
+    local access_key="$1"
+    local secret_key="$2"
+    local region="${3:-us-east-1}"
+    
+    if [ -z "$access_key" ] || [ -z "$secret_key" ]; then
+        log_error "Please provide both AWS access key and secret key"
+        echo "Usage: $0 add-aws-credentials <access_key> <secret_key> [region]"
+        echo "  region defaults to us-east-1 if not specified"
+        exit 1
+    fi
+    
+    # Create config file if it doesn't exist
+    touch "$SCRIPT_DIR/.pgwatch-config"
+    
+    # Remove existing AWS credentials if present
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep -v "^aws_access_key=" "$SCRIPT_DIR/.pgwatch-config" | grep -v "^aws_secret_key=" | grep -v "^aws_region=" > "$SCRIPT_DIR/.pgwatch-config.tmp" || true
+        mv "$SCRIPT_DIR/.pgwatch-config.tmp" "$SCRIPT_DIR/.pgwatch-config"
+    fi
+    
+    # Add the new AWS credentials
+    echo "aws_access_key=$access_key" >> "$SCRIPT_DIR/.pgwatch-config"
+    echo "aws_secret_key=$secret_key" >> "$SCRIPT_DIR/.pgwatch-config"
+    echo "aws_region=$region" >> "$SCRIPT_DIR/.pgwatch-config"
+    
+    log_success "AWS credentials added successfully"
+    log_info "CloudWatch datasource will be enabled on next restart"
+    log_info "Region: $region"
+}
+
+# Show AWS credentials (masked for security)
+show_aws_credentials() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        local access_key=$(grep "^aws_access_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        local region=$(grep "^aws_region=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        
+        if [ -n "$access_key" ]; then
+            local masked_key="${access_key:0:4}$( printf '%*s' $((${#access_key} - 8)) '' | tr ' ' '*' )${access_key: -4}"
+            log_info "CloudWatch Configuration:"
+            echo "  AWS Access Key: $masked_key"
+            echo "  AWS Region:     ${region:-us-east-1}"
+            log_success "CloudWatch datasource is configured"
+        else
+            log_warning "No AWS credentials configured"
+            log_info "CloudWatch datasource is disabled"
+        fi
+    else
+        log_warning "No AWS credentials configured"
+        log_info "CloudWatch datasource is disabled"
+    fi
+}
+
+# Remove AWS credentials from configuration
+remove_aws_credentials() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep -v "^aws_access_key=" "$SCRIPT_DIR/.pgwatch-config" | grep -v "^aws_secret_key=" | grep -v "^aws_region=" > "$SCRIPT_DIR/.pgwatch-config.tmp" || true
+        mv "$SCRIPT_DIR/.pgwatch-config.tmp" "$SCRIPT_DIR/.pgwatch-config"
+        log_success "AWS credentials removed successfully"
+        log_info "CloudWatch datasource will be disabled on next restart"
+    else
+        log_warning "No AWS credentials configured"
+    fi
+}
+
+# Get AWS credentials from configuration
+get_aws_access_key() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep "^aws_access_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2
+    fi
+}
+
+get_aws_secret_key() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        grep "^aws_secret_key=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2
+    fi
+}
+
+get_aws_region() {
+    if [ -f "$SCRIPT_DIR/.pgwatch-config" ]; then
+        local region=$(grep "^aws_region=" "$SCRIPT_DIR/.pgwatch-config" 2>/dev/null | cut -d'=' -f2)
+        echo "${region:-us-east-1}"
+    else
+        echo "us-east-1"
     fi
 }
 
@@ -2074,6 +2172,15 @@ main() {
             ;;
         "remove-key")
             remove_api_key
+            ;;
+        "add-aws-credentials")
+            add_aws_credentials "$2" "$3" "$4"
+            ;;
+        "show-aws-credentials")
+            show_aws_credentials
+            ;;
+        "remove-aws-credentials")
+            remove_aws_credentials
             ;;
         "generate-grafana-password")
             generate_grafana_password

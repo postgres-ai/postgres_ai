@@ -184,6 +184,11 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 
 # Health check
 ./postgres_ai health
+
+# AWS CloudWatch integration (optional)
+./postgres_ai add-aws-credentials <access_key> <secret_key> [region]
+./postgres_ai show-aws-credentials
+./postgres_ai remove-aws-credentials
 ```
 
 ## 🌐 Access points
@@ -205,6 +210,32 @@ Technical URLs (for advanced users):
 
 ## 🔑 PostgresAI access token
 Get your access token at [PostgresAI](https://postgres.ai) for automated report uploads and advanced analysis.
+
+## ☁️ AWS CloudWatch integration (optional)
+
+If you're monitoring AWS RDS Postgres instances, you can enable CloudWatch datasource to correlate RDS metrics with postgres_ai monitoring data.
+
+**Enable CloudWatch datasource:**
+
+```bash
+./postgres_ai add-aws-credentials <YOUR_AWS_ACCESS_KEY> <YOUR_AWS_SECRET_KEY> us-east-1
+./postgres_ai restart
+```
+
+The CloudWatch datasource is disabled by default and will only be activated when AWS credentials are configured. Your credentials are stored securely in `.pgwatch-config` (which is git-ignored).
+
+**Manage AWS credentials:**
+
+```bash
+# View current configuration (credentials are masked)
+./postgres_ai show-aws-credentials
+
+# Remove AWS credentials (disables CloudWatch datasource)
+./postgres_ai remove-aws-credentials
+./postgres_ai restart
+```
+
+**Note:** AWS credentials are optional and only needed if you want to view AWS RDS CloudWatch metrics alongside postgres_ai monitoring data in Grafana.
 
 ## 🛣️ Roadmap
 
