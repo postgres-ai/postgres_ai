@@ -32,6 +32,45 @@ output "grafana_credentials" {
   sensitive = true
 }
 
+output "grafana_access_hint" {
+  description = "How to access Grafana based on your configuration"
+  value = var.grafana_bind_host == "127.0.0.1:" || length(var.allowed_cidr_blocks) == 0 ? (
+    <<-EOT
+  
+  Grafana Access: SSH Tunnel Required
+  
+  Your configuration disables direct access (allowed_cidr_blocks is empty).
+  
+  Step 1: Create SSH tunnel
+    ssh -i ~/.ssh/${var.ssh_key_name}.pem -NL 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
+  
+  Step 2: Open browser
+    http://localhost:3000
+  
+  Login:
+    Username: monitor
+    Password: (see terraform.tfvars)
+  
+  EOT
+  ) : (
+    <<-EOT
+  
+  Grafana Access: Direct URL
+  
+  Your configuration allows direct access.
+  
+  URL: http://${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}:3000
+  
+  Login:
+    Username: monitor
+    Password: (see terraform.tfvars)
+  
+  Allowed from: ${join(", ", var.allowed_cidr_blocks)}
+  
+  EOT
+  )
+}
+
 output "deployment_info" {
   description = "Deployment information"
   value = {
@@ -48,21 +87,42 @@ output "deployment_info" {
 
 output "next_steps" {
   description = "Next steps after deployment"
-  value       = <<-EOT
+  value = var.grafana_bind_host == "127.0.0.1:" || length(var.allowed_cidr_blocks) == 0 ? (
+    <<-EOT
+
+Deployment complete
+
+Grafana Access: SSH Tunnel Required
+  Step 1: ssh -i ~/.ssh/${var.ssh_key_name}.pem -NL 3000:localhost:3000 ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
+  Step 2: Open http://localhost:3000
+  Login: monitor / (see terraform.tfvars)
+
+Monitoring: ${length(var.monitoring_instances)} instance(s) configured
+
+SSH: ssh -i ~/.ssh/${var.ssh_key_name}.pem ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
+
+For detailed access instructions: terraform output grafana_access_hint
+For deployment info: terraform output deployment_info
+
+EOT
+  ) : (
+    <<-EOT
 
 Deployment complete
 
 Grafana URL: http://${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}:3000
-Username: monitor
-Password: see terraform.tfvars
+  Username: monitor
+  Password: see terraform.tfvars
+  Allowed from: ${join(", ", var.allowed_cidr_blocks)}
 
-Monitoring: ${length(var.monitoring_instances)} instance(s)
-API key: see terraform.tfvars
+Monitoring: ${length(var.monitoring_instances)} instance(s) configured
 
 SSH: ssh -i ~/.ssh/${var.ssh_key_name}.pem ubuntu@${var.use_elastic_ip ? aws_eip.main[0].public_ip : aws_instance.main.public_ip}
 
-For detailed deployment info: terraform output deployment_info
+For detailed access instructions: terraform output grafana_access_hint
+For deployment info: terraform output deployment_info
 
 EOT
+  )
 }
 
