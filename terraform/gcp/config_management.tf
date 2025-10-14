@@ -9,16 +9,8 @@
 # 2. Update monitoring_instances in terraform.tfvars
 # 3. Run terraform apply - instances.yml will be automatically updated on the server
 
-terraform {
-  required_providers {
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.0"
-    }
-  }
-}
-
 # Generate instances.yml from template
+# NOTE: local provider is declared in main.tf
 resource "local_sensitive_file" "instances_config" {
   content  = templatefile("${path.module}/instances.yml.tpl", {
     monitoring_instances = var.monitoring_instances

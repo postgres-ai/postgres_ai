@@ -52,14 +52,14 @@ spec:
         varType: string
         required: true
       - name: boot_disk_size
-        description: Boot disk size in GiB
+        description: Boot disk size in GiB (minimum 50)
         varType: number
-        defaultValue: 30
+        defaultValue: 50
       - name: source_image
         description: GCE image for boot disk (packer-built image for Marketplace)
         varType: string
         required: true
-        defaultValue: projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-9-x86-64-20251010
+        defaultValue: projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-10-x86-64-20251014
       - name: subnet_cidr
         description: CIDR block for subnet
         varType: string
@@ -95,7 +95,23 @@ spec:
       - name: postgres_ai_version
         description: postgres_ai version (git tag or branch)
         varType: string
-        defaultValue: 0.9
+        defaultValue: "0.10"
+      - name: bind_host
+        description: "Bind host for internal service ports (127.0.0.1: for localhost only, empty for all interfaces)"
+        varType: string
+        defaultValue: "127.0.0.1:"
+      - name: grafana_bind_host
+        description: "Bind host for Grafana port (127.0.0.1: for localhost only, empty for all interfaces)"
+        varType: string
+        defaultValue: "127.0.0.1:"
+      - name: db_connection_string
+        description: "Postgres connection string WITHOUT password (e.g., postgresql://postgres_ai_mon@host:5432/dbname). Leave empty to configure after deployment. User setup: https://postgres.ai/docs/monitoring/how-to-install#create-monitoring-user"
+        varType: string
+        defaultValue: ""
+      - name: db_password
+        description: Password for database user
+        varType: string
+        defaultValue: ""
     outputs:
       - name: data_disk_name
         description: Name of the data disk

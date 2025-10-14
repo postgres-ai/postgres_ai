@@ -5,6 +5,11 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    # local provider needed for config_management.tf (excluded from Marketplace package)
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -119,11 +124,16 @@ resource "google_compute_instance" "main" {
   }
 
   metadata_startup_script = templatefile("${path.module}/user_data.sh", {
-    grafana_password     = var.grafana_password
-    postgres_ai_api_key  = var.postgres_ai_api_key
-    enable_demo_db       = var.enable_demo_db
-    postgres_ai_version  = var.postgres_ai_version
-    instances_yml        = templatefile("${path.module}/instances.yml.tpl", {
+    grafana_password       = var.grafana_password
+    postgres_ai_api_key    = var.postgres_ai_api_key
+    enable_demo_db         = var.enable_demo_db
+    postgres_ai_version    = var.postgres_ai_version
+    bind_host              = var.bind_host
+    grafana_bind_host      = var.grafana_bind_host
+    db_connection_string   = var.db_connection_string
+    db_password            = var.db_password
+    environment            = var.environment
+    instances_yml          = templatefile("${path.module}/instances.yml.tpl", {
       monitoring_instances = var.monitoring_instances
       enable_demo_db       = var.enable_demo_db
     })

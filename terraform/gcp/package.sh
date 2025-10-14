@@ -26,7 +26,10 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 echo "Copy files"
-cp main.tf "${TEMP_DIR}/"
+
+# Copy main.tf and remove local provider for Marketplace compatibility
+sed '/# local provider needed for config_management.tf/,/}/d' main.tf > "${TEMP_DIR}/main.tf"
+
 cp variables.tf "${TEMP_DIR}/"
 cp outputs.tf "${TEMP_DIR}/"
 cp user_data.sh "${TEMP_DIR}/"
@@ -38,7 +41,7 @@ cp validate.sh "${TEMP_DIR}/" || true
 cp marketplace_test.tfvars "$TEMP_DIR/" || true
 
 # NOTE: config_management.tf is intentionally excluded from Marketplace package
-# It contains local and terraform_data providers which are not allowed in GCP Marketplace
+# It contains local provider which is not allowed in GCP Marketplace
 # For regular Terraform deployments, use config_management.tf from the source repository
 
 # Include example tfvars if present

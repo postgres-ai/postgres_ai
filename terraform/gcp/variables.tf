@@ -1,6 +1,7 @@
 variable "goog_cm_deployment_name" {
-  description = "Deployment name from GCP Marketplace (auto-generated)"
+  description = "Deployment name from GCP Marketplace (auto-generated). For non-Marketplace deployments, use any unique name."
   type        = string
+  default     = "postgres-ai-monitoring"
 }
 
 variable "project_id" {
@@ -53,7 +54,7 @@ variable "boot_disk_size" {
 variable "source_image" {
   description = "GCE image for boot disk (leave empty outside Marketplace)"
   type        = string
-  default     = "projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-9-x86-64-20251010"
+  default     = "projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-10-x86-64-20251014"
 }
 
 variable "subnet_cidr" {
@@ -103,7 +104,32 @@ variable "enable_demo_db" {
 variable "postgres_ai_version" {
   description = "postgres_ai version (git tag or branch)"
   type        = string
-  default     = "main"
+  default     = "0.10"
+}
+
+variable "bind_host" {
+  description = "Bind host for internal service ports (127.0.0.1: for localhost only, empty for all interfaces)"
+  type        = string
+  default     = "127.0.0.1:"
+}
+
+variable "grafana_bind_host" {
+  description = "Bind host for Grafana port (127.0.0.1: for localhost only, empty for all interfaces)"
+  type        = string
+  default     = "127.0.0.1:"
+}
+
+variable "db_connection_string" {
+  description = "Postgres connection string WITHOUT password (e.g., postgresql://postgres_ai_mon@host:5432/dbname)"
+  type        = string
+  default     = ""
+}
+
+variable "db_password" {
+  description = "Password for database user specified in connection string"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "monitoring_instances" {

@@ -21,8 +21,8 @@ spec:
           name: postgres_ai_version
           title: PostgresAI Version
           enumValueLabels:
-            - label: "0.9"
-              value: "0.9"
+            - label: "0.10"
+              value: "0.10"
         boot_disk_type:
           name: boot_disk_type
           title: Boot Disk Type
@@ -35,7 +35,10 @@ spec:
               value: pd-standard
         boot_disk_size:
           name: boot_disk_size
-          title: Boot Disk Size
+          title: Boot Disk Size (GiB)
+          tooltip: Minimum 50 GiB required by the image
+          regexValidation: ^([5-9][0-9]|[1-9][0-9]{2,})$
+          validation: Boot disk size must be at least 50 GiB
         data_disk_type:
           name: data_disk_type
           title: Data Disk Type
@@ -92,8 +95,8 @@ spec:
           name: source_image
           title: Source Image
           enumValueLabels:
-            - label: postgres_ai-monitoring
-              value: projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-9-x86-64-20251010
+            - label: postgres_ai-monitoring-0.10
+              value: projects/postgresai-public-374205/global/images/postgres-ai-monitoring-0-10-x86-64-20251014
           xGoogleProperty:
             type: ET_GCE_DISK_IMAGE    
         ssh_public_key:
@@ -114,3 +117,18 @@ spec:
           tooltip: Must be in the same region as specified above (e.g., if region is us-central1, zone should be us-central1-a, us-central1-b, etc.)
           xGoogleProperty:
             type: ET_GCE_ZONE
+        db_connection_string:
+          name: db_connection_string
+          title: Database Connection String
+          tooltip: "Connection string WITHOUT password. Format: postgresql://user@host:port/dbname. Leave empty to configure after deployment. User setup: https://postgres.ai/docs/monitoring/how-to-install#create-monitoring-user"
+        db_password:
+          name: db_password
+          title: Database Password
+        bind_host:
+          name: bind_host
+          title: Bind Host (internal services)
+          tooltip: "Prefix for ports, e.g., '127.0.0.1:' to bind locally only; empty to expose on all interfaces"
+        grafana_bind_host:
+          name: grafana_bind_host
+          title: Grafana Bind Host
+          tooltip: "Prefix for Grafana port, e.g., '127.0.0.1:' to restrict to localhost; empty to expose publicly (use firewall)"

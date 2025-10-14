@@ -16,6 +16,9 @@
 # GCP SETTINGS
 # -------------------------
 
+# Deployment name (optional, defaults to 'postgres-ai-monitoring')
+# goog_cm_deployment_name = "my-postgres-monitoring"
+
 # GCP region
 # region = "us-central1"
 
@@ -63,8 +66,8 @@
 # OPTIONAL PARAMETERS
 # -------------------------
 
-# postgres_ai version (optional, defaults to 'main')
-# postgres_ai_version = "0.9"  # branch or tag
+# postgres_ai version (optional, defaults to '0.10')
+# postgres_ai_version = "0.10"  # branch or tag
 
 # PostgreSQL instances to monitor (optional)
 # monitoring_instances = [
@@ -96,6 +99,16 @@
 
 # Enable demo database (optional)
 # enable_demo_db = false
+
+# Database connection (optional, can be configured after deployment)
+# db_connection_string = "postgresql://postgres_ai_mon@your-db-host:5432/yourdb"
+# db_password = "your-secure-password"
+
+# Service port binding (optional, defaults to localhost for security)
+# bind_host = "127.0.0.1:"  # Bind internal services to localhost only
+# grafana_bind_host = "127.0.0.1:"  # Bind Grafana to localhost (use SSH tunnel)
+# To expose Grafana publicly (not recommended without firewall):
+# grafana_bind_host = ""
 
 
 # CONFIGURATION EXAMPLES
