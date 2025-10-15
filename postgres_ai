@@ -150,6 +150,9 @@ show_help() {
     echo "  flask-pgss-api      Flask API backend"
     echo "  postgres-reports    PostgreSQL reports generator (runs every 24h)"
     echo "  target-db           Demo PostgreSQL database (--demo mode only)"
+    echo "  cadvisor            Container resource monitoring (auto-started)"
+    echo "  node-exporter       System resource monitoring (auto-started)"
+    echo "  postgres-exporter   Database sink monitoring (auto-started)"
     echo
     echo "ACCESS URLS:"
     echo "  🚀 MAIN: Grafana Dashboard: http://localhost:3000 (demouser/demopwd)"
@@ -1052,6 +1055,7 @@ quickstart_setup() {
     echo "  ✅ Prometheus metrics storage"
     echo "  ✅ Flask API backend"
     echo "  ✅ Automated report generation (every 24h)"
+    echo "  ✅ Host stats monitoring (CPU, memory, disk, I/O)"
     echo
     
     if [ "$demo_mode" = false ]; then
@@ -1096,11 +1100,12 @@ start_services() {
     else
         log_info "Starting Postgres AI monitoring services (production mode)..."
         log_info "Target demo database not included - add your own PostgreSQL instances to monitor"
-        # Start all services except target-db
-        $compose_cmd -f "$COMPOSE_FILE" up -d sources-generator sink-postgres sink-prometheus pgwatch-postgres pgwatch-prometheus grafana flask-backend postgres-reports 
+        # Start all services except target-db, including host stats monitoring
+        $compose_cmd -f "$COMPOSE_FILE" up -d sources-generator sink-postgres sink-prometheus pgwatch-postgres pgwatch-prometheus grafana flask-backend postgres-reports cadvisor node-exporter postgres-exporter
     fi
     
     log_success "Services started!"
+    log_info "Host stats monitoring (cAdvisor, Node Exporter, Postgres Exporter) enabled automatically"
     log_info "Waiting for services to be ready..."
     sleep 10
     
@@ -1955,6 +1960,9 @@ show_access_info() {
     echo "  PGWatch Prometheus: http://localhost:58089"
     echo "  Prometheus:         http://localhost:59090"
     echo "  Flask API:          http://localhost:55000"
+    echo "  cAdvisor (host stats): http://localhost:58081"
+    echo "  Node Exporter:      http://localhost:59100/metrics"
+    echo "  Postgres Exporter:  http://localhost:59187/metrics"
     
     # Show target database only in demo mode
     if is_demo_mode; then

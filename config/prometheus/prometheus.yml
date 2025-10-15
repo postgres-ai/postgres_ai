@@ -8,9 +8,34 @@ rule_files:
   # - "second_rules.yml"
 
 scrape_configs:
+  # Main monitoring target: pgwatch metrics
   - job_name: 'pgwatch-prometheus'
     static_configs:
       - targets: ['pgwatch-prometheus:9091']
     scrape_interval: 30s      # How often to scrape PGWatch
     scrape_timeout: 25s       # Timeout for each scrape (must be < scrape_interval)
-    metrics_path: /pgwatch 
+    metrics_path: /pgwatch
+
+  # Self-monitoring: Prometheus internal metrics
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+
+  # Self-monitoring: Docker container metrics via cAdvisor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+  # Self-monitoring: System metrics via Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # Self-monitoring: Sink Postgres database metrics
+  - job_name: 'postgres-sink'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s

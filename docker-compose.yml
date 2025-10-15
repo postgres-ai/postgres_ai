@@ -187,6 +187,52 @@ services:
       done
       "
 
+  # Self-monitoring components
+
+  # cAdvisor - Container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    container_name: cadvisor
+    privileged: true
+    ports:
+      - "58081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - '--housekeeping_interval=30s'
+      - '--docker_only=true'
+      - '--disable_metrics=percpu,sched,tcp,udp,hugetlb,referenced_memory,cpu_topology,resctrl'
+      - '--store_container_labels=false'
+
+  # Node Exporter - System metrics
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    ports:
+      - "59100:9100"
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+  # Postgres Exporter - Metrics for sink-postgres database
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: postgres-exporter-sink
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@sink-postgres:5432/measurements?sslmode=disable"
+    ports:
+      - "59187:9187"
+    depends_on:
+      - sink-postgres
+    restart: unless-stopped
+
 volumes:
   target_db_data:
   sink_postgres_data:
