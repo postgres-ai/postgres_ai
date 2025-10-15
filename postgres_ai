@@ -342,6 +342,9 @@ cleanup_existing_containers() {
         "target-db"
         "postgres-reports"
         "sources-generator"
+        "cadvisor"
+        "node-exporter"
+        "postgres-exporter-sink"
     )
     
     # Check for containers matching our service names
