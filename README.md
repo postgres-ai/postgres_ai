@@ -211,7 +211,7 @@ node ./cli/bin/postgres-ai.js --help
 
 # local dev: install aliases into PATH
 npm --prefix cli install --no-audit --no-fund
-npm --prefix cli link
+npm link ./cli
 postgres-ai --help
 pgai --help
 
