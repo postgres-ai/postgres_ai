@@ -26,6 +26,6 @@ npx -y -p file:cli postgres-ai --help
 ```
 
 ### env vars for integration tests
-- `PGAIS_API_KEY`
-- `PGAIS_BASE_URL` (default `https://v2.postgres.ai/api/general/`)
+- `PGAI_API_KEY`
+- `PGAI_BASE_URL` (default `https://v2.postgres.ai/api/general/`)
 

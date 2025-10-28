@@ -5,9 +5,9 @@ const { Command } = require("commander");
 const pkg = require("../package.json");
 
 function getConfig(opts) {
-  const apiKey = opts.apiKey || process.env.PGAIS_API_KEY || "";
+  const apiKey = opts.apiKey || process.env.PGAI_API_KEY || "";
   const baseUrl =
-    opts.baseUrl || process.env.PGAIS_BASE_URL || "https://v2.postgres.ai/api/general/";
+    opts.baseUrl || process.env.PGAI_BASE_URL || "https://v2.postgres.ai/api/general/";
   return { apiKey, baseUrl };
 }
 
@@ -17,10 +17,10 @@ program
   .name("postgres-ai")
   .description("PostgresAI CLI")
   .version(pkg.version)
-  .option("--api-key <key>", "API key (overrides PGAIS_API_KEY)")
+  .option("--api-key <key>", "API key (overrides PGAI_API_KEY)")
   .option(
     "--base-url <url>",
-    "API base URL (overrides PGAIS_BASE_URL)",
+    "API base URL (overrides PGAI_BASE_URL)",
     "https://v2.postgres.ai/api/general/"
   );
 
