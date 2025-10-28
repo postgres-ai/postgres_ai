@@ -32,4 +32,24 @@ cli:node:smoke:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+cli:node:integration:
+  stage: test
+  image: node:20-alpine
+  variables:
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+    - node -v && npm -v
+    - npm --prefix cli install --no-audit --no-fund
+  script:
+    - |
+      set -euo pipefail
+      : "${PGAIS_API_KEY:?PGAIS_API_KEY is required for integration tests}"
+      BASE_URL="${PGAIS_BASE_URL:-https://console-dev.postgres.ai}"
+      echo "Using BASE_URL=$BASE_URL"
+      # Placeholder: run CLI help until API-backed commands are implemented
+      node ./cli/bin/postgres-ai.js --help
+  rules:
+    - if: '$PGAIS_API_KEY'
+
 
