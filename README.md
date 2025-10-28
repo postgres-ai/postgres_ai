@@ -203,6 +203,18 @@ Technical URLs (for advanced users):
 ./postgres_ai help
 ```
 
+### Node.js CLI (early preview)
+
+```bash
+# run without install
+node ./cli/bin/postgres-ai.js --help
+
+# or install globally after publish (planned)
+# npm i -g @postgresai/cli
+# postgres-ai --help
+# pgai --help
+```
+
 ## 🔑 PostgresAI access token
 Get your access token at [PostgresAI](https://postgres.ai) for automated report uploads and advanced analysis.
 
