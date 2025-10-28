@@ -29,7 +29,7 @@ cli:e2e:dind:
     DOCKER_TLS_CERTDIR: ""
     GIT_STRATEGY: fetch
   before_script:
-    - apk add --no-cache bash curl git coreutils docker-cli docker-compose
+    - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
     - docker version
   script:
     - set -euo pipefail
