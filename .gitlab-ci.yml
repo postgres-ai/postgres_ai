@@ -76,6 +76,13 @@ cli:node:smoke:
     - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
     - command -v postgres-ai && postgres-ai --help
     - command -v pgai && pgai --help
+    - rm -f .pgwatch-config
+    - node ./cli/bin/postgres-ai.js add-key "test_key_1234567890"
+    - node ./cli/bin/postgres-ai.js show-key | grep -E "\*{2,}|[0-9]{4}$"
+    - grep -q '^api_key=' .pgwatch-config
+    - node ./cli/bin/postgres-ai.js remove-key
+    - if grep -q '^api_key=' .pgwatch-config; then echo 'key not removed' && exit 1; fi
+    - node ./cli/bin/postgres-ai.js list-instances | head -n 1 || true
   rules:
     - if: '$CI_COMMIT_BRANCH'
 

@@ -58,7 +58,34 @@ program.command("shell <service>").description("open service shell").action(stub
 program.command("check").description("system readiness check").action(stub("check"));
 
 // Instance management
-program.command("list-instances").description("list instances").action(stub("list-instances"));
+program
+  .command("list-instances")
+  .description("list instances")
+  .action(async () => {
+    const fs = require("fs");
+    const path = require("path");
+    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    if (!fs.existsSync(instancesPath)) {
+      console.error(`instances.yml not found in ${process.cwd()}`);
+      process.exitCode = 1;
+      return;
+    }
+    const content = fs.readFileSync(instancesPath, "utf8");
+    const lines = content.split(/\r?\n/);
+    let currentName = "";
+    let printed = false;
+    for (const line of lines) {
+      const m = line.match(/^-[\t ]*name:[\t ]*(.+)$/);
+      if (m) {
+        currentName = m[1].trim();
+        console.log(`Instance: ${currentName}`);
+        printed = true;
+      }
+    }
+    if (!printed) {
+      console.log("No instances found");
+    }
+  });
 program
   .command("add-instance [connStr] [name]")
   .description("add instance")
@@ -73,9 +100,70 @@ program
   .action(stub("test-instance"));
 
 // API key and grafana
-program.command("add-key <apiKey>").description("store API key").action(stub("add-key"));
-program.command("show-key").description("show API key (masked)").action(stub("show-key"));
-program.command("remove-key").description("remove API key").action(stub("remove-key"));
+program
+  .command("add-key <apiKey>")
+  .description("store API key")
+  .action(async (apiKey) => {
+    const fs = require("fs");
+    const path = require("path");
+    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, "utf8") : "";
+    const filtered = existing
+      .split(/\r?\n/)
+      .filter((l) => !/^api_key=/.test(l))
+      .join("\n")
+      .replace(/\n+$/g, "");
+    const next = filtered.length ? `${filtered}\napi_key=${apiKey}\n` : `api_key=${apiKey}\n`;
+    fs.writeFileSync(cfgPath, next, "utf8");
+    console.log("API key saved to .pgwatch-config");
+  });
+
+program
+  .command("show-key")
+  .description("show API key (masked)")
+  .action(async () => {
+    const fs = require("fs");
+    const path = require("path");
+    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    if (!fs.existsSync(cfgPath)) {
+      console.log("No API key configured");
+      return;
+    }
+    const content = fs.readFileSync(cfgPath, "utf8");
+    const m = content.match(/^api_key=(.+)$/m);
+    if (!m) {
+      console.log("No API key configured");
+      return;
+    }
+    const key = m[1].trim();
+    if (!key) {
+      console.log("No API key configured");
+      return;
+    }
+    const mask = (k) => (k.length <= 8 ? "****" : `${k.slice(0, 4)}${"*".repeat(k.length - 8)}${k.slice(-4)}`);
+    console.log(`Current API key: ${mask(key)}`);
+  });
+
+program
+  .command("remove-key")
+  .description("remove API key")
+  .action(async () => {
+    const fs = require("fs");
+    const path = require("path");
+    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    if (!fs.existsSync(cfgPath)) {
+      console.log("No API key configured");
+      return;
+    }
+    const content = fs.readFileSync(cfgPath, "utf8");
+    const filtered = content
+      .split(/\r?\n/)
+      .filter((l) => !/^api_key=/.test(l))
+      .join("\n")
+      .replace(/\n+$/g, "\n");
+    fs.writeFileSync(cfgPath, filtered, "utf8");
+    console.log("API key removed");
+  });
 program
   .command("generate-grafana-password")
   .description("generate Grafana password")
