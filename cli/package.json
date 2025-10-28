@@ -4,6 +4,14 @@
   "description": "PostgresAI CLI (Node.js)",
   "license": "MIT",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/postgres-ai/postgres_ai.git"
+  },
+  "homepage": "https://gitlab.com/postgres-ai/postgres_ai",
+  "bugs": {
+    "url": "https://gitlab.com/postgres-ai/postgres_ai/-/issues"
+  },
   "bin": {
     "postgres-ai": "./bin/postgres-ai.js",
     "pgai": "./bin/postgres-ai.js"
@@ -17,6 +25,9 @@
   },
   "dependencies": {
     "commander": "^12.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
 

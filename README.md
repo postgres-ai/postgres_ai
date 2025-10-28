@@ -209,6 +209,12 @@ Technical URLs (for advanced users):
 # run without install
 node ./cli/bin/postgres-ai.js --help
 
+# local dev: install aliases into PATH
+npm --prefix cli install --no-audit --no-fund
+npm --prefix cli link
+postgres-ai --help
+pgai --help
+
 # or install globally after publish (planned)
 # npm i -g @postgresai/cli
 # postgres-ai --help
