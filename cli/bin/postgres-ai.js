@@ -16,9 +16,7 @@ const program = new Command();
 program
   .name("postgres-ai")
   .description("PostgresAI CLI")
-  .version(pkg.version);
-
-program
+  .version(pkg.version)
   .option("--api-key <key>", "API key (overrides PGAIS_API_KEY)")
   .option(
     "--base-url <url>",
@@ -27,6 +25,7 @@ program
   );
 
 const stub = (name) => async () => {
+  // Temporary stubs until Node parity is implemented
   console.error(`${name}: not implemented in Node CLI yet; use bash CLI for now`);
   process.exitCode = 2;
 };
@@ -88,4 +87,4 @@ program
 
 program.parseAsync(process.argv);
 
-
+ 
