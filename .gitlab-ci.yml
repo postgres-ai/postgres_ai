@@ -72,9 +72,10 @@ cli:node:smoke:
     - node ./cli/bin/postgres-ai.js --help
     - node ./cli/bin/postgres-ai.js status --help
     - node ./cli/bin/postgres-ai.js list-instances --help
-    - npm --prefix cli link
-    - postgres-ai --help
-    - pgai --help
+    - npm install -g ./cli
+    - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
+    - command -v postgres-ai && postgres-ai --help
+    - command -v pgai && pgai --help
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
