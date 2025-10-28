@@ -854,34 +854,32 @@ metrics:
   pg_stat_statements:
     sqls:
       11: |
-        WITH ranked_statements as (
+        WITH aggregated_statements as (
           select
-            pg_get_userbyid(userid) as user,
             pg_database.datname,
-            pg_stat_statements.queryid ,
-            pg_stat_statements.plans as plans_total,
-            pg_stat_statements.calls,
-            pg_stat_statements.total_exec_time as exec_time_total,
-            pg_stat_statements.total_plan_time as plan_time_total,
-            pg_stat_statements.rows,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
-            pg_stat_statements.blk_read_time as block_read_total,
-            pg_stat_statements.blk_write_time as block_write_total,
-            pg_stat_statements.wal_records,
-            pg_stat_statements.wal_fpi,
-            pg_stat_statements.wal_bytes,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written,
-            row_number() over (order by total_exec_time desc) as rn
+            pg_stat_statements.queryid,
+            sum(pg_stat_statements.plans) as plans_total,
+            sum(pg_stat_statements.calls) as calls,
+            sum(pg_stat_statements.total_exec_time) as exec_time_total,
+            sum(pg_stat_statements.total_plan_time) as plan_time_total,
+            sum(pg_stat_statements.rows) as rows,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
+            sum(pg_stat_statements.blk_read_time) as block_read_total,
+            sum(pg_stat_statements.blk_write_time) as block_write_total,
+            sum(pg_stat_statements.wal_records) as wal_records,
+            sum(pg_stat_statements.wal_fpi) as wal_fpi,
+            sum(pg_stat_statements.wal_bytes) as wal_bytes,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written
             from pg_stat_statements
             join pg_database
             on pg_database.oid = pg_stat_statements.dbid
+            group by pg_database.datname, pg_stat_statements.queryid
         )
         select
-          ranked_statements.user as tag_user,
           datname as tag_datname,
           queryid as tag_queryid,
           calls::int8 as calls,
@@ -900,36 +898,34 @@ metrics:
           wal_bytes::int8 as wal_bytes,
           temp_bytes_read::int8 as temp_bytes_read,
           temp_bytes_written::int8 as temp_bytes_written
-          from ranked_statements
+          from aggregated_statements
       17: |
-        WITH ranked_statements as (
+        WITH aggregated_statements as (
           select
-            pg_get_userbyid(userid) as user,
             pg_database.datname,
-            pg_stat_statements.queryid ,
-            pg_stat_statements.plans as plans_total,
-            pg_stat_statements.calls,
-            pg_stat_statements.total_exec_time as exec_time_total,
-            pg_stat_statements.total_plan_time as plan_time_total,
-            pg_stat_statements.rows,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
-            pg_stat_statements.shared_blk_read_time as block_read_total,
-            pg_stat_statements.shared_blk_write_time as block_write_total,
-            pg_stat_statements.wal_records,
-            pg_stat_statements.wal_fpi,
-            pg_stat_statements.wal_bytes,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written,
-            row_number() over (order by total_exec_time desc) as rn
+            pg_stat_statements.queryid,
+            sum(pg_stat_statements.plans) as plans_total,
+            sum(pg_stat_statements.calls) as calls,
+            sum(pg_stat_statements.total_exec_time) as exec_time_total,
+            sum(pg_stat_statements.total_plan_time) as plan_time_total,
+            sum(pg_stat_statements.rows) as rows,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
+            sum(pg_stat_statements.shared_blk_read_time) as block_read_total,
+            sum(pg_stat_statements.shared_blk_write_time) as block_write_total,
+            sum(pg_stat_statements.wal_records) as wal_records,
+            sum(pg_stat_statements.wal_fpi) as wal_fpi,
+            sum(pg_stat_statements.wal_bytes) as wal_bytes,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written
             from pg_stat_statements
             join pg_database
             on pg_database.oid = pg_stat_statements.dbid
+            group by pg_database.datname, pg_stat_statements.queryid
         )
         select
-          ranked_statements.user as tag_user,
           datname as tag_datname,
           queryid as tag_queryid,
           calls::int8 as calls,
@@ -948,7 +944,7 @@ metrics:
           wal_bytes::int8 as wal_bytes,
           temp_bytes_read::int8 as temp_bytes_read,
           temp_bytes_written::int8 as temp_bytes_written
-          from ranked_statements
+          from aggregated_statements
     gauges:
       - calls
       - plans_total
@@ -1650,7 +1646,8 @@ metrics:
             pg_relation_size(i.indexrelid) as index_bytes,
             ci.relpages,
             (case when a.amname = 'btree' then true else false end) as idx_is_btree,
-            array_to_string(i.indclass, ', ') as opclasses
+            array_to_string(i.indclass, ', ') as opclasses,
+            si.stats_reset
           from pg_index i
             join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
             join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
@@ -1679,6 +1676,7 @@ metrics:
             i.relpages,
             idx_is_btree,
             i.opclasses,
+            i.stats_reset,
             (
               select count(1)
               from fk_indexes fi
@@ -1705,7 +1703,8 @@ metrics:
           relpages,
           idx_is_btree,
           opclasses AS tag_opclasses,
-          supports_fk
+          supports_fk,
+          extract(epoch from stats_reset) as stats_reset_epoch
         from index_ratios
         where
           idx_scan = 0
@@ -1857,6 +1856,54 @@ metrics:
         order by grp, index_size_bytes desc;
     gauges:
       - '*'
+  
+  stats_reset:
+    description: >
+      This metric tracks when statistics were last reset for indexes and tables.
+      It provides visibility into the freshness of statistics data, which is essential for understanding
+      the reliability of index and table usage metrics. A recent reset time indicates that usage statistics
+      may not reflect long-term patterns.
+    sqls:
+      11: |
+        with index_stats as (
+          select
+            schemaname as schema_name,
+            indexrelname as index_name,
+            relname as table_name,
+            'index' as stat_type,
+            stats_reset,
+            extract(epoch from stats_reset) as stats_reset_epoch,
+            extract(epoch from now() - stats_reset) as seconds_since_reset
+          from pg_stat_user_indexes
+          where stats_reset is not null
+        ), table_stats as (
+          select
+            schemaname as schema_name,
+            null::text as index_name,
+            relname as table_name,
+            'table' as stat_type,
+            stats_reset,
+            extract(epoch from stats_reset) as stats_reset_epoch,
+            extract(epoch from now() - stats_reset) as seconds_since_reset
+          from pg_stat_user_tables
+          where stats_reset is not null
+        ), combined_stats as (
+          select * from index_stats
+          union all
+          select * from table_stats
+        )
+        select
+          schema_name as tag_schema_name,
+          table_name as tag_table_name,
+          coalesce(index_name, 'table') as tag_index_name,
+          stat_type as tag_stat_type,
+          stats_reset_epoch,
+          seconds_since_reset
+        from combined_stats
+        order by stats_reset desc;
+    gauges:
+      - 'stats_reset_epoch'
+      - 'seconds_since_reset'
   
   archive_lag:
     description: >
@@ -2091,6 +2138,8 @@ metrics:
           tidx_blks_hit
         from
           pg_statio_all_tables
+        order by pg_total_relation_size((schemaname || '.' || relname)::regclass) desc
+        limit 5000;
     gauges:
       - '*'
 
@@ -2133,6 +2182,7 @@ presets:
       redundant_indexes: 10800
       unused_indexes: 7200
       rarely_used_indexes: 10800
+      stats_reset: 3600
       archive_lag: 15
       pg_vacuum_progress: 30
   pg_index_pilot:

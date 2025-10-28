@@ -19,7 +19,7 @@ Built for senior DBAs, SREs, and AI systems who need rapid root cause analysis a
 - **Dual-purpose architecture**: Built for both human experts and AI systems requiring structured performance data
 - **Comprehensive query analysis**: Complete `pg_stat_statements` metrics with historical trends and plan variations
 - **Active Session History**: Postgres's answer to Oracle ASH and AWS RDS Performance Insights
-- **Hybrid storage**: Prometheus for metrics, Postgres for query texts — best of both worlds
+- **Hybrid storage**: Victoria Metrics (Prometheus-compatible) for metrics, Postgres for query texts — best of both worlds
 
 > 📖 **Read more**: [postgres_ai monitoring v0.7 announcement](https://postgres.ai/blog/20250722-postgres-ai-v0-7-expert-level-postgresql-monitoring) - detailed technical overview and architecture decisions.
 
@@ -48,7 +48,7 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 ## 🏗️ Architecture
 
 - **Collection**: pgwatch v3 (by Cybertec) for metrics gathering
-- **Storage**: Prometheus for time-series data + Postgres for query texts
+- **Storage**: Victoria Metrics for time-series data + Postgres for query texts
 - **Visualization**: Grafana with expert-designed dashboards
 - **Analysis**: Structured data output for AI system integration
 
@@ -71,7 +71,7 @@ This monitoring solution exposes several ports that **MUST** be properly firewal
 - **Port 3000** (Grafana) - Contains sensitive database metrics and dashboards
 - **Port 58080** (PGWatch Postgres) - Database monitoring interface  
 - **Port 58089** (PGWatch Prometheus) - Database monitoring interface
-- **Port 59090** (Prometheus) - Metrics storage and queries
+- **Port 59090** (Victoria Metrics) - Metrics storage and queries
 - **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
 - **Port 55000** (Flask API) - Backend API service
 - **Port 55432** (Demo DB) - When using `--demo` option
@@ -98,6 +98,8 @@ grant pg_monitor to postgres_ai_mon;
 grant select on pg_stat_statements to postgres_ai_mon;
 grant select on pg_stat_database to postgres_ai_mon;
 grant select on pg_stat_user_tables to postgres_ai_mon;
+grant select on pg_stat_user_indexes to postgres_ai_mon;
+grant select on pg_index to postgres_ai_mon;
 
 -- Create a public view for pg_statistic access (required for bloat metrics on user schemas)
 create view public.pg_statistic as
@@ -195,7 +197,7 @@ After running quickstart:
 Technical URLs (for advanced users):
 - **Demo DB**: postgresql://postgres:postgres@localhost:55432/target_database
 - **Monitoring**: http://localhost:58080 (PGWatch)
-- **Metrics**: http://localhost:59090 (Prometheus)
+- **Metrics**: http://localhost:59090 (Victoria Metrics)
 
 ## 📖 Help
 
