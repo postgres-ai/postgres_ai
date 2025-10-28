@@ -1,0 +1,23 @@
+{
+  "name": "@postgresai/cli",
+  "version": "0.1.0",
+  "description": "PostgresAI CLI (Node.js)",
+  "license": "MIT",
+  "private": false,
+  "bin": {
+    "postgres-ai": "./bin/postgres-ai.js",
+    "pgai": "./bin/postgres-ai.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node ./bin/postgres-ai.js --help"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  }
+}
+
+

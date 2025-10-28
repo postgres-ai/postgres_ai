@@ -18,4 +18,18 @@ cli:smoke:test:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+cli:node:smoke:
+  stage: test
+  image: node:20-alpine
+  variables:
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+  script:
+    - node -v && npm -v
+    - npm --prefix cli install --no-audit --no-fund
+    - node ./cli/bin/postgres-ai.js --help
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
 
