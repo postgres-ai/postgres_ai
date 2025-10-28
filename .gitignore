@@ -28,6 +28,11 @@ pids
 *.seed
 *.pid.lock
 
+# Node artifacts
+node_modules/
+cli/node_modules/
+cli/lib/node_modules/
+
 # Generated config files (these are created by the sources-generator)
 config/pgwatch-postgres/sources.yml
 config/pgwatch-prometheus/sources.yml
