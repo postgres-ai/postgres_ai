@@ -29,6 +29,8 @@ cli:node:smoke:
     - node -v && npm -v
     - npm --prefix cli install --no-audit --no-fund
     - node ./cli/bin/postgres-ai.js --help
+    - node ./cli/bin/postgres-ai.js status --help
+    - node ./cli/bin/postgres-ai.js list-instances --help
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
@@ -45,7 +47,7 @@ cli:node:integration:
     - |
       set -euo pipefail
       : "${PGAIS_API_KEY:?PGAIS_API_KEY is required for integration tests}"
-      BASE_URL="${PGAIS_BASE_URL:-https://console-dev.postgres.ai}"
+      BASE_URL="${PGAIS_BASE_URL:-https://v2.postgres.ai/api/general/}"
       echo "Using BASE_URL=$BASE_URL"
       # Placeholder: run CLI help until API-backed commands are implemented
       node ./cli/bin/postgres-ai.js --help
