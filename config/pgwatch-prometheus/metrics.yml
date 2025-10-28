@@ -900,7 +900,7 @@ metrics:
           temp_bytes_written::int8 as temp_bytes_written
           from aggregated_statements
       17: |
-        WITH aggregated_statements as (
+        with aggregated_statements as (
           select
             pg_database.datname,
             pg_stat_statements.queryid,
