@@ -30,6 +30,38 @@ const stub = (name) => async () => {
   process.exitCode = 2;
 };
 
+function resolvePaths() {
+  const path = require("path");
+  const fs = require("fs");
+  const projectDir = process.cwd();
+  const composeFile = path.resolve(projectDir, "docker-compose.yml");
+  const instancesFile = path.resolve(projectDir, "instances.yml");
+  return { fs, path, projectDir, composeFile, instancesFile };
+}
+
+function getComposeCmd() {
+  const { spawnSync } = require("child_process");
+  const tryCmd = (cmd, args) => spawnSync(cmd, args, { stdio: "ignore" }).status === 0;
+  if (tryCmd("docker-compose", ["version"])) return ["docker-compose"];
+  if (tryCmd("docker", ["compose", "version"])) return ["docker", "compose"];
+  return null;
+}
+
+async function runCompose(args) {
+  const { composeFile } = resolvePaths();
+  const cmd = getComposeCmd();
+  if (!cmd) {
+    console.error("docker compose not found (need docker-compose or docker compose)");
+    process.exitCode = 1;
+    return 1;
+  }
+  const { spawn } = require("child_process");
+  return new Promise((resolve) => {
+    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], { stdio: "inherit" });
+    child.on("close", (code) => resolve(code));
+  });
+}
+
 program.command("help", { isDefault: true }).description("show help").action(() => {
   program.outputHelp();
 });
@@ -40,14 +72,40 @@ program.command("install").description("install project").action(stub("install")
 program.command("start").description("start services").action(stub("start"));
 program.command("stop").description("stop services").action(stub("stop"));
 program.command("restart").description("restart services").action(stub("restart"));
-program.command("status").description("show service status").action(stub("status"));
+program
+  .command("status")
+  .description("show service status")
+  .action(async () => {
+    const code = await runCompose(["ps"]);
+    if (code !== 0) process.exitCode = code;
+  });
 program
   .command("logs [service]")
   .description("show logs for all or specific service")
   .action(stub("logs"));
 program.command("health").description("health check").action(stub("health"));
-program.command("config").description("show configuration").action(stub("config"));
-program.command("update-config").description("apply configuration").action(stub("update-config"));
+program
+  .command("config")
+  .description("show configuration")
+  .action(async () => {
+    const { fs, projectDir, composeFile, instancesFile } = resolvePaths();
+    console.log(`Project Directory: ${projectDir}`);
+    console.log(`Docker Compose File: ${composeFile}`);
+    console.log(`Instances File: ${instancesFile}`);
+    if (fs.existsSync(instancesFile)) {
+      console.log("\nInstances configuration:\n");
+      const text = fs.readFileSync(instancesFile, "utf8");
+      process.stdout.write(text);
+      if (!/\n$/.test(text)) console.log();
+    }
+  });
+program
+  .command("update-config")
+  .description("apply configuration (generate sources)")
+  .action(async () => {
+    const code = await runCompose(["run", "--rm", "sources-generator"]);
+    if (code !== 0) process.exitCode = code;
+  });
 program.command("update").description("update project").action(stub("update"));
 program
   .command("reset [service]")
