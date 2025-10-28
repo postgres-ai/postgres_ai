@@ -1,4 +1,4 @@
-## cli developer quickstart
+## CLI developer quickstart
 
 ### run without install
 ```bash
