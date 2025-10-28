@@ -18,6 +18,47 @@ cli:smoke:test:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+cli:e2e:dind:
+  stage: test
+  image: alpine:3.20
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    GIT_STRATEGY: fetch
+  before_script:
+    - apk add --no-cache bash curl git coreutils docker-cli docker-compose
+    - docker version
+  script:
+    - set -euo pipefail
+    - bash -n ./postgres_ai
+    - ./postgres_ai check || true
+    - ./postgres_ai quickstart --demo -y
+    - timeout 60 ./postgres_ai status
+    - timeout 10 ./postgres_ai logs grafana || true
+    - ./postgres_ai config
+    - ./postgres_ai update-config
+    - ./postgres_ai list-instances || true
+    - ./postgres_ai add-key "test_key_123"
+    - ./postgres_ai show-key
+    - ./postgres_ai remove-key
+    - ./postgres_ai generate-grafana-password || true
+    - ./postgres_ai show-grafana-credentials || true
+    - ./postgres_ai add-instance "postgresql://postgres:postgres@target-db:5432/target_database" "ci-demo"
+    - ./postgres_ai test-instance "ci-demo" || true
+    - printf "y\n" | ./postgres_ai reset sink-postgres
+    - ./postgres_ai restart
+    - ./postgres_ai stop
+    - ./postgres_ai start
+    - printf "y\n" | ./postgres_ai reset
+    - ./postgres_ai clean
+  after_script:
+    - docker ps -a || true
+    - docker system prune -af || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
 cli:node:smoke:
   stage: test
   image: node:20-alpine
