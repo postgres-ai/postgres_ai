@@ -86,6 +86,30 @@ cli:node:smoke:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+cli:node:e2e:dind:
+  stage: test
+  image: node:20-alpine
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+    - apk add --no-cache docker-cli docker-compose
+    - node -v && npm -v && docker version
+    - npm --prefix cli install --no-audit --no-fund
+  script:
+    - node ./cli/bin/postgres-ai.js update-config
+    - node ./cli/bin/postgres-ai.js start
+    - sleep 8
+    - node ./cli/bin/postgres-ai.js status
+    - node ./cli/bin/postgres-ai.js stop
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
 cli:node:integration:
   stage: test
   image: node:20-alpine

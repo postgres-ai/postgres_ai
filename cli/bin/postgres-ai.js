@@ -69,9 +69,27 @@ program.command("help", { isDefault: true }).description("show help").action(() 
 // Service lifecycle
 program.command("quickstart").description("complete setup").action(stub("quickstart"));
 program.command("install").description("install project").action(stub("install"));
-program.command("start").description("start services").action(stub("start"));
-program.command("stop").description("stop services").action(stub("stop"));
-program.command("restart").description("restart services").action(stub("restart"));
+program
+  .command("start")
+  .description("start services")
+  .action(async () => {
+    const code = await runCompose(["up", "-d"]);
+    if (code !== 0) process.exitCode = code;
+  });
+program
+  .command("stop")
+  .description("stop services")
+  .action(async () => {
+    const code = await runCompose(["down"]);
+    if (code !== 0) process.exitCode = code;
+  });
+program
+  .command("restart")
+  .description("restart services")
+  .action(async () => {
+    const code = await runCompose(["restart"]);
+    if (code !== 0) process.exitCode = code;
+  });
 program
   .command("status")
   .description("show service status")
@@ -81,8 +99,13 @@ program
   });
 program
   .command("logs [service]")
+  .option("-f, --follow", "follow logs", false)
   .description("show logs for all or specific service")
-  .action(stub("logs"));
+  .action(async (service, opts) => {
+    const args = ["logs"]; if (opts.follow) args.push("-f"); if (service) args.push(service);
+    const code = await runCompose(args);
+    if (code !== 0) process.exitCode = code;
+  });
 program.command("health").description("health check").action(stub("health"));
 program
   .command("config")
@@ -112,8 +135,20 @@ program
   .description("reset all or specific service")
   .action(stub("reset"));
 program.command("clean").description("cleanup artifacts").action(stub("clean"));
-program.command("shell <service>").description("open service shell").action(stub("shell"));
-program.command("check").description("system readiness check").action(stub("check"));
+program
+  .command("shell <service>")
+  .description("open service shell")
+  .action(async (service) => {
+    const code = await runCompose(["exec", "-T", service, "/bin/sh"]);
+    if (code !== 0) process.exitCode = code;
+  });
+program
+  .command("check")
+  .description("system readiness check")
+  .action(async () => {
+    const code = await runCompose(["ps"]);
+    if (code !== 0) process.exitCode = code;
+  });
 
 // Instance management
 program
