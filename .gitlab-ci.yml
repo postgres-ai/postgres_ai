@@ -1,0 +1,21 @@
+stages:
+  - test
+
+cli:smoke:test:
+  stage: test
+  image: alpine:3.20
+  variables:
+    GIT_STRATEGY: fetch
+  before_script:
+    - apk add --no-cache bash curl git docker-cli docker-compose
+  script:
+    - bash -n ./postgres_ai
+    - |
+      set -euo pipefail
+      out=$(./postgres_ai help | tr -d "\r")
+      echo "$out" | grep -q "Postgres AI CLI"
+      echo "$out" | grep -q "COMMANDS:"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+
