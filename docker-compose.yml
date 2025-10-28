@@ -65,7 +65,7 @@ services:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - "-storageDataPath=/victoria-metrics-data"
-      - "-retentionPeriod=200h"
+      - "-retentionPeriod=336h"
       - "-httpListenAddr=:9090"
       - "-promscrape.config=/etc/prometheus/prometheus.yml"
       - "-promscrape.config.strictParse=false"
