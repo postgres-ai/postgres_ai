@@ -19,6 +19,20 @@ pgai --help  # short alias
 
 ## Quick start
 
+### Authentication
+
+Authenticate via browser to obtain API key:
+```bash
+pgai auth
+```
+
+This will:
+- Open your browser for authentication
+- Prompt you to select an organization
+- Automatically save your API key to `~/.config/postgresai/config.json`
+
+### Start monitoring
+
 Start monitoring with demo database:
 ```bash
 postgres-ai quickstart --demo
@@ -54,14 +68,30 @@ postgres-ai config             # Show current configuration
 postgres-ai check              # Verify prerequisites
 ```
 
-### API key management
+### Authentication and API key management
 ```bash
-postgres-ai add-key <key>      # Store API key
+postgres-ai auth               # Authenticate via browser (recommended)
+postgres-ai add-key <key>      # Manually store API key
 postgres-ai show-key           # Show stored key (masked)
 postgres-ai remove-key         # Remove stored key
 ```
 
-## Environment variables
+## Configuration
+
+The CLI stores configuration in `~/.config/postgresai/config.json` including:
+- API key
+- Base URL
+- Organization ID
+
+### Configuration priority
+
+API key resolution order:
+1. Command line option (`--api-key`)
+2. Environment variable (`PGAI_API_KEY`)
+3. User config file (`~/.config/postgresai/config.json`)
+4. Legacy project config (`.pgwatch-config`)
+
+### Environment variables
 
 - `PGAI_API_KEY` - API key for PostgresAI services
 - `PGAI_BASE_URL` - API endpoint (default: `https://postgres.ai/api/general/`)

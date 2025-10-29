@@ -3,11 +3,30 @@
 
 const { Command } = require("commander");
 const pkg = require("../package.json");
+const config = require("../lib/config");
 
 function getConfig(opts) {
-  const apiKey = opts.apiKey || process.env.PGAI_API_KEY || "";
-  const baseUrl =
-    opts.baseUrl || process.env.PGAI_BASE_URL || "https://postgres.ai/api/general/";
+  // Priority order:
+  // 1. Command line option (--api-key)
+  // 2. Environment variable (PGAI_API_KEY)
+  // 3. User-level config file (~/.config/postgresai/config.json)
+  // 4. Legacy project-local config (.pgwatch-config)
+  
+  let apiKey = opts.apiKey || process.env.PGAI_API_KEY || "";
+  let baseUrl = opts.baseUrl || process.env.PGAI_BASE_URL || "";
+  
+  // Try config file if not provided via CLI or env
+  if (!apiKey || !baseUrl) {
+    const fileConfig = config.readConfig();
+    if (!apiKey) apiKey = fileConfig.apiKey || "";
+    if (!baseUrl) baseUrl = fileConfig.baseUrl || "";
+  }
+  
+  // Default base URL
+  if (!baseUrl) {
+    baseUrl = "https://postgres.ai/api/general/";
+  }
+  
   return { apiKey, baseUrl };
 }
 
@@ -548,7 +567,165 @@ program
     }
   });
 
-// API key and grafana
+// Authentication and API key management
+program
+  .command("auth")
+  .description("authenticate via browser and obtain API key")
+  .option("--port <port>", "local callback server port (default: random)", parseInt)
+  .action(async (opts) => {
+    const pkce = require("../lib/pkce");
+    const authServer = require("../lib/auth-server");
+    const { spawn } = require("child_process");
+    const http = require("https");
+    
+    console.log("Starting authentication flow...\n");
+    
+    // Generate PKCE parameters
+    const params = pkce.generatePKCEParams();
+    const port = opts.port || 8585;
+    const redirectUri = `http://localhost:${port}/callback`;
+    
+    const cfg = getConfig(program.opts());
+    const baseUrl = cfg.baseUrl || "https://postgres.ai/api/general/";
+    const apiBaseUrl = baseUrl.replace(/\/$/, "");
+    
+    // Step 1: Initialize OAuth session on backend
+    console.log("Initializing authentication session...");
+    const initData = JSON.stringify({
+      client_type: "cli",
+      state: params.state,
+      code_challenge: params.codeChallenge,
+      code_challenge_method: params.codeChallengeMethod,
+      redirect_uri: redirectUri,
+    });
+    
+    try {
+      const initUrl = new URL("/rpc/oauth_init", apiBaseUrl);
+      const initReq = http.request(
+        initUrl,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(initData),
+          },
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", async () => {
+            if (res.statusCode !== 200) {
+              console.error(`Failed to initialize auth session: ${res.statusCode}`);
+              console.error(data);
+              process.exitCode = 1;
+              return;
+            }
+            
+            // Step 2: Start local callback server
+            console.log("Starting local callback server...");
+            const serverPromise = authServer.startCallbackServer(port, params.state, 300000);
+            
+            // Step 3: Open browser
+            const webUrl = apiBaseUrl.replace(/\/api\/general\/?$/, "");
+            const authUrl = `${webUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
+            
+            console.log(`\nOpening browser for authentication...`);
+            console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
+            
+            // Open browser (cross-platform)
+            const openCommand = process.platform === "darwin" ? "open" :
+                               process.platform === "win32" ? "start" :
+                               "xdg-open";
+            spawn(openCommand, [authUrl], { detached: true, stdio: "ignore" }).unref();
+            
+            // Step 4: Wait for callback
+            console.log("Waiting for authorization...");
+            try {
+              const { code } = await serverPromise;
+              
+              // Step 5: Exchange code for token
+              console.log("\nExchanging authorization code for API token...");
+              const exchangeData = JSON.stringify({
+                authorization_code: code,
+                code_verifier: params.codeVerifier,
+                state: params.state,
+              });
+              
+              const exchangeUrl = new URL("/rpc/oauth_token_exchange", apiBaseUrl);
+              const exchangeReq = http.request(
+                exchangeUrl,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Content-Length": Buffer.byteLength(exchangeData),
+                  },
+                },
+                (exchangeRes) => {
+                  let exchangeData = "";
+                  exchangeRes.on("data", (chunk) => (exchangeData += chunk));
+                  exchangeRes.on("end", () => {
+                    if (exchangeRes.statusCode !== 200) {
+                      console.error(`Failed to exchange code for token: ${exchangeRes.statusCode}`);
+                      console.error(exchangeData);
+                      process.exitCode = 1;
+                      return;
+                    }
+                    
+                    try {
+                      const result = JSON.parse(exchangeData);
+                      const apiToken = result.api_token;
+                      const orgId = result.org_id;
+                      
+                      // Step 6: Save token to config
+                      config.writeConfig({
+                        apiKey: apiToken,
+                        baseUrl: apiBaseUrl,
+                        orgId: orgId,
+                      });
+                      
+                      console.log("\nAuthentication successful!");
+                      console.log(`API key saved to: ${config.getConfigPath()}`);
+                      console.log(`Organization ID: ${orgId}`);
+                      console.log(`\nYou can now use the CLI without specifying an API key.`);
+                    } catch (err) {
+                      console.error(`Failed to parse response: ${err.message}`);
+                      process.exitCode = 1;
+                    }
+                  });
+                }
+              );
+              
+              exchangeReq.on("error", (err) => {
+                console.error(`Exchange request failed: ${err.message}`);
+                process.exitCode = 1;
+              });
+              
+              exchangeReq.write(exchangeData);
+              exchangeReq.end();
+              
+            } catch (err) {
+              console.error(`\nAuthentication failed: ${err.message}`);
+              process.exitCode = 1;
+            }
+          });
+        }
+      );
+      
+      initReq.on("error", (err) => {
+        console.error(`Failed to connect to API: ${err.message}`);
+        process.exitCode = 1;
+      });
+      
+      initReq.write(initData);
+      initReq.end();
+      
+    } catch (err) {
+      console.error(`Authentication error: ${err.message}`);
+      process.exitCode = 1;
+    }
+  });
+
 program
   .command("add-key <apiKey>")
   .description("store API key")
@@ -571,47 +748,31 @@ program
   .command("show-key")
   .description("show API key (masked)")
   .action(async () => {
-    const fs = require("fs");
-    const path = require("path");
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
-    if (!fs.existsSync(cfgPath)) {
+    const cfg = config.readConfig();
+    if (!cfg.apiKey) {
       console.log("No API key configured");
-      return;
-    }
-    const content = fs.readFileSync(cfgPath, "utf8");
-    const m = content.match(/^api_key=(.+)$/m);
-    if (!m) {
-      console.log("No API key configured");
-      return;
-    }
-    const key = m[1].trim();
-    if (!key) {
-      console.log("No API key configured");
+      console.log(`\nTo authenticate, run: pgai auth`);
       return;
     }
     const mask = (k) => (k.length <= 8 ? "****" : `${k.slice(0, 4)}${"*".repeat(k.length - 8)}${k.slice(-4)}`);
-    console.log(`Current API key: ${mask(key)}`);
+    console.log(`Current API key: ${mask(cfg.apiKey)}`);
+    if (cfg.orgId) {
+      console.log(`Organization ID: ${cfg.orgId}`);
+    }
+    console.log(`Config location: ${config.getConfigPath()}`);
   });
 
 program
   .command("remove-key")
   .description("remove API key")
   .action(async () => {
-    const fs = require("fs");
-    const path = require("path");
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
-    if (!fs.existsSync(cfgPath)) {
+    if (!config.configExists()) {
       console.log("No API key configured");
       return;
     }
-    const content = fs.readFileSync(cfgPath, "utf8");
-    const filtered = content
-      .split(/\r?\n/)
-      .filter((l) => !/^api_key=/.test(l))
-      .join("\n")
-      .replace(/\n+$/g, "\n");
-    fs.writeFileSync(cfgPath, filtered, "utf8");
+    config.deleteConfigKeys(["apiKey", "orgId"]);
     console.log("API key removed");
+    console.log(`\nTo authenticate again, run: pgai auth`);
   });
 program
   .command("generate-grafana-password")
