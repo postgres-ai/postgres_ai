@@ -123,7 +123,52 @@ program
     const code = await runCompose(args);
     if (code !== 0) process.exitCode = code;
   });
-program.command("health").description("health check").action(stub("health"));
+program
+  .command("health")
+  .description("health check")
+  .action(async () => {
+    const { exec } = require("child_process");
+    const util = require("util");
+    const execPromise = util.promisify(exec);
+    
+    console.log("Checking service health...\n");
+    
+    const services = [
+      { name: "Grafana", url: "http://localhost:3000/api/health" },
+      { name: "Prometheus", url: "http://localhost:59090/-/healthy" },
+      { name: "PGWatch (Postgres)", url: "http://localhost:58080/health" },
+      { name: "PGWatch (Prometheus)", url: "http://localhost:58089/health" },
+    ];
+    
+    let allHealthy = true;
+    
+    for (const service of services) {
+      try {
+        const { stdout, stderr } = await execPromise(
+          `curl -sf -o /dev/null -w "%{http_code}" ${service.url}`,
+          { timeout: 5000 }
+        );
+        const code = stdout.trim();
+        if (code === "200") {
+          console.log(`✓ ${service.name}: healthy`);
+        } else {
+          console.log(`✗ ${service.name}: unhealthy (HTTP ${code})`);
+          allHealthy = false;
+        }
+      } catch (error) {
+        console.log(`✗ ${service.name}: unreachable`);
+        allHealthy = false;
+      }
+    }
+    
+    console.log("");
+    if (allHealthy) {
+      console.log("All services are healthy");
+    } else {
+      console.log("Some services are unhealthy");
+      process.exitCode = 1;
+    }
+  });
 program
   .command("config")
   .description("show configuration")
@@ -359,7 +404,36 @@ program
 program
   .command("show-grafana-credentials")
   .description("show Grafana credentials")
-  .action(stub("show-grafana-credentials"));
+  .action(async () => {
+    const fs = require("fs");
+    const path = require("path");
+    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    if (!fs.existsSync(cfgPath)) {
+      console.error("Configuration file not found. Run 'quickstart' first.");
+      process.exitCode = 1;
+      return;
+    }
+    const content = fs.readFileSync(cfgPath, "utf8");
+    const lines = content.split(/\r?\n/);
+    let password = "";
+    for (const line of lines) {
+      const m = line.match(/^grafana_password=(.+)$/);
+      if (m) {
+        password = m[1].trim();
+        break;
+      }
+    }
+    if (!password) {
+      console.error("Grafana password not found in configuration");
+      process.exitCode = 1;
+      return;
+    }
+    console.log("\nGrafana credentials:");
+    console.log("  URL:      http://localhost:3000");
+    console.log("  Username: monitor");
+    console.log(`  Password: ${password}`);
+    console.log("");
+  });
 
 program.parseAsync(process.argv);
 
