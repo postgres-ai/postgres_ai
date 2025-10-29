@@ -21,7 +21,8 @@ const execFilePromise = promisify(execFile);
  */
 interface CliOptions {
   apiKey?: string;
-  baseUrl?: string;
+  apiBaseUrl?: string;
+  uiBaseUrl?: string;
 }
 
 /**
@@ -29,7 +30,6 @@ interface CliOptions {
  */
 interface ConfigResult {
   apiKey: string;
-  baseUrl: string;
 }
 
 /**
@@ -75,23 +75,16 @@ function getConfig(opts: CliOptions): ConfigResult {
   // 2. Environment variable (PGAI_API_KEY)
   // 3. User-level config file (~/.config/postgresai/config.json)
   // 4. Legacy project-local config (.pgwatch-config)
-  
+
   let apiKey = opts.apiKey || process.env.PGAI_API_KEY || "";
-  let baseUrl = opts.baseUrl || process.env.PGAI_BASE_URL || "";
-  
+
   // Try config file if not provided via CLI or env
-  if (!apiKey || !baseUrl) {
+  if (!apiKey) {
     const fileConfig = config.readConfig();
     if (!apiKey) apiKey = fileConfig.apiKey || "";
-    if (!baseUrl) baseUrl = fileConfig.baseUrl || "";
   }
-  
-  // Default base URL
-  if (!baseUrl) {
-    baseUrl = "https://postgres.ai/api/general/";
-  }
-  
-  return { apiKey, baseUrl };
+
+  return { apiKey };
 }
 
 const program = new Command();
@@ -102,9 +95,12 @@ program
   .version(pkg.version)
   .option("--api-key <key>", "API key (overrides PGAI_API_KEY)")
   .option(
-    "--base-url <url>",
-    "API base URL (overrides PGAI_BASE_URL)",
-    "https://postgres.ai/api/general/"
+    "--api-base-url <url>",
+    "API base URL for backend RPC (overrides PGAI_API_BASE_URL)"
+  )
+  .option(
+    "--ui-base-url <url>",
+    "UI base URL for browser routes (overrides PGAI_UI_BASE_URL)"
   );
 
 /**
@@ -662,7 +658,8 @@ program
   .command("auth")
   .description("authenticate via browser and obtain API key")
   .option("--port <port>", "local callback server port (default: random)", parseInt)
-  .action(async (opts: { port?: number }) => {
+  .option("--debug", "enable debug output")
+  .action(async (opts: { port?: number; debug?: boolean }) => {
     const pkce = require("../lib/pkce");
     const authServer = require("../lib/auth-server");
     
@@ -670,10 +667,16 @@ program
     
     // Generate PKCE parameters
     const params = pkce.generatePKCEParams();
+
+    const rootOpts = program.opts<CliOptions>();
+
+    const apiBaseUrl = (rootOpts.apiBaseUrl || process.env.PGAI_API_BASE_URL || "https://postgres.ai/api/general/").replace(/\/$/, "");
+    const uiBaseUrl = (rootOpts.uiBaseUrl || process.env.PGAI_UI_BASE_URL || "https://console.postgres.ai").replace(/\/$/, "");
     
-    const cfg = getConfig(program.opts<CliOptions>());
-    const baseUrl = cfg.baseUrl || "https://postgres.ai/api/general/";
-    const apiBaseUrl = baseUrl.replace(/\/$/, "");
+    if (opts.debug) {
+      console.log(`Debug: Resolved API base URL: ${apiBaseUrl}`);
+      console.log(`Debug: Resolved UI base URL: ${uiBaseUrl}`);
+    }
     
     try {
       // Step 1: Start local callback server FIRST to get actual port
@@ -698,7 +701,14 @@ program
         redirect_uri: redirectUri,
       });
       
-      const initUrl = new URL("/rpc/oauth_init", apiBaseUrl);
+      // Build init URL by appending to the API base path (keep /api/general)
+      const initUrl = new URL(`${apiBaseUrl}/rpc/oauth_init`);
+      
+      if (opts.debug) {
+        console.log(`Debug: Trying to POST to: ${initUrl.toString()}`);
+        console.log(`Debug: Request data: ${initData}`);
+      }
+      
       const initReq = http.request(
         initUrl,
         {
@@ -721,8 +731,11 @@ program
             }
             
             // Step 3: Open browser
-            const webUrl = apiBaseUrl.replace(/\/api\/general\/?$/, "");
-            const authUrl = `${webUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
+            const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
+            
+            if (opts.debug) {
+              console.log(`Debug: Auth URL: ${authUrl}`);
+            }
             
             console.log(`\nOpening browser for authentication...`);
             console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
@@ -746,7 +759,7 @@ program
                 state: params.state,
               });
               
-              const exchangeUrl = new URL("/rpc/oauth_token_exchange", apiBaseUrl);
+              const exchangeUrl = new URL(`${apiBaseUrl}/rpc/oauth_token_exchange`);
               const exchangeReq = http.request(
                 exchangeUrl,
                 {

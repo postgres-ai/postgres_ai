@@ -106,7 +106,42 @@ API key resolution order:
 ### Environment variables
 
 - `PGAI_API_KEY` - API key for PostgresAI services
-- `PGAI_BASE_URL` - API endpoint (default: `https://postgres.ai/api/general/`)
+- `PGAI_API_BASE_URL` - API endpoint for backend RPC (default: `https://postgres.ai/api/general/`)
+- `PGAI_UI_BASE_URL` - UI endpoint for browser routes (default: `https://console.postgres.ai`)
+
+### CLI options
+
+- `--api-base-url <url>` - overrides `PGAI_API_BASE_URL`
+- `--ui-base-url <url>` - overrides `PGAI_UI_BASE_URL`
+
+### Examples
+
+Linux/macOS (bash/zsh):
+
+```bash
+export PGAI_API_BASE_URL=https://v2.postgres.ai/api/general/
+export PGAI_UI_BASE_URL=https://console.postgres.ai
+pgai auth --debug
+```
+
+Windows PowerShell:
+
+```powershell
+$env:PGAI_API_BASE_URL = "https://v2.postgres.ai/api/general/"
+$env:PGAI_UI_BASE_URL = "https://console.postgres.ai"
+pgai auth --debug
+```
+
+Via CLI options (overrides env):
+
+```bash
+pgai auth --debug \
+  --api-base-url https://v2.postgres.ai/api/general/ \
+  --ui-base-url https://console.postgres.ai
+```
+
+Notes:
+- If `PGAI_UI_BASE_URL` is not set, the default is `https://console.postgres.ai`.
 
 ## Requirements
 
