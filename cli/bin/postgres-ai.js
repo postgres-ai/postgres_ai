@@ -191,11 +191,128 @@ program
     const code = await runCompose(["run", "--rm", "sources-generator"]);
     if (code !== 0) process.exitCode = code;
   });
-program.command("update").description("update project").action(stub("update"));
+program
+  .command("update")
+  .description("update project")
+  .action(async () => {
+    const { exec } = require("child_process");
+    const util = require("util");
+    const execPromise = util.promisify(exec);
+    const fs = require("fs");
+    const path = require("path");
+    
+    console.log("Updating PostgresAI monitoring stack...\n");
+    
+    try {
+      // Check if we're in a git repo
+      const gitDir = path.resolve(process.cwd(), ".git");
+      if (!fs.existsSync(gitDir)) {
+        console.error("Not a git repository. Cannot update.");
+        process.exitCode = 1;
+        return;
+      }
+      
+      // Fetch latest changes
+      console.log("Fetching latest changes...");
+      await execPromise("git fetch origin");
+      
+      // Check current branch
+      const { stdout: branch } = await execPromise("git rev-parse --abbrev-ref HEAD");
+      const currentBranch = branch.trim();
+      console.log(`Current branch: ${currentBranch}`);
+      
+      // Pull latest changes
+      console.log("Pulling latest changes...");
+      const { stdout: pullOut } = await execPromise("git pull origin " + currentBranch);
+      console.log(pullOut);
+      
+      // Update Docker images
+      console.log("\nUpdating Docker images...");
+      const code = await runCompose(["pull"]);
+      
+      if (code === 0) {
+        console.log("\n✓ Update completed successfully");
+        console.log("\nTo apply updates, restart services:");
+        console.log("  postgres-ai restart");
+      } else {
+        console.error("\n✗ Docker image update failed");
+        process.exitCode = 1;
+      }
+    } catch (error) {
+      console.error(`Update failed: ${error.message}`);
+      process.exitCode = 1;
+    }
+  });
 program
   .command("reset [service]")
   .description("reset all or specific service")
-  .action(stub("reset"));
+  .action(async (service) => {
+    const readline = require("readline");
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    
+    const question = (prompt) => new Promise((resolve) => rl.question(prompt, resolve));
+    
+    try {
+      if (service) {
+        // Reset specific service
+        console.log(`\nThis will stop '${service}', remove its volume, and restart it.`);
+        console.log("All data for this service will be lost!\n");
+        
+        const answer = await question("Continue? (y/N): ");
+        if (answer.toLowerCase() !== "y") {
+          console.log("Cancelled");
+          rl.close();
+          return;
+        }
+        
+        console.log(`\nStopping ${service}...`);
+        await runCompose(["stop", service]);
+        
+        console.log(`Removing volume for ${service}...`);
+        await runCompose(["rm", "-f", "-v", service]);
+        
+        console.log(`Restarting ${service}...`);
+        const code = await runCompose(["up", "-d", service]);
+        
+        if (code === 0) {
+          console.log(`\n✓ Service '${service}' has been reset`);
+        } else {
+          console.error(`\n✗ Failed to restart '${service}'`);
+          process.exitCode = 1;
+        }
+      } else {
+        // Reset all services
+        console.log("\nThis will stop all services and remove all data!");
+        console.log("Volumes, networks, and containers will be deleted.\n");
+        
+        const answer = await question("Continue? (y/N): ");
+        if (answer.toLowerCase() !== "y") {
+          console.log("Cancelled");
+          rl.close();
+          return;
+        }
+        
+        console.log("\nStopping services and removing data...");
+        const downCode = await runCompose(["down", "-v"]);
+        
+        if (downCode === 0) {
+          console.log("✓ Environment reset completed - all containers and data removed");
+        } else {
+          console.error("✗ Reset failed");
+          process.exitCode = 1;
+        }
+      }
+      
+      rl.close();
+    } catch (error) {
+      rl.close();
+      console.error(`Reset failed: ${error.message}`);
+      process.exitCode = 1;
+    }
+  });
 program
   .command("clean")
   .description("cleanup artifacts")
@@ -499,7 +616,54 @@ program
 program
   .command("generate-grafana-password")
   .description("generate Grafana password")
-  .action(stub("generate-grafana-password"));
+  .action(async () => {
+    const fs = require("fs");
+    const path = require("path");
+    const { exec } = require("child_process");
+    const util = require("util");
+    const execPromise = util.promisify(exec);
+    
+    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    
+    try {
+      // Generate secure password using openssl
+      const { stdout: password } = await execPromise(
+        "openssl rand -base64 12 | tr -d '\n'"
+      );
+      const newPassword = password.trim();
+      
+      if (!newPassword) {
+        console.error("Failed to generate password");
+        process.exitCode = 1;
+        return;
+      }
+      
+      // Read existing config
+      let config = "";
+      if (fs.existsSync(cfgPath)) {
+        config = fs.readFileSync(cfgPath, "utf8");
+      }
+      
+      // Update or add grafana_password
+      const lines = config.split(/\r?\n/).filter((l) => !/^grafana_password=/.test(l));
+      lines.push(`grafana_password=${newPassword}`);
+      
+      // Write back
+      fs.writeFileSync(cfgPath, lines.filter(Boolean).join("\n") + "\n", "utf8");
+      
+      console.log("✓ New Grafana password generated and saved");
+      console.log("\nNew credentials:");
+      console.log("  URL:      http://localhost:3000");
+      console.log("  Username: monitor");
+      console.log(`  Password: ${newPassword}`);
+      console.log("\nRestart Grafana to apply:");
+      console.log("  postgres-ai restart grafana");
+    } catch (error) {
+      console.error(`Failed to generate password: ${error.message}`);
+      console.error("\nNote: This command requires 'openssl' to be installed");
+      process.exitCode = 1;
+    }
+  });
 program
   .command("show-grafana-credentials")
   .description("show Grafana credentials")
