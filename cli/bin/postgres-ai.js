@@ -67,8 +67,25 @@ program.command("help", { isDefault: true }).description("show help").action(() 
 });
 
 // Service lifecycle
-program.command("quickstart").description("complete setup").action(stub("quickstart"));
-program.command("install").description("install project").action(stub("install"));
+program
+  .command("quickstart")
+  .description("complete setup (generate config, start services)")
+  .option("--demo", "demo mode", false)
+  .action(async () => {
+    const code1 = await runCompose(["run", "--rm", "sources-generator"]);
+    if (code1 !== 0) {
+      process.exitCode = code1;
+      return;
+    }
+    const code2 = await runCompose(["up", "-d"]);
+    if (code2 !== 0) process.exitCode = code2;
+  });
+program
+  .command("install")
+  .description("prepare project (no-op in repo checkout)")
+  .action(async () => {
+    console.log("Project files present; nothing to install.");
+  });
 program
   .command("start")
   .description("start services")
@@ -192,11 +209,73 @@ program
 program
   .command("add-instance [connStr] [name]")
   .description("add instance")
-  .action(stub("add-instance"));
+  .action(async (connStr, name) => {
+    const fs = require("fs");
+    const path = require("path");
+    const file = path.resolve(process.cwd(), "instances.yml");
+    if (!connStr) {
+      console.error("Connection string required: postgresql://user:pass@host:port/db");
+      process.exitCode = 1;
+      return;
+    }
+    const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
+    if (!m) {
+      console.error("Invalid connection string format");
+      process.exitCode = 1;
+      return;
+    }
+    const host = m[3];
+    const db = m[5];
+    const instanceName = name && name.trim() ? name.trim() : `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
+    const lineStart = `- name: ${instanceName}`;
+    const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
+    const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    if (new RegExp(`^${lineStart}$`, "m").test(content)) {
+      console.error(`Instance '${instanceName}' already exists`);
+      process.exitCode = 1;
+      return;
+    }
+    fs.appendFileSync(file, (content && !/\n$/.test(content) ? "\n" : "") + body, "utf8");
+    console.log(`Instance '${instanceName}' added`);
+  });
 program
   .command("remove-instance <name>")
   .description("remove instance")
-  .action(stub("remove-instance"));
+  .action(async (name) => {
+    const fs = require("fs");
+    const path = require("path");
+    const file = path.resolve(process.cwd(), "instances.yml");
+    if (!fs.existsSync(file)) {
+      console.error("instances.yml not found");
+      process.exitCode = 1;
+      return;
+    }
+    const text = fs.readFileSync(file, "utf8");
+    const lines = text.split(/\r?\n/);
+    const out = [];
+    let skip = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isStart = /^-[\t ]*name:[\t ]*(.+)$/.test(line);
+      if (isStart) {
+        const n = line.replace(/^-[\t ]*name:[\t ]*/, "").trim();
+        if (n === name) {
+          skip = true;
+          continue;
+        } else if (skip) {
+          skip = false;
+        }
+      }
+      if (!skip) out.push(line);
+    }
+    if (out.join("\n") === text) {
+      console.error(`Instance '${name}' not found`);
+      process.exitCode = 1;
+      return;
+    }
+    fs.writeFileSync(file, out.join("\n"), "utf8");
+    console.log(`Instance '${name}' removed`);
+  });
 program
   .command("test-instance <name>")
   .description("test instance connectivity")
