@@ -145,7 +145,8 @@ program
 program
   .command("health")
   .description("health check")
-  .action(async () => {
+  .option("--strict", "exit with error if any service is unhealthy", false)
+  .action(async (opts) => {
     const { exec } = require("child_process");
     const util = require("util");
     const execPromise = util.promisify(exec);
@@ -185,7 +186,9 @@ program
       console.log("All services are healthy");
     } else {
       console.log("Some services are unhealthy");
-      process.exitCode = 1;
+      if (opts.strict) {
+        process.exitCode = 1;
+      }
     }
   });
 program
