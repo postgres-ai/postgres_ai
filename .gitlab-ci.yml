@@ -112,7 +112,7 @@ cli:node:e2e:dind:
     - sleep 10
     - node ./cli/bin/postgres-ai.js status
     - node ./cli/bin/postgres-ai.js logs --tail 5 grafana || true
-    - node ./cli/bin/postgres-ai.js health || true
+    - node ./cli/bin/postgres-ai.js health --wait 60 || true
     - echo ""
     - echo "=== Testing instance commands ==="
     - node ./cli/bin/postgres-ai.js list-instances
