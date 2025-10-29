@@ -4,8 +4,20 @@ Command-line interface for PostgresAI monitoring and database management.
 
 ## Installation
 
+### From npm
+
 ```bash
 npm install -g postgresai@alpha
+```
+
+### From Homebrew (macOS)
+
+```bash
+# Add the PostgresAI tap
+brew tap postgres-ai/tap https://gitlab.com/postgres-ai/homebrew-tap.git
+
+# Install postgresai
+brew install postgresai
 ```
 
 ## Usage
