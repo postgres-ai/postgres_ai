@@ -58,29 +58,40 @@ This will:
 ## Commands
 
 ### Monitoring services management (`mon` group)
+
+#### Service lifecycle
 ```bash
-postgres-ai mon start              # Start monitoring services
-postgres-ai mon stop               # Stop monitoring services
-postgres-ai mon restart            # Restart all monitoring services
-postgres-ai mon status             # Show monitoring services status
-postgres-ai mon logs [service]     # Show logs for monitoring services
-postgres-ai mon health             # Check monitoring services health
-postgres-ai mon config             # Show monitoring configuration
-postgres-ai mon update-config      # Apply monitoring configuration
-postgres-ai mon update             # Update monitoring stack
-postgres-ai mon reset [service]    # Reset monitoring service
-postgres-ai mon clean              # Cleanup monitoring services artifacts
-postgres-ai mon check              # System readiness check
-postgres-ai mon generate-grafana-password  # Generate Grafana password
-postgres-ai mon show-grafana-credentials   # Show Grafana credentials
+postgres-ai mon quickstart [--demo]    # Complete setup (generate config, start services)
+postgres-ai mon start                  # Start monitoring services
+postgres-ai mon stop                   # Stop monitoring services
+postgres-ai mon restart [service]      # Restart all or specific monitoring service
+postgres-ai mon status                 # Show monitoring services status
+postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 ```
 
-### Instance management
+#### Monitoring target databases (`mon targets` subgroup)
 ```bash
-postgres-ai list-instances                          # List configured instances
-postgres-ai add-instance <conn-string> <name>       # Add new instance
-postgres-ai remove-instance <name>                  # Remove instance
-postgres-ai test-instance <name>                    # Test instance connectivity
+postgres-ai mon targets list                       # List databases to monitor
+postgres-ai mon targets add <conn-string> <name>   # Add database to monitor
+postgres-ai mon targets remove <name>              # Remove monitoring target
+postgres-ai mon targets test <name>                # Test target connectivity
+```
+
+#### Configuration and maintenance
+```bash
+postgres-ai mon config                         # Show monitoring configuration
+postgres-ai mon update-config                  # Apply configuration changes
+postgres-ai mon update                         # Update monitoring stack
+postgres-ai mon reset [service]                # Reset service data
+postgres-ai mon clean                          # Cleanup artifacts
+postgres-ai mon check                          # System readiness check
+postgres-ai mon shell <service>                # Open shell to monitoring service
+```
+
+#### Grafana management
+```bash
+postgres-ai mon generate-grafana-password      # Generate new Grafana password
+postgres-ai mon show-grafana-credentials       # Show Grafana credentials
 ```
 
 ### Authentication and API key management

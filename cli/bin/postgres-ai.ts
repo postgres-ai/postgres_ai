@@ -154,13 +154,6 @@ program.command("help", { isDefault: true }).description("show help").action(() 
   program.outputHelp();
 });
 
-program
-  .command("install")
-  .description("prepare project (no-op in repo checkout)")
-  .action(async () => {
-    console.log("Project files present; nothing to install.");
-  });
-
 // Monitoring services management
 const mon = program.command("mon").description("monitoring services management");
 
@@ -458,9 +451,9 @@ mon
       process.exitCode = 1;
     }
   });
-program
+mon
   .command("shell <service>")
-  .description("open service shell")
+  .description("open shell to monitoring service")
   .action(async (service: string) => {
     const code = await runCompose(["exec", service, "/bin/sh"]);
     if (code !== 0) process.exitCode = code;
@@ -473,10 +466,12 @@ mon
     if (code !== 0) process.exitCode = code;
   });
 
-// Instance management
-program
-  .command("list-instances")
-  .description("list instances")
+// Monitoring targets (databases to monitor)
+const targets = mon.command("targets").description("manage databases to monitor");
+
+targets
+  .command("list")
+  .description("list monitoring target databases")
   .action(async () => {
     const instancesPath = path.resolve(process.cwd(), "instances.yml");
     if (!fs.existsSync(instancesPath)) {
@@ -490,13 +485,13 @@ program
       const instances = yaml.load(content) as Instance[] | null;
       
       if (!instances || !Array.isArray(instances) || instances.length === 0) {
-        console.log("No instances configured");
+        console.log("No monitoring targets configured");
         console.log("");
-        console.log("To add an instance:");
-        console.log("  postgres-ai add-instance <connection-string> <name>");
+        console.log("To add a monitoring target:");
+        console.log("  postgres-ai mon targets add <connection-string> <name>");
         console.log("");
         console.log("Example:");
-        console.log("  postgres-ai add-instance 'postgresql://user:pass@host:5432/db' my-db");
+        console.log("  postgres-ai mon targets add 'postgresql://user:pass@host:5432/db' my-db");
         return;
       }
       
@@ -504,18 +499,18 @@ program
       const filtered = instances.filter((inst) => inst.name && inst.name !== "target-database");
       
       if (filtered.length === 0) {
-        console.log("No instances configured");
+        console.log("No monitoring targets configured");
         console.log("");
-        console.log("To add an instance:");
-        console.log("  postgres-ai add-instance <connection-string> <name>");
+        console.log("To add a monitoring target:");
+        console.log("  postgres-ai mon targets add <connection-string> <name>");
         console.log("");
         console.log("Example:");
-        console.log("  postgres-ai add-instance 'postgresql://user:pass@host:5432/db' my-db");
+        console.log("  postgres-ai mon targets add 'postgresql://user:pass@host:5432/db' my-db");
         return;
       }
       
       for (const inst of filtered) {
-        console.log(`Instance: ${inst.name}`);
+        console.log(`Target: ${inst.name}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -523,9 +518,9 @@ program
       process.exitCode = 1;
     }
   });
-program
-  .command("add-instance [connStr] [name]")
-  .description("add instance")
+targets
+  .command("add [connStr] [name]")
+  .description("add monitoring target database")
   .action(async (connStr?: string, name?: string) => {
     const file = path.resolve(process.cwd(), "instances.yml");
     if (!connStr) {
@@ -551,7 +546,7 @@ program
         if (Array.isArray(instances)) {
           const exists = instances.some((inst) => inst.name === instanceName);
           if (exists) {
-            console.error(`Instance '${instanceName}' already exists`);
+            console.error(`Monitoring target '${instanceName}' already exists`);
             process.exitCode = 1;
             return;
           }
@@ -561,7 +556,7 @@ program
       // If YAML parsing fails, fall back to simple check
       const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
       if (new RegExp(`^- name: ${instanceName}$`, "m").test(content)) {
-        console.error(`Instance '${instanceName}' already exists`);
+        console.error(`Monitoring target '${instanceName}' already exists`);
         process.exitCode = 1;
         return;
       }
@@ -571,11 +566,11 @@ program
     const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
     const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     fs.appendFileSync(file, (content && !/\n$/.test(content) ? "\n" : "") + body, "utf8");
-    console.log(`Instance '${instanceName}' added`);
+    console.log(`Monitoring target '${instanceName}' added`);
   });
-program
-  .command("remove-instance <name>")
-  .description("remove instance")
+targets
+  .command("remove <name>")
+  .description("remove monitoring target database")
   .action(async (name: string) => {
     const file = path.resolve(process.cwd(), "instances.yml");
     if (!fs.existsSync(file)) {
@@ -597,22 +592,22 @@ program
       const filtered = instances.filter((inst) => inst.name !== name);
       
       if (filtered.length === instances.length) {
-        console.error(`Instance '${name}' not found`);
+        console.error(`Monitoring target '${name}' not found`);
         process.exitCode = 1;
         return;
       }
       
       fs.writeFileSync(file, yaml.dump(filtered), "utf8");
-      console.log(`Instance '${name}' removed`);
+      console.log(`Monitoring target '${name}' removed`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Error processing instances.yml: ${message}`);
       process.exitCode = 1;
     }
   });
-program
-  .command("test-instance <name>")
-  .description("test instance connectivity")
+targets
+  .command("test <name>")
+  .description("test monitoring target database connectivity")
   .action(async (name: string) => {
     const instancesPath = path.resolve(process.cwd(), "instances.yml");
     if (!fs.existsSync(instancesPath)) {
@@ -634,18 +629,18 @@ program
       const instance = instances.find((inst) => inst.name === name);
       
       if (!instance) {
-        console.error(`Instance '${name}' not found`);
+        console.error(`Monitoring target '${name}' not found`);
         process.exitCode = 1;
         return;
       }
       
       if (!instance.conn_str) {
-        console.error(`Connection string not found for instance '${name}'`);
+        console.error(`Connection string not found for monitoring target '${name}'`);
         process.exitCode = 1;
         return;
       }
       
-      console.log(`Testing connection to '${name}'...`);
+      console.log(`Testing connection to monitoring target '${name}'...`);
       
       const { stdout, stderr } = await execFilePromise(
         "psql",
