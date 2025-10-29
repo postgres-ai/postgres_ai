@@ -733,7 +733,20 @@ program
     const fs = require("fs");
     const path = require("path");
     const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
-    const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, "utf8") : "";
+    
+    // Check if it exists and is a file (not a directory)
+    let existing = "";
+    if (fs.existsSync(cfgPath)) {
+      const stats = fs.statSync(cfgPath);
+      if (stats.isFile()) {
+        existing = fs.readFileSync(cfgPath, "utf8");
+      } else if (stats.isDirectory()) {
+        console.error("Error: .pgwatch-config is a directory, expected a file");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    
     const filtered = existing
       .split(/\r?\n/)
       .filter((l) => !/^api_key=/.test(l))
