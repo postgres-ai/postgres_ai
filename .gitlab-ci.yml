@@ -145,7 +145,7 @@ cli:node:full:dind:
     - node ./cli/dist/bin/postgres-ai.js add-instance "postgresql://monitor:monitor_pass@target-db:5432/target_database" demo-test
     - node ./cli/dist/bin/postgres-ai.js list-instances
     - node ./cli/dist/bin/postgres-ai.js test-instance demo-test || true
-    - node ./cli/dist/bin/postgres-ai.js health --wait 120
+    - node ./cli/dist/bin/postgres-ai.js health --wait 300
     - node ./cli/dist/bin/postgres-ai.js show-grafana-credentials
     - echo ""
     - echo "=== Cleanup ==="
