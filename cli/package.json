@@ -1,6 +1,6 @@
 {
   "name": "postgresai",
-  "version": "0.11.0-alpha.3",
+  "version": "0.11.0-alpha.4",
   "description": "PostgresAI CLI (Node.js)",
   "license": "MIT",
   "private": false,
@@ -14,6 +14,7 @@
   },
   "bin": {
     "postgres-ai": "./bin/postgres-ai.js",
+    "postgresai": "./bin/postgres-ai.js",
     "pgai": "./bin/postgres-ai.js"
   },
   "type": "commonjs",

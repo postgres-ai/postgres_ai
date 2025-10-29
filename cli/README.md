@@ -10,9 +10,10 @@ npm install -g postgresai@alpha
 
 ## Usage
 
-The CLI provides two command aliases:
+The CLI provides three command aliases:
 ```bash
 postgres-ai --help
+postgresai --help
 pgai --help  # short alias
 ```
 
