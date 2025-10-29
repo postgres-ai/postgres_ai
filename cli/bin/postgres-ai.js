@@ -741,9 +741,8 @@ program
       if (stats.isFile()) {
         existing = fs.readFileSync(cfgPath, "utf8");
       } else if (stats.isDirectory()) {
-        console.error("Error: .pgwatch-config is a directory, expected a file");
-        process.exitCode = 1;
-        return;
+        // Remove directory and recreate as file
+        fs.rmSync(cfgPath, { recursive: true, force: true });
       }
     }
     
