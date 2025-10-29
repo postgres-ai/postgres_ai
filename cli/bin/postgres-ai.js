@@ -778,11 +778,35 @@ program
   .command("remove-key")
   .description("remove API key")
   .action(async () => {
-    if (!config.configExists()) {
+    const fs = require("fs");
+    const path = require("path");
+    
+    // Check both new config and legacy config
+    const hasNewConfig = config.configExists();
+    const legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const hasLegacyConfig = fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile();
+    
+    if (!hasNewConfig && !hasLegacyConfig) {
       console.log("No API key configured");
       return;
     }
-    config.deleteConfigKeys(["apiKey", "orgId"]);
+    
+    // Remove from new config
+    if (hasNewConfig) {
+      config.deleteConfigKeys(["apiKey", "orgId"]);
+    }
+    
+    // Remove from legacy config
+    if (hasLegacyConfig) {
+      const content = fs.readFileSync(legacyPath, "utf8");
+      const filtered = content
+        .split(/\r?\n/)
+        .filter((l) => !/^api_key=/.test(l))
+        .join("\n")
+        .replace(/\n+$/g, "\n");
+      fs.writeFileSync(legacyPath, filtered, "utf8");
+    }
+    
     console.log("API key removed");
     console.log(`\nTo authenticate again, run: pgai auth`);
   });
