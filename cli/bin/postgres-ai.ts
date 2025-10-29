@@ -154,10 +154,19 @@ program.command("help", { isDefault: true }).description("show help").action(() 
   program.outputHelp();
 });
 
-// Service lifecycle
 program
+  .command("install")
+  .description("prepare project (no-op in repo checkout)")
+  .action(async () => {
+    console.log("Project files present; nothing to install.");
+  });
+
+// Monitoring services management
+const mon = program.command("mon").description("monitoring services management");
+
+mon
   .command("quickstart")
-  .description("complete setup (generate config, start services)")
+  .description("complete setup (generate config, start monitoring services)")
   .option("--demo", "demo mode", false)
   .action(async () => {
     const code1 = await runCompose(["run", "--rm", "sources-generator"]);
@@ -168,47 +177,46 @@ program
     const code2 = await runCompose(["up", "-d"]);
     if (code2 !== 0) process.exitCode = code2;
   });
-program
-  .command("install")
-  .description("prepare project (no-op in repo checkout)")
-  .action(async () => {
-    console.log("Project files present; nothing to install.");
-  });
-program
+
+mon
   .command("start")
-  .description("start services")
+  .description("start monitoring services")
   .action(async () => {
     const code = await runCompose(["up", "-d"]);
     if (code !== 0) process.exitCode = code;
   });
-program
+
+mon
   .command("stop")
-  .description("stop services")
+  .description("stop monitoring services")
   .action(async () => {
     const code = await runCompose(["down"]);
     if (code !== 0) process.exitCode = code;
   });
-program
+
+mon
   .command("restart [service]")
-  .description("restart all services or specific service")
+  .description("restart all monitoring services or specific service")
   .action(async (service?: string) => {
     const args = ["restart"];
     if (service) args.push(service);
     const code = await runCompose(args);
     if (code !== 0) process.exitCode = code;
   });
-program
+
+mon
   .command("status")
-  .description("show service status")
+  .description("show monitoring services status")
   .action(async () => {
     const code = await runCompose(["ps"]);
     if (code !== 0) process.exitCode = code;
   });
-program
+
+mon
   .command("logs [service]")
   .option("-f, --follow", "follow logs", false)
   .option("--tail <lines>", "number of lines to show from the end of logs", "all")
-  .description("show logs for all or specific service")
+  .description("show logs for all or specific monitoring service")
   .action(async (service: string | undefined, opts: { follow: boolean; tail: string }) => {
     const args: string[] = ["logs"];
     if (opts.follow) args.push("-f");
@@ -217,9 +225,9 @@ program
     const code = await runCompose(args);
     if (code !== 0) process.exitCode = code;
   });
-program
+mon
   .command("health")
-  .description("health check")
+  .description("health check for monitoring services")
   .option("--wait <seconds>", "wait time in seconds for services to become healthy", parseInt, 0)
   .action(async (opts: { wait: number }) => {
     const services: HealthService[] = [
@@ -274,9 +282,9 @@ program
       process.exitCode = 1;
     }
   });
-program
+mon
   .command("config")
-  .description("show configuration")
+  .description("show monitoring services configuration")
   .action(async () => {
     const { fs, projectDir, composeFile, instancesFile } = resolvePaths();
     console.log(`Project Directory: ${projectDir}`);
@@ -289,16 +297,16 @@ program
       if (!/\n$/.test(text)) console.log();
     }
   });
-program
+mon
   .command("update-config")
-  .description("apply configuration (generate sources)")
+  .description("apply monitoring services configuration (generate sources)")
   .action(async () => {
     const code = await runCompose(["run", "--rm", "sources-generator"]);
     if (code !== 0) process.exitCode = code;
   });
-program
+mon
   .command("update")
-  .description("update project")
+  .description("update monitoring stack")
   .action(async () => {
     console.log("Updating PostgresAI monitoring stack...\n");
     
@@ -331,8 +339,8 @@ program
       
       if (code === 0) {
         console.log("\n✓ Update completed successfully");
-        console.log("\nTo apply updates, restart services:");
-        console.log("  postgres-ai restart");
+        console.log("\nTo apply updates, restart monitoring services:");
+        console.log("  postgres-ai mon restart");
       } else {
         console.error("\n✗ Docker image update failed");
         process.exitCode = 1;
@@ -343,9 +351,9 @@ program
       process.exitCode = 1;
     }
   });
-program
+mon
   .command("reset [service]")
-  .description("reset all or specific service")
+  .description("reset all or specific monitoring service")
   .action(async (service?: string) => {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -414,9 +422,9 @@ program
       process.exitCode = 1;
     }
   });
-program
+mon
   .command("clean")
-  .description("cleanup artifacts")
+  .description("cleanup monitoring services artifacts")
   .action(async () => {
     console.log("Cleaning up Docker resources...\n");
     
@@ -457,9 +465,9 @@ program
     const code = await runCompose(["exec", service, "/bin/sh"]);
     if (code !== 0) process.exitCode = code;
   });
-program
+mon
   .command("check")
-  .description("system readiness check")
+  .description("monitoring services system readiness check")
   .action(async () => {
     const code = await runCompose(["ps"]);
     if (code !== 0) process.exitCode = code;
@@ -908,9 +916,9 @@ program
     console.log("API key removed");
     console.log(`\nTo authenticate again, run: pgai auth`);
   });
-program
+mon
   .command("generate-grafana-password")
-  .description("generate Grafana password")
+  .description("generate Grafana password for monitoring services")
   .action(async () => {
     const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
     
@@ -951,7 +959,7 @@ program
       console.log("  Username: monitor");
       console.log(`  Password: ${newPassword}`);
       console.log("\nRestart Grafana to apply:");
-      console.log("  postgres-ai restart grafana");
+      console.log("  postgres-ai mon restart grafana");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to generate password: ${message}`);
@@ -959,13 +967,13 @@ program
       process.exitCode = 1;
     }
   });
-program
+mon
   .command("show-grafana-credentials")
-  .description("show Grafana credentials")
+  .description("show Grafana credentials for monitoring services")
   .action(async () => {
     const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
     if (!fs.existsSync(cfgPath)) {
-      console.error("Configuration file not found. Run 'quickstart' first.");
+      console.error("Configuration file not found. Run 'postgres-ai mon quickstart' first.");
       process.exitCode = 1;
       return;
     }

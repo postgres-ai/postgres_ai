@@ -47,7 +47,7 @@ This will:
 
 Start monitoring with demo database:
 ```bash
-postgres-ai quickstart --demo
+postgres-ai mon quickstart --demo
 ```
 
 This will:
@@ -57,13 +57,22 @@ This will:
 
 ## Commands
 
-### Monitoring services
+### Monitoring services management (`mon` group)
 ```bash
-postgres-ai start              # Start all services
-postgres-ai stop               # Stop all services
-postgres-ai restart            # Restart all services
-postgres-ai status             # Show service status
-postgres-ai logs [service]     # Show logs
+postgres-ai mon start              # Start monitoring services
+postgres-ai mon stop               # Stop monitoring services
+postgres-ai mon restart            # Restart all monitoring services
+postgres-ai mon status             # Show monitoring services status
+postgres-ai mon logs [service]     # Show logs for monitoring services
+postgres-ai mon health             # Check monitoring services health
+postgres-ai mon config             # Show monitoring configuration
+postgres-ai mon update-config      # Apply monitoring configuration
+postgres-ai mon update             # Update monitoring stack
+postgres-ai mon reset [service]    # Reset monitoring service
+postgres-ai mon clean              # Cleanup monitoring services artifacts
+postgres-ai mon check              # System readiness check
+postgres-ai mon generate-grafana-password  # Generate Grafana password
+postgres-ai mon show-grafana-credentials   # Show Grafana credentials
 ```
 
 ### Instance management
@@ -71,13 +80,7 @@ postgres-ai logs [service]     # Show logs
 postgres-ai list-instances                          # List configured instances
 postgres-ai add-instance <conn-string> <name>       # Add new instance
 postgres-ai remove-instance <name>                  # Remove instance
-postgres-ai update-config                           # Regenerate config files
-```
-
-### Configuration
-```bash
-postgres-ai config             # Show current configuration
-postgres-ai check              # Verify prerequisites
+postgres-ai test-instance <name>                    # Test instance connectivity
 ```
 
 ### Authentication and API key management
