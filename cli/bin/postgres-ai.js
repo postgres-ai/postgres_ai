@@ -7,7 +7,7 @@ const pkg = require("../package.json");
 function getConfig(opts) {
   const apiKey = opts.apiKey || process.env.PGAI_API_KEY || "";
   const baseUrl =
-    opts.baseUrl || process.env.PGAI_BASE_URL || "https://v2.postgres.ai/api/general/";
+    opts.baseUrl || process.env.PGAI_BASE_URL || "https://postgres.ai/api/general/";
   return { apiKey, baseUrl };
 }
 
@@ -21,7 +21,7 @@ program
   .option(
     "--base-url <url>",
     "API base URL (overrides PGAI_BASE_URL)",
-    "https://v2.postgres.ai/api/general/"
+    "https://postgres.ai/api/general/"
   );
 
 const stub = (name) => async () => {

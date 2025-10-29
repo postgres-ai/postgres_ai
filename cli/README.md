@@ -1,31 +1,76 @@
-## CLI developer quickstart
+# PostgresAI CLI
 
-### run without install
+Command-line interface for PostgresAI monitoring and database management.
+
+## Installation
+
 ```bash
-npm --prefix cli install --no-audit --no-fund
-node ./cli/bin/postgres-ai.js --help
+npm install -g postgresai@alpha
 ```
 
-### use aliases locally (no ./)
+## Usage
+
+The CLI provides two command aliases:
 ```bash
-# install from repo into global prefix
-npm install -g ./cli
-
-# ensure global npm bin is in PATH (zsh)
-echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.zshrc
-exec zsh -l
-
-# aliases
 postgres-ai --help
-pgai --help
+pgai --help  # short alias
 ```
 
-### one‑off run (no install)
+## Quick start
+
+Start monitoring with demo database:
 ```bash
-npx -y -p file:cli postgres-ai --help
+postgres-ai quickstart --demo
 ```
 
-### env vars for integration tests
-- `PGAI_API_KEY`
-- `PGAI_BASE_URL` (default `https://v2.postgres.ai/api/general/`)
+This will:
+- Generate secure Grafana password
+- Start all monitoring services
+- Open Grafana at http://localhost:3000
 
+## Commands
+
+### Monitoring services
+```bash
+postgres-ai start              # Start all services
+postgres-ai stop               # Stop all services
+postgres-ai restart            # Restart all services
+postgres-ai status             # Show service status
+postgres-ai logs [service]     # Show logs
+```
+
+### Instance management
+```bash
+postgres-ai list-instances                          # List configured instances
+postgres-ai add-instance <conn-string> <name>       # Add new instance
+postgres-ai remove-instance <name>                  # Remove instance
+postgres-ai update-config                           # Regenerate config files
+```
+
+### Configuration
+```bash
+postgres-ai config             # Show current configuration
+postgres-ai check              # Verify prerequisites
+```
+
+### API key management
+```bash
+postgres-ai add-key <key>      # Store API key
+postgres-ai show-key           # Show stored key (masked)
+postgres-ai remove-key         # Remove stored key
+```
+
+## Environment variables
+
+- `PGAI_API_KEY` - API key for PostgresAI services
+- `PGAI_BASE_URL` - API endpoint (default: `https://postgres.ai/api/general/`)
+
+## Requirements
+
+- Node.js 18 or higher
+- Docker and Docker Compose
+
+## Learn more
+
+- Documentation: https://postgres.ai/docs
+- Issues: https://gitlab.com/postgres-ai/postgres_ai/-/issues
