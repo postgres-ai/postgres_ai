@@ -766,7 +766,12 @@ program
       console.log(`\nTo authenticate, run: pgai auth`);
       return;
     }
-    const mask = (k) => (k.length <= 8 ? "****" : `${k.slice(0, 4)}${"*".repeat(k.length - 8)}${k.slice(-4)}`);
+    const mask = (k) => {
+      if (k.length <= 8) return "****";
+      if (k.length <= 16) return `${k.slice(0, 4)}${"*".repeat(k.length - 8)}${k.slice(-4)}`;
+      // For longer keys, show more of the beginning to help identify them
+      return `${k.slice(0, Math.min(12, k.length - 8))}${"*".repeat(Math.max(4, k.length - 16))}${k.slice(-4)}`;
+    };
     console.log(`Current API key: ${mask(cfg.apiKey)}`);
     if (cfg.orgId) {
       console.log(`Organization ID: ${cfg.orgId}`);
