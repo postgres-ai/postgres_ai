@@ -878,13 +878,18 @@ program
     
     // Remove from legacy config
     if (hasLegacyConfig) {
-      const content = fs.readFileSync(legacyPath, "utf8");
-      const filtered = content
-        .split(/\r?\n/)
-        .filter((l) => !/^api_key=/.test(l))
-        .join("\n")
-        .replace(/\n+$/g, "\n");
-      fs.writeFileSync(legacyPath, filtered, "utf8");
+      try {
+        const content = fs.readFileSync(legacyPath, "utf8");
+        const filtered = content
+          .split(/\r?\n/)
+          .filter((l) => !/^api_key=/.test(l))
+          .join("\n")
+          .replace(/\n+$/g, "\n");
+        fs.writeFileSync(legacyPath, filtered, "utf8");
+      } catch (err) {
+        // If we can't read/write the legacy config, just skip it
+        console.warn(`Warning: Could not update legacy config: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     
     console.log("API key removed");
