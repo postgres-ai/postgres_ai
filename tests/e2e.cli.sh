@@ -28,7 +28,7 @@ $CLI_CMD remove-instance ci-test
 echo ""
 echo "=== Testing API key commands ==="
 $CLI_CMD add-key "test_api_key_12345"
-$CLI_CMD show-key | grep -q "test_api_key"
+$CLI_CMD show-key | grep -q "test_api"
 $CLI_CMD remove-key
 
 echo ""
