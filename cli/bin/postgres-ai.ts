@@ -917,7 +917,12 @@ program
       // Read existing config
       let configContent = "";
       if (fs.existsSync(cfgPath)) {
-        configContent = fs.readFileSync(cfgPath, "utf8");
+        const stats = fs.statSync(cfgPath);
+        if (stats.isDirectory()) {
+          console.error(".pgwatch-config is a directory, expected a file. Skipping read.");
+        } else {
+          configContent = fs.readFileSync(cfgPath, "utf8");
+        }
       }
       
       // Update or add grafana_password
@@ -951,6 +956,14 @@ program
       process.exitCode = 1;
       return;
     }
+    
+    const stats = fs.statSync(cfgPath);
+    if (stats.isDirectory()) {
+      console.error(".pgwatch-config is a directory, expected a file. Cannot read credentials.");
+      process.exitCode = 1;
+      return;
+    }
+    
     const content = fs.readFileSync(cfgPath, "utf8");
     const lines = content.split(/\r?\n/);
     let password = "";

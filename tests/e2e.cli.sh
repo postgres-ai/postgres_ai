@@ -11,10 +11,10 @@ $CLI_CMD check || true
 $CLI_CMD config || true
 $CLI_CMD update-config
 $CLI_CMD start
-sleep 30
+sleep 10
 $CLI_CMD status
 $CLI_CMD logs --tail 5 grafana || true
-$CLI_CMD health --wait 240 || true
+$CLI_CMD health --wait 60 || true
 
 echo ""
 echo "=== Testing instance commands ==="
