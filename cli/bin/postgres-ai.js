@@ -136,9 +136,13 @@ program
 program
   .command("logs [service]")
   .option("-f, --follow", "follow logs", false)
+  .option("--tail <lines>", "number of lines to show from the end of logs", "all")
   .description("show logs for all or specific service")
   .action(async (service, opts) => {
-    const args = ["logs"]; if (opts.follow) args.push("-f"); if (service) args.push(service);
+    const args = ["logs"];
+    if (opts.follow) args.push("-f");
+    if (opts.tail) args.push("--tail", opts.tail);
+    if (service) args.push(service);
     const code = await runCompose(args);
     if (code !== 0) process.exitCode = code;
   });
