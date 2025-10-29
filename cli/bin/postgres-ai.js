@@ -196,7 +196,44 @@ program
   .command("reset [service]")
   .description("reset all or specific service")
   .action(stub("reset"));
-program.command("clean").description("cleanup artifacts").action(stub("clean"));
+program
+  .command("clean")
+  .description("cleanup artifacts")
+  .action(async () => {
+    const { exec } = require("child_process");
+    const util = require("util");
+    const execPromise = util.promisify(exec);
+    
+    console.log("Cleaning up Docker resources...\n");
+    
+    try {
+      // Remove stopped containers
+      const { stdout: containers } = await execPromise("docker ps -aq --filter 'status=exited'");
+      if (containers.trim()) {
+        await execPromise(`docker rm ${containers.trim().split('\n').join(' ')}`);
+        console.log("✓ Removed stopped containers");
+      } else {
+        console.log("✓ No stopped containers to remove");
+      }
+      
+      // Remove unused volumes
+      const { stdout: volumeOut } = await execPromise("docker volume prune -f");
+      console.log("✓ Removed unused volumes");
+      
+      // Remove unused networks
+      const { stdout: networkOut } = await execPromise("docker network prune -f");
+      console.log("✓ Removed unused networks");
+      
+      // Remove dangling images
+      const { stdout: imageOut } = await execPromise("docker image prune -f");
+      console.log("✓ Removed dangling images");
+      
+      console.log("\nCleanup completed");
+    } catch (error) {
+      console.error(`Error during cleanup: ${error.message}`);
+      process.exitCode = 1;
+    }
+  });
 program
   .command("shell <service>")
   .description("open service shell")
@@ -330,7 +367,69 @@ program
 program
   .command("test-instance <name>")
   .description("test instance connectivity")
-  .action(stub("test-instance"));
+  .action(async (name) => {
+    const fs = require("fs");
+    const path = require("path");
+    const { exec } = require("child_process");
+    const util = require("util");
+    const execPromise = util.promisify(exec);
+    
+    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    if (!fs.existsSync(instancesPath)) {
+      console.error("instances.yml not found");
+      process.exitCode = 1;
+      return;
+    }
+    
+    const content = fs.readFileSync(instancesPath, "utf8");
+    const lines = content.split(/\r?\n/);
+    let connStr = "";
+    let foundInstance = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const nameLine = lines[i].match(/^-[\t ]*name:[\t ]*(.+)$/);
+      if (nameLine && nameLine[1].trim() === name) {
+        foundInstance = true;
+        // Look for conn_str in next lines
+        for (let j = i + 1; j < lines.length && j < i + 15; j++) {
+          const connLine = lines[j].match(/^[\t ]*conn_str:[\t ]*(.+)$/);
+          if (connLine) {
+            connStr = connLine[1].trim();
+            break;
+          }
+          // Stop at next instance
+          if (lines[j].match(/^-[\t ]*name:/)) break;
+        }
+        break;
+      }
+    }
+    
+    if (!foundInstance) {
+      console.error(`Instance '${name}' not found`);
+      process.exitCode = 1;
+      return;
+    }
+    
+    if (!connStr) {
+      console.error(`Connection string not found for instance '${name}'`);
+      process.exitCode = 1;
+      return;
+    }
+    
+    console.log(`Testing connection to '${name}'...`);
+    
+    try {
+      const { stdout, stderr } = await execPromise(
+        `psql "${connStr}" -c "SELECT version();" --no-psqlrc`,
+        { timeout: 10000, env: { ...process.env, PAGER: 'cat' } }
+      );
+      console.log(`✓ Connection successful`);
+      console.log(stdout.trim());
+    } catch (error) {
+      console.error(`✗ Connection failed: ${error.message}`);
+      process.exitCode = 1;
+    }
+  });
 
 // API key and grafana
 program
