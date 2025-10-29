@@ -199,6 +199,12 @@ program
       const list = filtered.length > 0 ? filtered : [];
       if (list.length === 0) {
         console.log("No instances configured");
+        console.log("");
+        console.log("To add an instance:");
+        console.log("  postgres-ai add-instance <connection-string> <name>");
+        console.log("");
+        console.log("Example:");
+        console.log("  postgres-ai add-instance 'postgresql://user:pass@host:5432/db' my-db");
         return;
       }
       for (const n of list) console.log(`Instance: ${n}`);
