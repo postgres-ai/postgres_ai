@@ -60,13 +60,16 @@ function readConfig() {
   const legacyPath = getLegacyConfigPath();
   if (fs.existsSync(legacyPath)) {
     try {
-      const content = fs.readFileSync(legacyPath, "utf8");
-      const lines = content.split(/\r?\n/);
-      for (const line of lines) {
-        const match = line.match(/^api_key=(.+)$/);
-        if (match) {
-          config.apiKey = match[1].trim();
-          break;
+      const stats = fs.statSync(legacyPath);
+      if (stats.isFile()) {
+        const content = fs.readFileSync(legacyPath, "utf8");
+        const lines = content.split(/\r?\n/);
+        for (const line of lines) {
+          const match = line.match(/^api_key=(.+)$/);
+          if (match) {
+            config.apiKey = match[1].trim();
+            break;
+          }
         }
       }
     } catch (err) {
