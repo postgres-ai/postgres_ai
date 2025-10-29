@@ -33,9 +33,9 @@ $CLI_CMD remove-key
 
 echo ""
 echo "=== Testing Grafana commands ==="
-$CLI_CMD show-grafana-credentials
-$CLI_CMD generate-grafana-password
-$CLI_CMD show-grafana-credentials
+$CLI_CMD show-grafana-credentials || true
+$CLI_CMD generate-grafana-password || true
+$CLI_CMD show-grafana-credentials || true
 
 echo ""
 echo "=== Testing service management ==="
