@@ -104,40 +104,7 @@ cli:node:e2e:dind:
     - node -v && npm -v && docker version
     - npm --prefix cli install --no-audit --no-fund
   script:
-    - echo "=== Testing service commands ==="
-    - node ./cli/bin/postgres-ai.js check || true
-    - node ./cli/bin/postgres-ai.js config || true
-    - node ./cli/bin/postgres-ai.js update-config
-    - node ./cli/bin/postgres-ai.js start
-    - sleep 10
-    - node ./cli/bin/postgres-ai.js status
-    - node ./cli/bin/postgres-ai.js logs --tail 5 grafana || true
-    - node ./cli/bin/postgres-ai.js health --wait 60 || true
-    - echo ""
-    - echo "=== Testing instance commands ==="
-    - node ./cli/bin/postgres-ai.js list-instances
-    - node ./cli/bin/postgres-ai.js add-instance "postgresql://monitor:monitor_pass@target-db:5432/target_database" ci-test
-    - node ./cli/bin/postgres-ai.js list-instances | grep -q ci-test
-    - sleep 5
-    - node ./cli/bin/postgres-ai.js test-instance ci-test || true
-    - node ./cli/bin/postgres-ai.js remove-instance ci-test
-    - echo ""
-    - echo "=== Testing API key commands ==="
-    - node ./cli/bin/postgres-ai.js add-key "test_api_key_12345"
-    - node ./cli/bin/postgres-ai.js show-key | grep -q "test_api_key"
-    - node ./cli/bin/postgres-ai.js remove-key
-    - echo ""
-    - echo "=== Testing Grafana commands ==="
-    - node ./cli/bin/postgres-ai.js show-grafana-credentials
-    - node ./cli/bin/postgres-ai.js generate-grafana-password
-    - node ./cli/bin/postgres-ai.js show-grafana-credentials
-    - echo ""
-    - echo "=== Testing service management ==="
-    - node ./cli/bin/postgres-ai.js restart grafana
-    - sleep 3
-    - node ./cli/bin/postgres-ai.js status
-    - node ./cli/bin/postgres-ai.js stop
-    - node ./cli/bin/postgres-ai.js clean || true
+    - ./tests/e2e.cli.sh
   after_script:
     - docker ps -a || true
   rules:
