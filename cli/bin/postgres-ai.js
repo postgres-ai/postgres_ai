@@ -167,15 +167,25 @@ program
     const lines = content.split(/\r?\n/);
     let currentName = "";
     let printed = false;
+    const collected = [];
     for (const line of lines) {
       const m = line.match(/^-[\t ]*name:[\t ]*(.+)$/);
       if (m) {
         currentName = m[1].trim();
-        console.log(`Instance: ${currentName}`);
+        collected.push(currentName);
         printed = true;
       }
     }
-    if (!printed) {
+    // Hide demo placeholder if that's the only entry
+    if (printed) {
+      const filtered = collected.filter((n) => n !== "target-database");
+      const list = filtered.length > 0 ? filtered : [];
+      if (list.length === 0) {
+        console.log("No instances configured");
+        return;
+      }
+      for (const n of list) console.log(`Instance: ${n}`);
+    } else {
       console.log("No instances found");
     }
   });
