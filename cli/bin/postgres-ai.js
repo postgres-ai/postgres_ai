@@ -145,13 +145,11 @@ program
 program
   .command("health")
   .description("health check")
-  .option("--strict", "exit with error if any service is unhealthy", false)
+  .option("--wait <seconds>", "wait time in seconds for services to become healthy", parseInt, 0)
   .action(async (opts) => {
     const { exec } = require("child_process");
     const util = require("util");
     const execPromise = util.promisify(exec);
-    
-    console.log("Checking service health...\n");
     
     const services = [
       { name: "Grafana", url: "http://localhost:3000/api/health" },
@@ -160,24 +158,40 @@ program
       { name: "PGWatch (Prometheus)", url: "http://localhost:58089/health" },
     ];
     
-    let allHealthy = true;
+    const waitTime = opts.wait || 0;
+    const maxAttempts = waitTime > 0 ? Math.ceil(waitTime / 5) : 1;
     
-    for (const service of services) {
-      try {
-        const { stdout, stderr } = await execPromise(
-          `curl -sf -o /dev/null -w "%{http_code}" ${service.url}`,
-          { timeout: 5000 }
-        );
-        const code = stdout.trim();
-        if (code === "200") {
-          console.log(`✓ ${service.name}: healthy`);
-        } else {
-          console.log(`✗ ${service.name}: unhealthy (HTTP ${code})`);
+    console.log("Checking service health...\n");
+    
+    let allHealthy = false;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        console.log(`Retrying (attempt ${attempt}/${maxAttempts})...\n`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+      
+      allHealthy = true;
+      for (const service of services) {
+        try {
+          const { stdout } = await execPromise(
+            `curl -sf -o /dev/null -w "%{http_code}" ${service.url}`,
+            { timeout: 5000 }
+          );
+          const code = stdout.trim();
+          if (code === "200") {
+            console.log(`✓ ${service.name}: healthy`);
+          } else {
+            console.log(`✗ ${service.name}: unhealthy (HTTP ${code})`);
+            allHealthy = false;
+          }
+        } catch (error) {
+          console.log(`✗ ${service.name}: unreachable`);
           allHealthy = false;
         }
-      } catch (error) {
-        console.log(`✗ ${service.name}: unreachable`);
-        allHealthy = false;
+      }
+      
+      if (allHealthy) {
+        break;
       }
     }
     
@@ -186,9 +200,7 @@ program
       console.log("All services are healthy");
     } else {
       console.log("Some services are unhealthy");
-      if (opts.strict) {
-        process.exitCode = 1;
-      }
+      process.exitCode = 1;
     }
   });
 program
