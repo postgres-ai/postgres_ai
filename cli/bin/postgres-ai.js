@@ -806,7 +806,8 @@ program
     const path = require("path");
     
     // Check both new config and legacy config
-    const hasNewConfig = config.configExists();
+    const newConfigPath = config.getConfigPath();
+    const hasNewConfig = fs.existsSync(newConfigPath);
     const legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
     const hasLegacyConfig = fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile();
     
