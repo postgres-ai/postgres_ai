@@ -4,6 +4,7 @@
 const { Command } = require("commander");
 const pkg = require("../package.json");
 const config = require("../lib/config");
+const yaml = require("js-yaml");
 
 function getConfig(opts) {
   // Priority order:
@@ -120,10 +121,12 @@ program
     if (code !== 0) process.exitCode = code;
   });
 program
-  .command("restart")
-  .description("restart services")
-  .action(async () => {
-    const code = await runCompose(["restart"]);
+  .command("restart [service]")
+  .description("restart all services or specific service")
+  .action(async (service) => {
+    const args = ["restart"];
+    if (service) args.push(service);
+    const code = await runCompose(args);
     if (code !== 0) process.exitCode = code;
   });
 program
@@ -355,32 +358,33 @@ program
   .command("clean")
   .description("cleanup artifacts")
   .action(async () => {
-    const { exec } = require("child_process");
+    const { execFile } = require("child_process");
     const util = require("util");
-    const execPromise = util.promisify(exec);
+    const execFilePromise = util.promisify(execFile);
     
     console.log("Cleaning up Docker resources...\n");
     
     try {
       // Remove stopped containers
-      const { stdout: containers } = await execPromise("docker ps -aq --filter 'status=exited'");
+      const { stdout: containers } = await execFilePromise("docker", ["ps", "-aq", "--filter", "status=exited"]);
       if (containers.trim()) {
-        await execPromise(`docker rm ${containers.trim().split('\n').join(' ')}`);
+        const containerIds = containers.trim().split('\n');
+        await execFilePromise("docker", ["rm", ...containerIds]);
         console.log("✓ Removed stopped containers");
       } else {
         console.log("✓ No stopped containers to remove");
       }
       
       // Remove unused volumes
-      const { stdout: volumeOut } = await execPromise("docker volume prune -f");
+      await execFilePromise("docker", ["volume", "prune", "-f"]);
       console.log("✓ Removed unused volumes");
       
       // Remove unused networks
-      const { stdout: networkOut } = await execPromise("docker network prune -f");
+      await execFilePromise("docker", ["network", "prune", "-f"]);
       console.log("✓ Removed unused networks");
       
       // Remove dangling images
-      const { stdout: imageOut } = await execPromise("docker image prune -f");
+      await execFilePromise("docker", ["image", "prune", "-f"]);
       console.log("✓ Removed dangling images");
       
       console.log("\nCleanup completed");
@@ -393,7 +397,7 @@ program
   .command("shell <service>")
   .description("open service shell")
   .action(async (service) => {
-    const code = await runCompose(["exec", "-T", service, "/bin/sh"]);
+    const code = await runCompose(["exec", service, "/bin/sh"]);
     if (code !== 0) process.exitCode = code;
   });
 program
@@ -417,24 +421,12 @@ program
       process.exitCode = 1;
       return;
     }
-    const content = fs.readFileSync(instancesPath, "utf8");
-    const lines = content.split(/\r?\n/);
-    let currentName = "";
-    let printed = false;
-    const collected = [];
-    for (const line of lines) {
-      const m = line.match(/^-[\t ]*name:[\t ]*(.+)$/);
-      if (m) {
-        currentName = m[1].trim();
-        collected.push(currentName);
-        printed = true;
-      }
-    }
-    // Hide demo placeholder if that's the only entry
-    if (printed) {
-      const filtered = collected.filter((n) => n !== "target-database");
-      const list = filtered.length > 0 ? filtered : [];
-      if (list.length === 0) {
+    
+    try {
+      const content = fs.readFileSync(instancesPath, "utf8");
+      const instances = yaml.load(content);
+      
+      if (!instances || !Array.isArray(instances) || instances.length === 0) {
         console.log("No instances configured");
         console.log("");
         console.log("To add an instance:");
@@ -444,9 +436,27 @@ program
         console.log("  postgres-ai add-instance 'postgresql://user:pass@host:5432/db' my-db");
         return;
       }
-      for (const n of list) console.log(`Instance: ${n}`);
-    } else {
-      console.log("No instances found");
+      
+      // Filter out demo placeholder
+      const filtered = instances.filter((inst) => inst.name && inst.name !== "target-database");
+      
+      if (filtered.length === 0) {
+        console.log("No instances configured");
+        console.log("");
+        console.log("To add an instance:");
+        console.log("  postgres-ai add-instance <connection-string> <name>");
+        console.log("");
+        console.log("Example:");
+        console.log("  postgres-ai add-instance 'postgresql://user:pass@host:5432/db' my-db");
+        return;
+      }
+      
+      for (const inst of filtered) {
+        console.log(`Instance: ${inst.name}`);
+      }
+    } catch (err) {
+      console.error(`Error parsing instances.yml: ${err.message}`);
+      process.exitCode = 1;
     }
   });
 program
@@ -470,14 +480,34 @@ program
     const host = m[3];
     const db = m[5];
     const instanceName = name && name.trim() ? name.trim() : `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
-    const lineStart = `- name: ${instanceName}`;
+    
+    // Check if instance already exists
+    try {
+      if (fs.existsSync(file)) {
+        const content = fs.readFileSync(file, "utf8");
+        const instances = yaml.load(content) || [];
+        if (Array.isArray(instances)) {
+          const exists = instances.some((inst) => inst.name === instanceName);
+          if (exists) {
+            console.error(`Instance '${instanceName}' already exists`);
+            process.exitCode = 1;
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      // If YAML parsing fails, fall back to simple check
+      const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+      if (new RegExp(`^- name: ${instanceName}$`, "m").test(content)) {
+        console.error(`Instance '${instanceName}' already exists`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+    
+    // Add new instance
     const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
     const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    if (new RegExp(`^${lineStart}$`, "m").test(content)) {
-      console.error(`Instance '${instanceName}' already exists`);
-      process.exitCode = 1;
-      return;
-    }
     fs.appendFileSync(file, (content && !/\n$/.test(content) ? "\n" : "") + body, "utf8");
     console.log(`Instance '${instanceName}' added`);
   });
@@ -493,31 +523,31 @@ program
       process.exitCode = 1;
       return;
     }
-    const text = fs.readFileSync(file, "utf8");
-    const lines = text.split(/\r?\n/);
-    const out = [];
-    let skip = false;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const isStart = /^-[\t ]*name:[\t ]*(.+)$/.test(line);
-      if (isStart) {
-        const n = line.replace(/^-[\t ]*name:[\t ]*/, "").trim();
-        if (n === name) {
-          skip = true;
-          continue;
-        } else if (skip) {
-          skip = false;
-        }
+    
+    try {
+      const content = fs.readFileSync(file, "utf8");
+      const instances = yaml.load(content);
+      
+      if (!instances || !Array.isArray(instances)) {
+        console.error("Invalid instances.yml format");
+        process.exitCode = 1;
+        return;
       }
-      if (!skip) out.push(line);
-    }
-    if (out.join("\n") === text) {
-      console.error(`Instance '${name}' not found`);
+      
+      const filtered = instances.filter((inst) => inst.name !== name);
+      
+      if (filtered.length === instances.length) {
+        console.error(`Instance '${name}' not found`);
+        process.exitCode = 1;
+        return;
+      }
+      
+      fs.writeFileSync(file, yaml.dump(filtered), "utf8");
+      console.log(`Instance '${name}' removed`);
+    } catch (err) {
+      console.error(`Error processing instances.yml: ${err.message}`);
       process.exitCode = 1;
-      return;
     }
-    fs.writeFileSync(file, out.join("\n"), "utf8");
-    console.log(`Instance '${name}' removed`);
   });
 program
   .command("test-instance <name>")
@@ -525,9 +555,9 @@ program
   .action(async (name) => {
     const fs = require("fs");
     const path = require("path");
-    const { exec } = require("child_process");
+    const { execFile } = require("child_process");
     const util = require("util");
-    const execPromise = util.promisify(exec);
+    const execFilePromise = util.promisify(execFile);
     
     const instancesPath = path.resolve(process.cwd(), "instances.yml");
     if (!fs.existsSync(instancesPath)) {
@@ -536,46 +566,35 @@ program
       return;
     }
     
-    const content = fs.readFileSync(instancesPath, "utf8");
-    const lines = content.split(/\r?\n/);
-    let connStr = "";
-    let foundInstance = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const nameLine = lines[i].match(/^-[\t ]*name:[\t ]*(.+)$/);
-      if (nameLine && nameLine[1].trim() === name) {
-        foundInstance = true;
-        // Look for conn_str in next lines
-        for (let j = i + 1; j < lines.length && j < i + 15; j++) {
-          const connLine = lines[j].match(/^[\t ]*conn_str:[\t ]*(.+)$/);
-          if (connLine) {
-            connStr = connLine[1].trim();
-            break;
-          }
-          // Stop at next instance
-          if (lines[j].match(/^-[\t ]*name:/)) break;
-        }
-        break;
-      }
-    }
-    
-    if (!foundInstance) {
-      console.error(`Instance '${name}' not found`);
-      process.exitCode = 1;
-      return;
-    }
-    
-    if (!connStr) {
-      console.error(`Connection string not found for instance '${name}'`);
-      process.exitCode = 1;
-      return;
-    }
-    
-    console.log(`Testing connection to '${name}'...`);
-    
     try {
-      const { stdout, stderr } = await execPromise(
-        `psql "${connStr}" -c "SELECT version();" --no-psqlrc`,
+      const content = fs.readFileSync(instancesPath, "utf8");
+      const instances = yaml.load(content);
+      
+      if (!instances || !Array.isArray(instances)) {
+        console.error("Invalid instances.yml format");
+        process.exitCode = 1;
+        return;
+      }
+      
+      const instance = instances.find((inst) => inst.name === name);
+      
+      if (!instance) {
+        console.error(`Instance '${name}' not found`);
+        process.exitCode = 1;
+        return;
+      }
+      
+      if (!instance.conn_str) {
+        console.error(`Connection string not found for instance '${name}'`);
+        process.exitCode = 1;
+        return;
+      }
+      
+      console.log(`Testing connection to '${name}'...`);
+      
+      const { stdout, stderr } = await execFilePromise(
+        "psql",
+        [instance.conn_str, "-c", "SELECT version();", "--no-psqlrc"],
         { timeout: 10000, env: { ...process.env, PAGER: 'cat' } }
       );
       console.log(`✓ Connection successful`);
@@ -601,24 +620,34 @@ program
     
     // Generate PKCE parameters
     const params = pkce.generatePKCEParams();
-    const port = opts.port || 8585;
-    const redirectUri = `http://localhost:${port}/callback`;
     
     const cfg = getConfig(program.opts());
     const baseUrl = cfg.baseUrl || "https://postgres.ai/api/general/";
     const apiBaseUrl = baseUrl.replace(/\/$/, "");
     
-    // Step 1: Initialize OAuth session on backend
-    console.log("Initializing authentication session...");
-    const initData = JSON.stringify({
-      client_type: "cli",
-      state: params.state,
-      code_challenge: params.codeChallenge,
-      code_challenge_method: params.codeChallengeMethod,
-      redirect_uri: redirectUri,
-    });
-    
     try {
+      // Step 1: Start local callback server FIRST to get actual port
+      console.log("Starting local callback server...");
+      const requestedPort = opts.port || 0; // 0 = OS assigns available port
+      const callbackServer = authServer.createCallbackServer(requestedPort, params.state, 300000);
+      
+      // Wait a bit for server to start and get port
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const actualPort = callbackServer.getPort();
+      const redirectUri = `http://localhost:${actualPort}/callback`;
+      
+      console.log(`Callback server listening on port ${actualPort}`);
+      
+      // Step 2: Initialize OAuth session on backend
+      console.log("Initializing authentication session...");
+      const initData = JSON.stringify({
+        client_type: "cli",
+        state: params.state,
+        code_challenge: params.codeChallenge,
+        code_challenge_method: params.codeChallengeMethod,
+        redirect_uri: redirectUri,
+      });
+      
       const initUrl = new URL("/rpc/oauth_init", apiBaseUrl);
       const initReq = http.request(
         initUrl,
@@ -636,13 +665,10 @@ program
             if (res.statusCode !== 200) {
               console.error(`Failed to initialize auth session: ${res.statusCode}`);
               console.error(data);
+              callbackServer.server.close();
               process.exitCode = 1;
               return;
             }
-            
-            // Step 2: Start local callback server
-            console.log("Starting local callback server...");
-            const serverPromise = authServer.startCallbackServer(port, params.state, 300000);
             
             // Step 3: Open browser
             const webUrl = apiBaseUrl.replace(/\/api\/general\/?$/, "");
@@ -660,7 +686,7 @@ program
             // Step 4: Wait for callback
             console.log("Waiting for authorization...");
             try {
-              const { code } = await serverPromise;
+              const { code } = await callbackServer.promise;
               
               // Step 5: Exchange code for token
               console.log("\nExchanging authorization code for API token...");
@@ -733,6 +759,7 @@ program
       
       initReq.on("error", (err) => {
         console.error(`Failed to connect to API: ${err.message}`);
+        callbackServer.server.close();
         process.exitCode = 1;
       });
       
@@ -749,30 +776,8 @@ program
   .command("add-key <apiKey>")
   .description("store API key")
   .action(async (apiKey) => {
-    const fs = require("fs");
-    const path = require("path");
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
-    
-    // Check if it exists and is a file (not a directory)
-    let existing = "";
-    if (fs.existsSync(cfgPath)) {
-      const stats = fs.statSync(cfgPath);
-      if (stats.isFile()) {
-        existing = fs.readFileSync(cfgPath, "utf8");
-      } else if (stats.isDirectory()) {
-        // Remove directory and recreate as file
-        fs.rmSync(cfgPath, { recursive: true, force: true });
-      }
-    }
-    
-    const filtered = existing
-      .split(/\r?\n/)
-      .filter((l) => !/^api_key=/.test(l))
-      .join("\n")
-      .replace(/\n+$/g, "");
-    const next = filtered.length ? `${filtered}\napi_key=${apiKey}\n` : `api_key=${apiKey}\n`;
-    fs.writeFileSync(cfgPath, next, "utf8");
-    console.log("API key saved to .pgwatch-config");
+    config.writeConfig({ apiKey });
+    console.log(`API key saved to ${config.getConfigPath()}`);
   });
 
 program

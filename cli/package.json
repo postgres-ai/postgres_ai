@@ -1,7 +1,7 @@
 {
   "name": "postgresai",
   "version": "0.11.0-alpha.8",
-  "description": "PostgresAI CLI (Node.js)",
+  "description": "postgres_ai CLI (Node.js)",
   "license": "Apache-2.0",
   "private": false,
   "repository": {
@@ -25,7 +25,8 @@
     "start": "node ./bin/postgres-ai.js --help"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "js-yaml": "^4.1.0"
   },
   "publishConfig": {
     "access": "public"
