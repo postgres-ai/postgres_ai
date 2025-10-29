@@ -217,32 +217,32 @@
                 },
                 {
                   "selector": "exec_time",
-                  "text": "Exec Time (ms)",
+                  "text": "Exec time (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "exec_time_per_sec",
-                  "text": "Exec Time/sec (ms/s)",
+                  "text": "Exec time/sec (ms/s)",
                   "type": "number"
                 },
                 {
                   "selector": "exec_time_per_call",
-                  "text": "Exec Time/call (ms)",
+                  "text": "Exec time/call (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "plan_time",
-                  "text": "Planning Time (ms)",
+                  "text": "Planning time (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "plan_time_per_sec",
-                  "text": "Planning Time/sec (ms/s)",
+                  "text": "Planning time/sec (ms/s)",
                   "type": "number"
                 },
                 {
                   "selector": "plan_time_per_call",
-                  "text": "Planning Time/call (ms)",
+                  "text": "Planning time/call (ms)",
                   "type": "number"
                 },
                 {
@@ -262,92 +262,92 @@
                 },
                 {
                   "selector": "shared_blks_hit",
-                  "text": "Shared Blocks Hit",
+                  "text": "Shared blocks hit",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_hit_per_sec",
-                  "text": "Shared Blocks Hit/sec",
+                  "text": "Shared blocks hit/sec",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_hit_per_call",
-                  "text": "Shared Blocks Hit/call",
+                  "text": "Shared blocks hit/call",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_read",
-                  "text": "Shared Blocks Read",
+                  "text": "Shared blocks read",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_read_per_sec",
-                  "text": "Shared Blocks Read/sec",
+                  "text": "Shared blocks read/sec",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_read_per_call",
-                  "text": "Shared Blocks Read/call",
+                  "text": "Shared blocks read/call",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_dirtied",
-                  "text": "Shared Blocks Dirtied",
+                  "text": "Shared blocks dirtied",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_dirtied_per_sec",
-                  "text": "Shared Blocks Dirtied/sec",
+                  "text": "Shared blocks dirtied/sec",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_dirtied_per_call",
-                  "text": "Shared Blocks Dirtied/call",
+                  "text": "Shared blocks dirtied/call",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_written",
-                  "text": "Shared Blocks Written",
+                  "text": "Shared blocks written",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_written_per_sec",
-                  "text": "Shared Blocks Written/sec",
+                  "text": "Shared blocks written/sec",
                   "type": "number"
                 },
                 {
                   "selector": "shared_blks_written_per_call",
-                  "text": "Shared Blocks Written/call",
+                  "text": "Shared blocks written/call",
                   "type": "number"
                 },
                 {
                   "selector": "blk_read_time",
-                  "text": "Block Read Time (ms)",
+                  "text": "Block read time (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "blk_read_time_per_sec",
-                  "text": "Block Read Time/sec (ms)",
+                  "text": "Block read time/sec (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "blk_read_time_per_call",
-                  "text": "Block Read Time/call (ms)",
+                  "text": "Block read time/call (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "blk_write_time",
-                  "text": "Block Write Time (ms)",
+                  "text": "Block write time (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "blk_write_time_per_sec",
-                  "text": "Block Write Time/sec (ms)",
+                  "text": "Block write time/sec (ms)",
                   "type": "number"
                 },
                 {
                   "selector": "blk_write_time_per_call",
-                  "text": "Block Write Time/call (ms)",
+                  "text": "Block write time/call (ms)",
                   "type": "number"
                 }
               ],
@@ -395,37 +395,37 @@
                 },
                 "includeByName": {},
                 "indexByName": {
-                  "Block Read Time (ms)": 27,
-                  "Block Read Time/call (ms)": 29,
-                  "Block Read Time/sec (ms)": 28,
-                  "Block Write Time (ms)": 24,
-                  "Block Write Time/call (ms)": 26,
-                  "Block Write Time/sec (ms)": 25,
+                  "Block read time (ms)": 27,
+                  "Block read time/call (ms)": 29,
+                  "Block read time/sec (ms)": 28,
+                  "Block write time (ms)": 24,
+                  "Block write time/call (ms)": 26,
+                  "Block write time/sec (ms)": 25,
                   "Calls": 1,
                   "Calls/sec": 2,
                   "Duration (seconds)": 30,
-                  "Exec Time (ms)": 3,
-                  "Exec Time/call (ms)": 5,
-                  "Exec Time/sec (ms/s)": 4,
-                  "Planning Time (ms)": 6,
-                  "Planning Time/call (ms)": 8,
-                  "Planning Time/sec (ms/s)": 7,
+                  "Exec time (ms)": 3,
+                  "Exec time/call (ms)": 5,
+                  "Exec time/sec (ms/s)": 4,
+                  "Planning time (ms)": 6,
+                  "Planning time/call (ms)": 8,
+                  "Planning time/sec (ms/s)": 7,
                   "Query ID": 0,
                   "Rows": 9,
                   "Rows/call": 11,
                   "Rows/sec": 10,
-                  "Shared Blocks Dirtied": 21,
-                  "Shared Blocks Dirtied/call": 23,
-                  "Shared Blocks Dirtied/sec": 22,
-                  "Shared Blocks Hit": 12,
-                  "Shared Blocks Hit/call": 14,
-                  "Shared Blocks Hit/sec": 13,
-                  "Shared Blocks Read": 15,
-                  "Shared Blocks Read/call": 17,
-                  "Shared Blocks Read/sec": 16,
-                  "Shared Blocks Written": 18,
-                  "Shared Blocks Written/call": 20,
-                  "Shared Blocks Written/sec": 19
+                  "Shared blocks dirtied": 21,
+                  "Shared blocks dirtied/call": 23,
+                  "Shared blocks dirtied/sec": 22,
+                  "Shared blocks hit": 12,
+                  "Shared blocks hit/call": 14,
+                  "Shared blocks hit/sec": 13,
+                  "Shared blocks read": 15,
+                  "Shared blocks read/call": 17,
+                  "Shared blocks read/sec": 16,
+                  "Shared blocks written": 18,
+                  "Shared blocks written/call": 20,
+                  "Shared blocks written/sec": 19
                 },
                 "renameByName": {}
               }

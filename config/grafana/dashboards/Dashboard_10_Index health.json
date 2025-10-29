@@ -593,9 +593,9 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, pgwatch_pg_btree_bloat_real_size_mib{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})*1024*1024",
+          "expr": "topk($top_n, pgwatch_pg_class_relation_size_bytes{relkind=\"105\", cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})",
           "interval": "20",
-          "legendFormat": "{{schemaname}}.{{tblname}}.{{idxname}}",
+          "legendFormat": "{{schemaname}}.{{relname}}",
           "range": true,
           "refId": "A"
         }
