@@ -79,9 +79,10 @@ cli:node:smoke:
     - rm -f .pgwatch-config
     - node ./cli/bin/postgres-ai.js add-key "test_key_1234567890"
     - node ./cli/bin/postgres-ai.js show-key | grep -E "\*{2,}|[0-9]{4}$"
-    - grep -q '^api_key=' .pgwatch-config
+    - test -f ~/.config/postgresai/config.json
+    - grep -q 'test_key' ~/.config/postgresai/config.json
     - node ./cli/bin/postgres-ai.js remove-key
-    - if grep -q '^api_key=' .pgwatch-config; then echo 'key not removed' && exit 1; fi
+    - if grep -q 'apiKey' ~/.config/postgresai/config.json; then echo 'key not removed' && exit 1; fi
     - node ./cli/bin/postgres-ai.js list-instances | head -n 1 || true
     - node ./cli/bin/postgres-ai.js add-instance 'postgresql://user:pass@host:5432/db' ci-test || true
     - node ./cli/bin/postgres-ai.js remove-instance ci-test || true
