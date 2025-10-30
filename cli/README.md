@@ -7,6 +7,11 @@ Command-line interface for PostgresAI monitoring and database management.
 ### From npm
 
 ```bash
+npm install -g postgresai
+```
+
+Or install the latest alpha release explicitly:
+```bash
 npm install -g postgresai@alpha
 ```
 
