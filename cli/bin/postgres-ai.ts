@@ -1002,5 +1002,113 @@ mon
     console.log("");
   });
 
+// Issues management
+const issues = program.command("issues").description("issues management");
+
+issues
+  .command("list")
+  .description("list issues")
+  .option("--debug", "enable debug output")
+  .action(async (opts: { debug?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey   } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const apiBaseUrl = (
+        rootOpts.apiBaseUrl || process.env.PGAI_API_BASE_URL || cfg.baseUrl || "https://postgres.ai/api/general/"
+      ).replace(/\/$/, "");
+
+      const url = new URL(`${apiBaseUrl}/issues`);
+
+      // Use only 'access-token' header for authentication
+      const headers: Record<string, string> = {};
+      headers["access-token"] = apiKey;
+      // Preferred PostgREST behavior
+      headers["Prefer"] = "return=representation";
+      headers["Content-Type"] = "application/json";
+
+      if (opts.debug) {
+        const mask = (k: string): string => {
+          if (!k) return "";
+          if (k.length <= 8) return "****";
+          if (k.length <= 16) return `${k.slice(0, 4)}${"*".repeat(k.length - 8)}${k.slice(-4)}`;
+          return `${k.slice(0, Math.min(12, k.length - 8))}${"*".repeat(Math.max(4, k.length - 16))}${k.slice(-4)}`;
+        };
+        console.log(`Debug: Resolved API base URL: ${apiBaseUrl}`);
+        console.log(`Debug: GET URL: ${url.toString()}`);
+        console.log(`Debug: Auth scheme: access-token`);
+        const debugHeaders: Record<string, string> = { ...headers };
+        if (debugHeaders["access-token"]) debugHeaders["access-token"] = mask(apiKey);
+        console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+      }
+
+      const req = http.request(
+        url,
+        {
+          method: "GET",
+          headers,
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            if (opts.debug) {
+              console.log(`Debug: Response status: ${res.statusCode}`);
+              console.log(`Debug: Response headers: ${JSON.stringify(res.headers)}`);
+            }
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              try {
+                const parsed = JSON.parse(data);
+                if (opts.debug) {
+                  console.log(`Debug: Response body (parsed JSON)`);
+                }
+                console.log(JSON.stringify(parsed, null, 2));
+              } catch {
+                // If not JSON, print raw
+                if (opts.debug) {
+                  console.log(`Debug: Response body (raw)`);
+                }
+                process.stdout.write(data);
+                if (!/\n$/.test(data)) console.log();
+              }
+            } else {
+              console.error(`Failed to fetch issues: HTTP ${res.statusCode}`);
+              if (data) {
+                // Try to parse error or print as-is
+                try {
+                  const errObj = JSON.parse(data);
+                  console.error(JSON.stringify(errObj, null, 2));
+                } catch {
+                  console.error(data);
+                }
+              }
+              if (res.statusCode === 401) {
+                console.error("Tip: authenticate with 'pgai auth' or check your --api-key.");
+              }
+              process.exitCode = 1;
+            }
+          });
+        }
+      );
+
+      req.on("error", (err: Error) => {
+        console.error(`Request failed: ${err.message}`);
+        process.exitCode = 1;
+      });
+
+      req.end();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Error: ${message}`);
+      process.exitCode = 1;
+    }
+  });
+
 program.parseAsync(process.argv);
 
