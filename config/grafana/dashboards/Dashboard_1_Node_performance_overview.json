@@ -1751,7 +1751,7 @@
           "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "interval": "20",
-          "legendFormat": "blk_read_time",
+          "legendFormat": "blk_write_time",
           "range": true,
           "refId": "B"
         }
@@ -1863,7 +1863,7 @@
           "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
           "hide": false,
           "interval": "20",
-          "legendFormat": "blk_read_time",
+          "legendFormat": "blk_write_time",
           "range": true,
           "refId": "B"
         }

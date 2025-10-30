@@ -57,6 +57,7 @@ metrics:
           pg_stat_bgwriter
     node_status: primary
     is_instance_level: true
+    statement_timeout_seconds: 15
   checkpointer:
     description: >
       Retrieves key statistics from the PostgreSQL `pg_stat_checkpointer` view, providing insights into the checkpointer's performance.
@@ -79,6 +80,7 @@ metrics:
           (extract(epoch from now() - stats_reset))::int as last_reset_s
         from
           pg_stat_checkpointer
+    statement_timeout_seconds: 15
   db_size:
     description: >
       Retrieves the size of the current database and the size of the `pg_catalog` schema, providing insights into the storage usage of the database.
@@ -273,6 +275,7 @@ metrics:
           datname = current_database()
     gauges:
       - '*'
+    statement_timeout_seconds: 15
   locks_mode:
     description: >
       Retrieves lock mode statistics from the PostgreSQL `pg_locks` view, providing insights into the different lock modes currently held in the database.
@@ -299,6 +302,7 @@ metrics:
           unnest('{AccessShareLock, ExclusiveLock, RowShareLock, RowExclusiveLock, ShareLock, ShareRowExclusiveLock,  AccessExclusiveLock, ShareUpdateExclusiveLock}'::text[]) lockmodes
     gauges:
       - '*'
+    statement_timeout_seconds: 15
   replication:
     description: >
       This metric collects replication statistics from the `pg_stat_replication` view.
@@ -330,6 +334,7 @@ metrics:
     gauges:
       - '*'
     is_instance_level: true
+    statement_timeout_seconds: 15
   replication_slots:
     description: >
       This metric collects information about replication slots from the `pg_replication_slots` view.
@@ -352,6 +357,7 @@ metrics:
     gauges:
       - '*'
     is_instance_level: true
+    statement_timeout_seconds: 15
   settings:
     description: >
       This metric collects various PostgreSQL server settings and configurations.
@@ -374,6 +380,7 @@ metrics:
     gauges:
       - '*'
     is_instance_level: true
+    statement_timeout_seconds: 15
 
   table_stats:
     description: >
@@ -433,7 +440,7 @@ metrics:
                         analyze_count,
                         autoanalyze_count,
                         case when c.relkind <> 'p' then age(c.relfrozenxid) else 0 end as tx_freeze_age
-                from pg_stat_user_tables ut
+                from pg_stat_all_tables ut
                           join
                       pg_class c on c.oid = ut.relid
                 where
@@ -570,7 +577,7 @@ metrics:
                         autoanalyze_count,
                         case when c.relkind <> 'p' then age(c.relfrozenxid) else 0 end as tx_freeze_age,
                         extract(epoch from now() - last_seq_scan)::int8 as last_seq_scan_s
-                from pg_stat_user_tables ut
+                from pg_stat_all_tables ut
                     join pg_class c on c.oid = ut.relid
                     left join pg_class t on t.oid = c.reltoastrelid
                     left join pg_index ti on ti.indrelid = t.oid
@@ -697,6 +704,7 @@ metrics:
     gauges:
       - '*'
     is_instance_level: true
+    statement_timeout_seconds: 15
   wait_events:
     description: >
       This metric retrieves information about wait events for active sessions in the PostgreSQL database.
@@ -726,6 +734,7 @@ metrics:
     gauges:
       - total
     is_instance_level: true
+    statement_timeout_seconds: 15
   pg_stat_activity:
     sqls:
       11: |-
@@ -761,6 +770,7 @@ metrics:
     gauges:
       - count
       - max_tx_duration
+    statement_timeout_seconds: 15
   pg_archiver:
     sqls:
       11: |
@@ -788,6 +798,7 @@ metrics:
         from current_wal cw, archive_wal aw
     gauges:
       - pending_wal_count
+    statement_timeout_seconds: 15
   pg_blocked:
     sqls:
       11: |-
@@ -805,6 +816,7 @@ metrics:
         limit 5000
     gauges:
       - queries
+    statement_timeout_seconds: 15
   pg_database_wraparound:
     sqls:
       11: |
@@ -820,6 +832,7 @@ metrics:
     gauges:
       - age_datfrozenxid
       - age_datminmxid
+    statement_timeout_seconds: 15
   pg_long_running_transactions:
     sqls:
       11: |
@@ -831,6 +844,7 @@ metrics:
         where state is distinct from 'idle' and (now() - xact_start) > '1 minutes'::interval and query not like 'autovacuum:%'
     gauges:
       - '*'
+    statement_timeout_seconds: 15
   pg_stat_replication:
     sqls:
       11: |
@@ -851,37 +865,36 @@ metrics:
       - flush_lsn
       - replay_lsn
       - reply_time_lag
+    statement_timeout_seconds: 15
   pg_stat_statements:
     sqls:
       11: |
-        WITH ranked_statements as (
+        WITH aggregated_statements as (
           select
-            pg_get_userbyid(userid) as user,
             pg_database.datname,
-            pg_stat_statements.queryid ,
-            pg_stat_statements.plans as plans_total,
-            pg_stat_statements.calls,
-            pg_stat_statements.total_exec_time as exec_time_total,
-            pg_stat_statements.total_plan_time as plan_time_total,
-            pg_stat_statements.rows,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
-            pg_stat_statements.blk_read_time as block_read_total,
-            pg_stat_statements.blk_write_time as block_write_total,
-            pg_stat_statements.wal_records,
-            pg_stat_statements.wal_fpi,
-            pg_stat_statements.wal_bytes,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written,
-            row_number() over (order by total_exec_time desc) as rn
+            pg_stat_statements.queryid,
+            sum(pg_stat_statements.plans) as plans_total,
+            sum(pg_stat_statements.calls) as calls,
+            sum(pg_stat_statements.total_exec_time) as exec_time_total,
+            sum(pg_stat_statements.total_plan_time) as plan_time_total,
+            sum(pg_stat_statements.rows) as rows,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
+            sum(pg_stat_statements.blk_read_time) as block_read_total,
+            sum(pg_stat_statements.blk_write_time) as block_write_total,
+            sum(pg_stat_statements.wal_records) as wal_records,
+            sum(pg_stat_statements.wal_fpi) as wal_fpi,
+            sum(pg_stat_statements.wal_bytes) as wal_bytes,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written
             from pg_stat_statements
             join pg_database
             on pg_database.oid = pg_stat_statements.dbid
+            group by pg_database.datname, pg_stat_statements.queryid
         )
         select
-          ranked_statements.user as tag_user,
           datname as tag_datname,
           queryid as tag_queryid,
           calls::int8 as calls,
@@ -900,36 +913,34 @@ metrics:
           wal_bytes::int8 as wal_bytes,
           temp_bytes_read::int8 as temp_bytes_read,
           temp_bytes_written::int8 as temp_bytes_written
-          from ranked_statements
+          from aggregated_statements
       17: |
-        WITH ranked_statements as (
+        with aggregated_statements as (
           select
-            pg_get_userbyid(userid) as user,
             pg_database.datname,
-            pg_stat_statements.queryid ,
-            pg_stat_statements.plans as plans_total,
-            pg_stat_statements.calls,
-            pg_stat_statements.total_exec_time as exec_time_total,
-            pg_stat_statements.total_plan_time as plan_time_total,
-            pg_stat_statements.rows,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
-            (current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
-            pg_stat_statements.shared_blk_read_time as block_read_total,
-            pg_stat_statements.shared_blk_write_time as block_write_total,
-            pg_stat_statements.wal_records,
-            pg_stat_statements.wal_fpi,
-            pg_stat_statements.wal_bytes,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
-            (current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written,
-            row_number() over (order by total_exec_time desc) as rn
+            pg_stat_statements.queryid,
+            sum(pg_stat_statements.plans) as plans_total,
+            sum(pg_stat_statements.calls) as calls,
+            sum(pg_stat_statements.total_exec_time) as exec_time_total,
+            sum(pg_stat_statements.total_plan_time) as plan_time_total,
+            sum(pg_stat_statements.rows) as rows,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_hit) as shared_bytes_hit_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_read) as shared_bytes_read_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_dirtied) as shared_bytes_dirtied_total,
+            sum(current_setting('block_size')::int * pg_stat_statements.shared_blks_written) as shared_bytes_written_total,
+            sum(pg_stat_statements.shared_blk_read_time) as block_read_total,
+            sum(pg_stat_statements.shared_blk_write_time) as block_write_total,
+            sum(pg_stat_statements.wal_records) as wal_records,
+            sum(pg_stat_statements.wal_fpi) as wal_fpi,
+            sum(pg_stat_statements.wal_bytes) as wal_bytes,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_read) as temp_bytes_read,
+            sum(current_setting('block_size')::int * pg_stat_statements.temp_blks_written) as temp_bytes_written
             from pg_stat_statements
             join pg_database
             on pg_database.oid = pg_stat_statements.dbid
+            group by pg_database.datname, pg_stat_statements.queryid
         )
         select
-          ranked_statements.user as tag_user,
           datname as tag_datname,
           queryid as tag_queryid,
           calls::int8 as calls,
@@ -948,7 +959,7 @@ metrics:
           wal_bytes::int8 as wal_bytes,
           temp_bytes_read::int8 as temp_bytes_read,
           temp_bytes_written::int8 as temp_bytes_written
-          from ranked_statements
+          from aggregated_statements
     gauges:
       - calls
       - plans_total
@@ -966,6 +977,7 @@ metrics:
       - wal_bytes
       - temp_bytes_read
       - temp_bytes_written
+    statement_timeout_seconds: 15
   pg_class:
     description: >
       Direct access to pg_class system catalog data for all relations (tables, indexes, etc).
@@ -993,7 +1005,8 @@ metrics:
       - relpages
       - relation_size_bytes
       - total_relation_size_bytes
-  pg_stat_user_indexes:
+    statement_timeout_seconds: 15
+  pg_stat_all_indexes:
     sqls:
       11: |
         select schemaname as tag_schemaname, 
@@ -1002,14 +1015,15 @@ metrics:
           idx_scan, 
           idx_tup_read, 
           idx_tup_fetch
-        from pg_stat_user_indexes
+        from pg_stat_all_indexes
         order by idx_scan desc
         limit 5000
     gauges:
       - idx_scan
       - idx_tup_read
       - idx_tup_fetch
-  pg_stat_user_tables:
+    statement_timeout_seconds: 15
+  pg_stat_all_tables:
     sqls:
       11: |
         select
@@ -1031,7 +1045,7 @@ metrics:
           (vacuum_count + autovacuum_count) as vacuum_count,
           (analyze_count + autoanalyze_count) as analyze_count
         from
-          pg_stat_user_tables
+          pg_stat_all_tables
         order by n_live_tup + n_dead_tup desc
         limit 5000
     gauges:
@@ -1049,6 +1063,7 @@ metrics:
       - last_analyze
       - vacuum_count
       - analyze_count
+    statement_timeout_seconds: 15
   pg_stat_wal_receiver:
     sqls:
       11: |
@@ -1077,6 +1092,7 @@ metrics:
       - latest_end_lsn
       - latest_end_time
       - upstream_node
+    statement_timeout_seconds: 15
   pg_stuck_idle_in_transaction:
     sqls:
       11: |
@@ -1085,6 +1101,7 @@ metrics:
         where state = 'idle in transaction' and (now() - query_start) > '10 minutes'::interval
     gauges:
       - queries
+    statement_timeout_seconds: 15
   pg_total_relation_size:
     sqls:
       11: |
@@ -1098,6 +1115,7 @@ metrics:
         limit 5000
     gauges:
       - bytes
+    statement_timeout_seconds: 15
   pg_txid:
     sqls:
       11: |
@@ -1110,6 +1128,7 @@ metrics:
       - current
       - xmin
       - xmin_age
+    statement_timeout_seconds: 15
   pg_xlog_position:
     sqls:
       11: |
@@ -1121,7 +1140,7 @@ metrics:
               end as bytes
     gauges:
       - bytes
-
+    statement_timeout_seconds: 15
   pg_btree_bloat:
     description: >
       This metric analyzes index bloat by calculating the estimated vs actual index pages and sizes.
@@ -1236,7 +1255,7 @@ metrics:
       - bloat_pct
       - is_na
       - reltuples
-
+    statement_timeout_seconds: 15
   pg_table_bloat:
     description: >
       This metric analyzes table bloat by calculating the estimated vs actual table pages and sizes.
@@ -1400,7 +1419,7 @@ metrics:
             (confrelid::regclass)::text as tag_fk_table_ref,
             array_to_string(indclass, ', ') as tag_opclasses
           from
-            pg_stat_user_indexes
+            pg_stat_all_indexes
           join pg_index using (indexrelid)
           left join pg_constraint
             on array_to_string(indkey, ',') = array_to_string(conkey, ',')
@@ -1449,7 +1468,7 @@ metrics:
         from num_data;
     gauges:
       - '*'
-
+    statement_timeout_seconds: 15
   redundant_indexes:
     description: >
       This metric identifies redundant indexes that can potentially be dropped to save storage space and improve write performance.
@@ -1469,7 +1488,7 @@ metrics:
           join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
           join pg_namespace n on n.oid = ci.relnamespace
           join pg_constraint cn on cn.conrelid = cr.oid
-          left join pg_stat_user_indexes si on si.indexrelid = i.indexrelid
+          left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             contype = 'f'
             and i.indisunique is false
@@ -1519,7 +1538,7 @@ metrics:
             inner join pg_opclass op2 on i2.indclass[0] = op2.oid
             inner join pg_am am1 on op1.opcmethod = am1.oid
             inner join pg_am am2 on op2.opcmethod = am2.oid
-            join pg_stat_user_indexes as s on s.indexrelid = i2.indexrelid
+            join pg_stat_all_indexes as s on s.indexrelid = i2.indexrelid
             join pg_class as trel on trel.oid = i2.indrelid
             join pg_namespace as tnsp on trel.relnamespace = tnsp.oid
             join pg_class as irel on irel.oid = i2.indexrelid
@@ -1605,6 +1624,7 @@ metrics:
         select * from redundant_indexes_grouped;
     gauges:
       - '*'
+    statement_timeout_seconds: 15
   unused_indexes:
     description: >
       This metric identifies unused indexes in the database.
@@ -1624,7 +1644,7 @@ metrics:
           join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
           join pg_namespace n on n.oid = ci.relnamespace
           join pg_constraint cn on cn.conrelid = cr.oid
-          left join pg_stat_user_indexes si on si.indexrelid = i.indexrelid
+          left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             contype = 'f'
             and i.indisunique is false
@@ -1636,7 +1656,7 @@ metrics:
               tables.idx_scan + tables.seq_scan as all_scans,
               ( tables.n_tup_ins + tables.n_tup_upd + tables.n_tup_del ) as writes,
             pg_relation_size(relid) as table_size
-              from pg_stat_user_tables as tables
+              from pg_stat_all_tables as tables
               join pg_class c on c.oid = relid
               where c.relpages > 5
         ), indexes as (
@@ -1656,7 +1676,7 @@ metrics:
             join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
             join pg_namespace n on n.oid = ci.relnamespace
             join pg_am a ON ci.relam = a.oid
-            left join pg_stat_user_indexes si on si.indexrelid = i.indexrelid
+            left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             i.indisunique = false
             and i.indisvalid = true
@@ -1713,7 +1733,7 @@ metrics:
         order by index_size_bytes desc;
     gauges:
       - '*'
-  
+    statement_timeout_seconds: 15
   rarely_used_indexes:
     description: >
       This metric identifies rarely used indexes in the database.
@@ -1733,7 +1753,7 @@ metrics:
           join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
           join pg_namespace n on n.oid = ci.relnamespace
           join pg_constraint cn on cn.conrelid = cr.oid
-          left join pg_stat_user_indexes si on si.indexrelid = i.indexrelid
+          left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             contype = 'f'
             and i.indisunique is false
@@ -1745,7 +1765,7 @@ metrics:
               tables.idx_scan + tables.seq_scan as all_scans,
               ( tables.n_tup_ins + tables.n_tup_upd + tables.n_tup_del ) as writes,
             pg_relation_size(relid) as table_size
-              from pg_stat_user_tables as tables
+              from pg_stat_all_tables as tables
               join pg_class c on c.oid = relid
               where c.relpages > 5
         ), all_writes as (
@@ -1768,7 +1788,7 @@ metrics:
             join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
             join pg_namespace n on n.oid = ci.relnamespace
             join pg_am a ON ci.relam = a.oid
-            left join pg_stat_user_indexes si on si.indexrelid = i.indexrelid
+            left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             i.indisunique = false
             and i.indisvalid = true
@@ -1857,7 +1877,28 @@ metrics:
         order by grp, index_size_bytes desc;
     gauges:
       - '*'
-  
+    statement_timeout_seconds: 15
+  stats_reset:
+    description: >
+      This metric tracks when statistics were last reset at the database level.
+      It provides visibility into the freshness of statistics data, which is essential for understanding
+      the reliability of usage metrics. A recent reset time indicates that usage statistics
+      may not reflect long-term patterns. Note that Postgres tracks stats resets at the database level,
+      not per-index or per-table.
+    sqls:
+      11: |
+        select
+          datname as tag_database_name,
+          stats_reset,
+          extract(epoch from stats_reset) as stats_reset_epoch,
+          extract(epoch from now() - stats_reset) as seconds_since_reset
+        from pg_stat_database
+        where datname = current_database()
+          and stats_reset is not null;
+    gauges:
+      - 'stats_reset_epoch'
+      - 'seconds_since_reset'
+    statement_timeout_seconds: 15
   archive_lag:
     description: >
       This metric measures the lag in WAL archive processing.
@@ -1919,6 +1960,7 @@ metrics:
       - 'wal_files_behind'
       - 'current_lsn_numeric'
       - 'archived_wal_start_lsn_numeric'
+    statement_timeout_seconds: 15
   pg_vacuum_progress:
     sqls:
       11: |
@@ -2011,6 +2053,7 @@ metrics:
           join pg_namespace N on (N.oid = C.relnamespace)
     gauges:
       - '*'
+    statement_timeout_seconds: 15
   pg_index_pilot:
     sqls:
       11: |
@@ -2032,7 +2075,7 @@ metrics:
       - is_valid
       - estimated_tuples
       - best_ratio
-  
+    statement_timeout_seconds: 15
   pg_index_pilot_config:
     sqls:
       12: |
@@ -2067,11 +2110,12 @@ metrics:
         order by id;
     gauges:
       - config_value_normalized
-
+    statement_timeout_seconds: 15
   pg_statio_all_tables:
     description: >
       Retrieves table-level I/O statistics from the PostgreSQL `pg_statio_all_tables` view, providing insights into I/O operations for all tables.
       It returns block-level read and hit statistics for heap, index, TOAST, and TOAST index operations broken down by schema and table.
+      Joined with pg_class for efficient ordering by table size.
       This metric helps administrators monitor table-level I/O performance and identify which tables are generating the most I/O activity.
       Compatible with all PostgreSQL versions.
     sqls:
@@ -2079,21 +2123,53 @@ metrics:
         select /* pgwatch_generated */
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
-          schemaname as tag_schemaname,
-          relname as tag_relname,
-          heap_blks_read,
-          heap_blks_hit,
-          idx_blks_read,
-          idx_blks_hit,
-          toast_blks_read,
-          toast_blks_hit,
-          tidx_blks_read,
-          tidx_blks_hit
+          s.schemaname as tag_schemaname,
+          s.relname as tag_relname,
+          s.heap_blks_read,
+          s.heap_blks_hit,
+          s.idx_blks_read,
+          s.idx_blks_hit,
+          s.toast_blks_read,
+          s.toast_blks_hit,
+          s.tidx_blks_read,
+          s.tidx_blks_hit
         from
-          pg_statio_all_tables
+          pg_statio_all_tables as s
+          join pg_class as c on
+            s.relname = c.relname
+            and s.schemaname = c.relnamespace::regnamespace::name
+        order by c.relpages desc
+        limit 5000;
     gauges:
       - '*'
-
+    statement_timeout_seconds: 15
+  pg_statio_all_indexes:
+    description: >
+      Retrieves index-level I/O statistics from the PostgreSQL `pg_statio_all_indexes` view, providing insights into I/O operations for all indexes.
+      It returns block-level read and hit statistics for index operations broken down by schema, table, and index name.
+      Joined with pg_class for efficient ordering by index size.
+      This metric helps administrators monitor index-level I/O performance and identify which indexes are generating the most I/O activity.
+      Compatible with all PostgreSQL versions.
+    sqls:
+      11: |-
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          s.schemaname as tag_schemaname,
+          s.relname as tag_relname,
+          s.indexrelname as tag_indexrelname,
+          s.idx_blks_read,
+          s.idx_blks_hit
+        from
+          pg_statio_all_indexes as s
+          join pg_class as c on
+            s.indexrelname = c.relname
+            and s.schemaname = c.relnamespace::regnamespace::name
+        order by c.relpages desc
+        limit 5000;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 15
 
 presets:
   full:
@@ -2113,12 +2189,13 @@ presets:
       pg_stat_activity: 15
       pg_stat_wal_receiver: 30
       pg_archiver: 30
-      pg_stat_user_tables: 30
+      pg_stat_all_tables: 30
       pg_class: 30
-      pg_stat_user_indexes: 30
+      pg_stat_all_indexes: 30
       pg_stat_statements: 30
       pg_stat_replication: 30
       pg_statio_all_tables: 30
+      pg_statio_all_indexes: 30
       pg_total_relation_size: 30
       pg_blocked: 30
       pg_long_running_transactions: 30
@@ -2133,6 +2210,7 @@ presets:
       redundant_indexes: 10800
       unused_indexes: 7200
       rarely_used_indexes: 10800
+      stats_reset: 3600
       archive_lag: 15
       pg_vacuum_progress: 30
   pg_index_pilot:
