@@ -1399,7 +1399,7 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "irate(pgwatch_pg_stat_user_tables_seq_tup_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
+          "expr": "irate(pgwatch_pg_stat_all_tables_seq_tup_read{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -1415,7 +1415,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "irate(pgwatch_pg_stat_user_tables_idx_tup_fetch{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
+          "expr": "irate(pgwatch_pg_stat_all_tables_idx_tup_fetch{schemaname=~\"$schema_name\", datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\", relname=\"$table_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,

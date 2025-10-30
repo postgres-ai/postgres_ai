@@ -18,11 +18,11 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 6,
+  "id": 1,
   "links": [],
   "panels": [
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -30,202 +30,228 @@
         "y": 0
       },
       "id": 19,
-      "panels": [],
-      "title": "Detailed index view",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "aerffb0z8rjlsc"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 15,
-        "w": 24,
-        "x": 0,
-        "y": 1
-      },
-      "id": 24,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
+      "panels": [
         {
-          "columns": [
-            {
-              "selector": "bloat_pct",
-              "text": "",
-              "type": "number"
-            },
-            {
-              "selector": "bloat_size",
-              "text": "",
-              "type": "number"
-            },
-            {
-              "selector": "fillfactor",
-              "text": "",
-              "type": "number"
-            },
-            {
-              "selector": "idxname",
-              "text": "",
-              "type": "string"
-            },
-            {
-              "selector": "schemaname",
-              "text": "",
-              "type": "string"
-            },
-            {
-              "selector": "tblname",
-              "text": "",
-              "type": "string"
-            },
-            {
-              "selector": "real_size_mib",
-              "text": "",
-              "type": "number"
-            },
-            {
-              "selector": "is_na",
-              "text": "",
-              "type": "number"
-            }
-          ],
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "aerffb0z8rjlsc"
           },
-          "filterExpression": "is_na<1 && bloat_pct>0",
-          "filters": [],
-          "format": "table",
-          "global_query_id": "",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "csv",
-          "url": "http://flask-pgss-api:5000/btree_bloat/csv",
-          "url_options": {
-            "data": "",
-            "method": "GET",
-            "params": [
-              {
-                "key": "cluster_name",
-                "value": "$cluster_name"
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
               },
-              {
-                "key": "node_name",
-                "value": "$node_name"
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
               },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": [
               {
-                "key": "db_name",
-                "value": "$db_name"
-              }
-            ]
-          }
-        }
-      ],
-      "title": "",
-      "transformations": [
-        {
-          "id": "calculateField",
-          "options": {
-            "alias": "Index Size",
-            "binary": {
-              "left": {
                 "matcher": {
                   "id": "byName",
-                  "options": "real_size_mib"
-                }
+                  "options": "Bloat %"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percent"
+                  }
+                ]
               },
-              "operator": "*",
-              "right": {
-                "fixed": "1048576"
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Fillfactor"
+                },
+                "properties": [
+                  {
+                    "id": "unit"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 15,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "id": 24,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "pluginVersion": "12.0.2",
+          "targets": [
+            {
+              "columns": [
+                {
+                  "selector": "bloat_pct",
+                  "text": "",
+                  "type": "number"
+                },
+                {
+                  "selector": "bloat_size",
+                  "text": "",
+                  "type": "number"
+                },
+                {
+                  "selector": "fillfactor",
+                  "text": "",
+                  "type": "number"
+                },
+                {
+                  "selector": "idxname",
+                  "text": "",
+                  "type": "string"
+                },
+                {
+                  "selector": "schemaname",
+                  "text": "",
+                  "type": "string"
+                },
+                {
+                  "selector": "tblname",
+                  "text": "",
+                  "type": "string"
+                },
+                {
+                  "selector": "real_size_mib",
+                  "text": "",
+                  "type": "number"
+                },
+                {
+                  "selector": "is_na",
+                  "text": "",
+                  "type": "number"
+                }
+              ],
+              "datasource": {
+                "type": "yesoreyeram-infinity-datasource",
+                "uid": "aerffb0z8rjlsc"
+              },
+              "filterExpression": "is_na<1 && bloat_pct>0",
+              "filters": [],
+              "format": "table",
+              "global_query_id": "",
+              "parser": "backend",
+              "refId": "A",
+              "root_selector": "",
+              "source": "url",
+              "type": "csv",
+              "url": "http://flask-pgss-api:5000/btree_bloat/csv",
+              "url_options": {
+                "data": "",
+                "method": "GET",
+                "params": [
+                  {
+                    "key": "cluster_name",
+                    "value": "$cluster_name"
+                  },
+                  {
+                    "key": "node_name",
+                    "value": "$node_name"
+                  },
+                  {
+                    "key": "db_name",
+                    "value": "$db_name"
+                  }
+                ]
+              }
+            }
+          ],
+          "title": "",
+          "transformations": [
+            {
+              "id": "calculateField",
+              "options": {
+                "alias": "Index Size",
+                "binary": {
+                  "left": {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "real_size_mib"
+                    }
+                  },
+                  "operator": "*",
+                  "right": {
+                    "fixed": "1048576"
+                  }
+                },
+                "mode": "binary",
+                "reduce": {
+                  "include": [
+                    "Index Size (mb)"
+                  ],
+                  "reducer": "sum"
+                }
               }
             },
-            "mode": "binary",
-            "reduce": {
-              "include": [
-                "Index Size (mb)"
-              ],
-              "reducer": "sum"
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Index Size (mb)": true,
+                  "is_na": true,
+                  "real_size_mib": true
+                },
+                "includeByName": {},
+                "indexByName": {
+                  "Index Size": 3,
+                  "bloat_pct": 5,
+                  "bloat_size": 4,
+                  "fillfactor": 6,
+                  "idxname": 2,
+                  "is_na": 7,
+                  "real_size_mib": 8,
+                  "schemaname": 0,
+                  "tblname": 1
+                },
+                "renameByName": {
+                  "Schema": "",
+                  "bloat_pct": "Bloat %",
+                  "bloat_size": "Bloat size",
+                  "fillfactor": "Fillfactor",
+                  "idxname": "Index",
+                  "real_size_mib": "",
+                  "schemaname": "Schema",
+                  "tblname": "Table"
+                }
+              }
             }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Index Size (mb)": true,
-              "is_na": true,
-              "real_size_mib": true
-            },
-            "includeByName": {},
-            "indexByName": {
-              "Index Size": 3,
-              "bloat_pct": 5,
-              "bloat_size": 4,
-              "fillfactor": 6,
-              "idxname": 2,
-              "is_na": 7,
-              "real_size_mib": 8,
-              "schemaname": 0,
-              "tblname": 1
-            },
-            "renameByName": {
-              "Schema": "",
-              "bloat_pct": "Bloat %",
-              "bloat_size": "Bloat size",
-              "fillfactor": "Fillfactor",
-              "idxname": "Index",
-              "real_size_mib": "",
-              "schemaname": "Schema",
-              "tblname": "Table"
-            }
-          }
+          ],
+          "type": "table"
         }
       ],
-      "type": "table"
+      "title": "Detailed index view",
+      "type": "row"
     },
     {
       "collapsed": false,
@@ -233,7 +259,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 1
       },
       "id": 18,
       "panels": [],
@@ -256,8 +282,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -325,7 +351,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 2
       },
       "id": 2,
       "options": {
@@ -377,8 +403,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -446,7 +472,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 14
       },
       "id": 22,
       "options": {
@@ -498,8 +524,8 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -567,7 +593,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 26
       },
       "id": 23,
       "options": {
@@ -593,9 +619,9 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "topk($top_n, pgwatch_pg_btree_bloat_real_size_mib{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})*1024*1024",
+          "expr": "topk($top_n, pgwatch_pg_class_relation_size_bytes{relkind=\"105\", cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})",
           "interval": "20",
-          "legendFormat": "{{schemaname}}.{{tblname}}.{{idxname}}",
+          "legendFormat": "{{schemaname}}.{{relname}}",
           "range": true,
           "refId": "A"
         }
@@ -612,7 +638,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 38
       },
       "id": 21,
       "options": {
@@ -662,8 +688,8 @@
       },
       {
         "current": {
-          "text": "local",
-          "value": "local"
+          "text": "default",
+          "value": "default"
         },
         "definition": "label_values(pgwatch_settings_configured,cluster)",
         "label": "Cluster name",
@@ -680,8 +706,8 @@
       },
       {
         "current": {
-          "text": "node-01",
-          "value": "node-01"
+          "text": "postgres_ai",
+          "value": "postgres_ai"
         },
         "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
@@ -698,8 +724,8 @@
       },
       {
         "current": {
-          "text": "target_database",
-          "value": "target_database"
+          "text": "workloaddb",
+          "value": "workloaddb"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -724,5 +750,5 @@
   "timezone": "utc",
   "title": "10. Aggregated index analysis",
   "uid": "db3b37d1-1540-4f7e-95c9-4082f2ca349e",
-  "version": 11
+  "version": 8
 }

@@ -16,8 +16,8 @@ scrape_configs:
     scrape_timeout: 25s       # Timeout for each scrape (must be < scrape_interval)
     metrics_path: /pgwatch
 
-  # Self-monitoring: Prometheus internal metrics
-  - job_name: 'prometheus'
+  # Self-monitoring: Victoria Metrics internal metrics
+  - job_name: 'victoriametrics'
     static_configs:
       - targets: ['localhost:9090']
     scrape_interval: 15s
