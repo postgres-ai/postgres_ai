@@ -645,13 +645,18 @@ targets
       
       console.log(`Testing connection to monitoring target '${name}'...`);
       
-      const { stdout, stderr } = await execFilePromise(
-        "psql",
-        [instance.conn_str, "-c", "SELECT version();", "--no-psqlrc"],
-        { timeout: 10000, env: { ...process.env, PAGER: 'cat' } }
-      );
-      console.log(`✓ Connection successful`);
-      console.log(stdout.trim());
+      // Use native pg client instead of requiring psql to be installed
+      const { Client } = require('pg');
+      const client = new Client({ connectionString: instance.conn_str });
+      
+      try {
+        await client.connect();
+        const result = await client.query('select version();');
+        console.log(`✓ Connection successful`);
+        console.log(result.rows[0].version);
+      } finally {
+        await client.end();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`✗ Connection failed: ${message}`);
