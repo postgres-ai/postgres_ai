@@ -761,7 +761,6 @@ program
                 code_verifier: params.codeVerifier,
                 state: params.state,
               });
-              
               const exchangeUrl = new URL(`${apiBaseUrl}/rpc/oauth_token_exchange`);
               const exchangeReq = http.request(
                 exchangeUrl,
@@ -773,20 +772,20 @@ program
                   },
                 },
                 (exchangeRes) => {
-                  let exchangeData = "";
-                  exchangeRes.on("data", (chunk) => (exchangeData += chunk));
+                  let exchangeBody = "";
+                  exchangeRes.on("data", (chunk) => (exchangeBody += chunk));
                   exchangeRes.on("end", () => {
                     if (exchangeRes.statusCode !== 200) {
                       console.error(`Failed to exchange code for token: ${exchangeRes.statusCode}`);
-                      console.error(exchangeData);
-                      process.exitCode = 1;
+                      console.error(exchangeBody);
+                      process.exit(1);
                       return;
                     }
                     
                     try {
-                      const result = JSON.parse(exchangeData);
-                      const apiToken = result.api_token;
-                      const orgId = result.org_id;
+                      const result = JSON.parse(exchangeBody);
+                      const apiToken = result.api_token || result?.[0]?.result?.api_token; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
+                      const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
                       
                       // Step 6: Save token to config
                       config.writeConfig({
@@ -799,10 +798,11 @@ program
                       console.log(`API key saved to: ${config.getConfigPath()}`);
                       console.log(`Organization ID: ${orgId}`);
                       console.log(`\nYou can now use the CLI without specifying an API key.`);
+                      process.exit(0);
                     } catch (err) {
                       const message = err instanceof Error ? err.message : String(err);
                       console.error(`Failed to parse response: ${message}`);
-                      process.exitCode = 1;
+                      process.exit(1);
                     }
                   });
                 }
@@ -810,7 +810,7 @@ program
               
               exchangeReq.on("error", (err: Error) => {
                 console.error(`Exchange request failed: ${err.message}`);
-                process.exitCode = 1;
+                process.exit(1);
               });
               
               exchangeReq.write(exchangeData);
@@ -819,7 +819,7 @@ program
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               console.error(`\nAuthentication failed: ${message}`);
-              process.exitCode = 1;
+              process.exit(1);
             }
           });
         }
@@ -828,7 +828,7 @@ program
       initReq.on("error", (err: Error) => {
         console.error(`Failed to connect to API: ${err.message}`);
         callbackServer.server.close();
-        process.exitCode = 1;
+        process.exit(1);
       });
       
       initReq.write(initData);
@@ -837,7 +837,7 @@ program
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Authentication error: ${message}`);
-      process.exitCode = 1;
+      process.exit(1);
     }
   });
 
