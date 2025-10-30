@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "@modelcontextprotocol/sdk": "^1.20.2"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

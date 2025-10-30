@@ -88,6 +88,31 @@ postgres-ai mon check                          # System readiness check
 postgres-ai mon shell <service>                # Open shell to monitoring service
 ```
 
+### MCP server (`mcp` group)
+
+```bash
+pgai mcp start                 # Start MCP stdio server exposing list_issues tool
+```
+
+Cursor configuration example (Settings → MCP):
+
+```json
+{
+  "mcpServers": {
+    "PostgresAI": {
+      "command": "pgai",
+      "args": ["mcp", "start"],
+      "env": {
+        "PGAI_API_BASE_URL": "https://postgres.ai/api/general/"
+      }
+    }
+  }
+}
+```
+
+Tools exposed:
+- list_issues: returns the same JSON as `pgai issues list`.
+
 #### Grafana management
 ```bash
 postgres-ai mon generate-grafana-password      # Generate new Grafana password
@@ -116,6 +141,20 @@ API key resolution order:
 2. Environment variable (`PGAI_API_KEY`)
 3. User config file (`~/.config/postgresai/config.json`)
 4. Legacy project config (`.pgwatch-config`)
+
+Base URL resolution order:
+- API base URL (`apiBaseUrl`):
+  1. Command line option (`--api-base-url`)
+  2. Environment variable (`PGAI_API_BASE_URL`)
+  3. User config file `baseUrl` (`~/.config/postgresai/config.json`)
+  4. Default: `https://postgres.ai/api/general/`
+- UI base URL (`uiBaseUrl`):
+  1. Command line option (`--ui-base-url`)
+  2. Environment variable (`PGAI_UI_BASE_URL`)
+  3. Default: `https://console.postgres.ai`
+
+Normalization:
+- A single trailing `/` is removed to ensure consistent path joining.
 
 ### Environment variables
 
