@@ -97,7 +97,7 @@ export function createCallbackServer(
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Authentication Failed</title>
+  <title>Authentication failed</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
     .error { background: #fee; border: 1px solid #fcc; padding: 20px; border-radius: 8px; }
@@ -107,7 +107,7 @@ export function createCallbackServer(
 </head>
 <body>
   <div class="error">
-    <h1>Authentication Failed</h1>
+    <h1>Authentication failed</h1>
     <p><strong>Error:</strong> ${escapeHtml(error)}</p>
     ${errorDescription ? `<p><strong>Description:</strong> ${escapeHtml(errorDescription)}</p>` : ""}
     <p>You can close this window and return to your terminal.</p>
@@ -130,7 +130,7 @@ export function createCallbackServer(
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Authentication Failed</title>
+  <title>Authentication failed</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
     .error { background: #fee; border: 1px solid #fcc; padding: 20px; border-radius: 8px; }
@@ -139,7 +139,7 @@ export function createCallbackServer(
 </head>
 <body>
   <div class="error">
-    <h1>Authentication Failed</h1>
+    <h1>Authentication failed</h1>
     <p>Missing required parameters (code or state).</p>
     <p>You can close this window and return to your terminal.</p>
   </div>
@@ -159,7 +159,7 @@ export function createCallbackServer(
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Authentication Failed</title>
+  <title>Authentication failed</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
     .error { background: #fee; border: 1px solid #fcc; padding: 20px; border-radius: 8px; }
@@ -168,7 +168,7 @@ export function createCallbackServer(
 </head>
 <body>
   <div class="error">
-    <h1>Authentication Failed</h1>
+    <h1>Authentication failed</h1>
     <p>Invalid state parameter (possible CSRF attack).</p>
     <p>You can close this window and return to your terminal.</p>
   </div>
@@ -192,7 +192,7 @@ export function createCallbackServer(
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Authentication Successful</title>
+  <title>Authentication successful</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
     .success { background: #efe; border: 1px solid #cfc; padding: 20px; border-radius: 8px; }
@@ -201,7 +201,7 @@ export function createCallbackServer(
 </head>
 <body>
   <div class="success">
-    <h1>Authentication Successful</h1>
+    <h1>Authentication successful</h1>
     <p>You have successfully authenticated the PostgresAI CLI.</p>
     <p>You can close this window and return to your terminal.</p>
   </div>

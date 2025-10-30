@@ -685,7 +685,7 @@ program
       // Step 1: Start local callback server FIRST to get actual port
       console.log("Starting local callback server...");
       const requestedPort = opts.port || 0; // 0 = OS assigns available port
-      const callbackServer = authServer.createCallbackServer(requestedPort, params.state, 300000);
+      const callbackServer = authServer.createCallbackServer(requestedPort, params.state, 120000); // 2 minute timeout
       
       // Wait a bit for server to start and get port
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -727,10 +727,20 @@ program
           res.on("end", async () => {
             if (res.statusCode !== 200) {
               console.error(`Failed to initialize auth session: ${res.statusCode}`);
-              console.error(data);
+              
+              // Check if response is HTML (common for 404 pages)
+              if (data.trim().startsWith("<!") || data.trim().startsWith("<html")) {
+                console.error("Error: Received HTML response instead of JSON. This usually means:");
+                console.error("  1. The API endpoint URL is incorrect");
+                console.error("  2. The endpoint does not exist (404)");
+                console.error(`\nAPI URL attempted: ${initUrl.toString()}`);
+                console.error("\nPlease verify the --api-base-url parameter.");
+              } else {
+                console.error(data);
+              }
+              
               callbackServer.server.close();
-              process.exitCode = 1;
-              return;
+              process.exit(1);
             }
             
             // Step 3: Open browser
@@ -751,8 +761,21 @@ program
             
             // Step 4: Wait for callback
             console.log("Waiting for authorization...");
+            console.log("(Press Ctrl+C to cancel)\n");
+            
+            // Handle Ctrl+C gracefully
+            const cancelHandler = () => {
+              console.log("\n\nAuthentication cancelled by user.");
+              callbackServer.server.close();
+              process.exit(130); // Standard exit code for SIGINT
+            };
+            process.on("SIGINT", cancelHandler);
+            
             try {
               const { code } = await callbackServer.promise;
+              
+              // Remove the cancel handler after successful auth
+              process.off("SIGINT", cancelHandler);
               
               // Step 5: Exchange code for token
               console.log("\nExchanging authorization code for API token...");
@@ -777,7 +800,18 @@ program
                   exchangeRes.on("end", () => {
                     if (exchangeRes.statusCode !== 200) {
                       console.error(`Failed to exchange code for token: ${exchangeRes.statusCode}`);
-                      console.error(exchangeBody);
+                      
+                      // Check if response is HTML (common for 404 pages)
+                      if (exchangeBody.trim().startsWith("<!") || exchangeBody.trim().startsWith("<html")) {
+                        console.error("Error: Received HTML response instead of JSON. This usually means:");
+                        console.error("  1. The API endpoint URL is incorrect");
+                        console.error("  2. The endpoint does not exist (404)");
+                        console.error(`\nAPI URL attempted: ${exchangeUrl.toString()}`);
+                        console.error("\nPlease verify the --api-base-url parameter.");
+                      } else {
+                        console.error(exchangeBody);
+                      }
+                      
                       process.exit(1);
                       return;
                     }
@@ -817,8 +851,20 @@ program
               exchangeReq.end();
               
             } catch (err) {
+              // Remove the cancel handler in error case too
+              process.off("SIGINT", cancelHandler);
+              
               const message = err instanceof Error ? err.message : String(err);
-              console.error(`\nAuthentication failed: ${message}`);
+              
+              // Provide more helpful error messages
+              if (message.includes("timeout")) {
+                console.error(`\nAuthentication timed out.`);
+                console.error(`This usually means you closed the browser window without completing authentication.`);
+                console.error(`Please try again and complete the authentication flow.`);
+              } else {
+                console.error(`\nAuthentication failed: ${message}`);
+              }
+              
               process.exit(1);
             }
           });
@@ -953,8 +999,8 @@ mon
       console.log("  URL:      http://localhost:3000");
       console.log("  Username: monitor");
       console.log(`  Password: ${newPassword}`);
-      console.log("\nRestart Grafana to apply:");
-      console.log("  postgres-ai mon restart grafana");
+      console.log("\nReset Grafana to apply new password:");
+      console.log("  postgres-ai mon reset grafana");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to generate password: ${message}`);
