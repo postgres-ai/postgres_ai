@@ -999,8 +999,8 @@ mon
       console.log("  URL:      http://localhost:3000");
       console.log("  Username: monitor");
       console.log(`  Password: ${newPassword}`);
-      console.log("\nRestart Grafana to apply:");
-      console.log("  postgres-ai mon restart grafana");
+      console.log("\nReset Grafana to apply new password:");
+      console.log("  postgres-ai mon reset grafana");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to generate password: ${message}`);
