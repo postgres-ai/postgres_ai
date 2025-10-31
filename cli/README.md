@@ -178,7 +178,7 @@ Linux/macOS (bash/zsh):
 
 ```bash
 export PGAI_API_BASE_URL=https://v2.postgres.ai/api/general/
-export PGAI_UI_BASE_URL=https://console.postgres.ai
+export PGAI_UI_BASE_URL=https://console-dev.postgres.ai
 pgai auth --debug
 ```
 
@@ -186,7 +186,7 @@ Windows PowerShell:
 
 ```powershell
 $env:PGAI_API_BASE_URL = "https://v2.postgres.ai/api/general/"
-$env:PGAI_UI_BASE_URL = "https://console.postgres.ai"
+$env:PGAI_UI_BASE_URL = "https://console-dev.postgres.ai"
 pgai auth --debug
 ```
 
@@ -195,7 +195,7 @@ Via CLI options (overrides env):
 ```bash
 pgai auth --debug \
   --api-base-url https://v2.postgres.ai/api/general/ \
-  --ui-base-url https://console.postgres.ai
+  --ui-base-url https://console-dev.postgres.ai
 ```
 
 Notes:
