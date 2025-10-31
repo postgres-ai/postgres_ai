@@ -248,15 +248,20 @@ mon
       allHealthy = true;
       for (const service of services) {
         try {
-          const { stdout } = await execPromise(
-            `curl -sf -o /dev/null -w "%{http_code}" ${service.url}`,
-            { timeout: 5000 }
-          );
-          const code = stdout.trim();
-          if (code === "200") {
+          // Use native fetch instead of requiring curl to be installed
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch(service.url, {
+            signal: controller.signal,
+            method: 'GET',
+          });
+          clearTimeout(timeoutId);
+          
+          if (response.status === 200) {
             console.log(`✓ ${service.name}: healthy`);
           } else {
-            console.log(`✗ ${service.name}: unhealthy (HTTP ${code})`);
+            console.log(`✗ ${service.name}: unhealthy (HTTP ${response.status})`);
             allHealthy = false;
           }
         } catch (error) {
