@@ -301,24 +301,24 @@ class PostgresReportGenerator:
 
     def generate_h002_unused_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
-        Generate H002 Unused and rarely used Indexes report.
+        Generate H002 Unused Indexes report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             
         Returns:
-            Dictionary containing unused and rarely used indexes information
+            Dictionary containing unused indexes information
         """
-        print("Generating H002 Unused and rarely used Indexes report...")
+        print("Generating H002 Unused Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
 
         unused_indexes_by_db = {}
         for db_name in databases:
-            # Query unused indexes for each database
-            unused_indexes_query = f'pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}'
+            # Query unused indexes for each database using last_over_time to get most recent value
+            unused_indexes_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
             unused_result = self.query_instant(unused_indexes_query)
 
             unused_indexes = []
@@ -333,7 +333,7 @@ class PostgresReportGenerator:
                     index_size_bytes = float(item['value'][1]) if item.get('value') else 0
 
                     # Query other related metrics for this index
-                    idx_scan_query = f'pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                    idx_scan_query = f'last_over_time(pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
                     idx_scan_result = self.query_instant(idx_scan_query)
                     idx_scan = float(idx_scan_result['data']['result'][0]['value'][1]) if idx_scan_result.get('data',
                                                                                                               {}).get(
@@ -346,7 +346,7 @@ class PostgresReportGenerator:
                         "reason": reason,
                         "idx_scan": idx_scan,
                         "index_size_bytes": index_size_bytes,
-                        "idx_is_btree": item['metric'].get('opclasses', '').startswith('btree'),
+                        "idx_is_btree": item['metric'].get('idx_is_btree', 'false') == 'true',
                         "supports_fk": bool(int(item['metric'].get('supports_fk', 0)))
                     }
 
@@ -354,33 +354,16 @@ class PostgresReportGenerator:
 
                     unused_indexes.append(index_data)
 
-            # Query rarely used indexes (note: logs show 0 rows, but we'll include the structure)
-            rarely_used_indexes = []  # Currently empty as per logs
-
-            # Combine and calculate totals
-            all_indexes = unused_indexes + rarely_used_indexes
-            total_unused_size = sum(idx['index_size_bytes'] for idx in unused_indexes)
-            total_rarely_used_size = sum(idx['index_size_bytes'] for idx in rarely_used_indexes)
-            total_size = total_unused_size + total_rarely_used_size
-
             # Sort by index size descending
-            all_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
+            unused_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
+            
+            total_unused_size = sum(idx['index_size_bytes'] for idx in unused_indexes)
 
             unused_indexes_by_db[db_name] = {
                 "unused_indexes": unused_indexes,
-                "rarely_used_indexes": rarely_used_indexes,
-                "all_indexes": all_indexes,
-                "summary": {
-                    "total_unused_count": len(unused_indexes),
-                    "total_rarely_used_count": len(rarely_used_indexes),
-                    "total_count": len(all_indexes),
-                    "total_unused_size_bytes": total_unused_size,
-                    "total_rarely_used_size_bytes": total_rarely_used_size,
-                    "total_size_bytes": total_size,
-                    "total_unused_size_pretty": self.format_bytes(total_unused_size),
-                    "total_rarely_used_size_pretty": self.format_bytes(total_rarely_used_size),
-                    "total_size_pretty": self.format_bytes(total_size)
-                }
+                "total_count": len(unused_indexes),
+                "total_size_bytes": total_unused_size,
+                "total_size_pretty": self.format_bytes(total_unused_size)
             }
 
         return self.format_report_data("H002", unused_indexes_by_db, node_name)
@@ -404,8 +387,8 @@ class PostgresReportGenerator:
 
         redundant_indexes_by_db = {}
         for db_name in databases:
-            # Query redundant indexes for each database
-            redundant_indexes_query = f'pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}'
+            # Query redundant indexes for each database using last_over_time to get most recent value
+            redundant_indexes_query = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
             result = self.query_instant(redundant_indexes_query)
 
             redundant_indexes = []
@@ -424,18 +407,18 @@ class PostgresReportGenerator:
                     index_size_bytes = float(item['value'][1]) if item.get('value') else 0
 
                     # Query other related metrics for this index
-                    table_size_query = f'pgwatch_redundant_indexes_table_size_bytes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                    table_size_query = f'last_over_time(pgwatch_redundant_indexes_table_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
                     table_size_result = self.query_instant(table_size_query)
                     table_size_bytes = float(
                         table_size_result['data']['result'][0]['value'][1]) if table_size_result.get('data', {}).get(
                         'result') else 0
 
-                    index_usage_query = f'pgwatch_redundant_indexes_index_usage{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                    index_usage_query = f'last_over_time(pgwatch_redundant_indexes_index_usage{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
                     index_usage_result = self.query_instant(index_usage_query)
                     index_usage = float(index_usage_result['data']['result'][0]['value'][1]) if index_usage_result.get(
                         'data', {}).get('result') else 0
 
-                    supports_fk_query = f'pgwatch_redundant_indexes_supports_fk{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}'
+                    supports_fk_query = f'last_over_time(pgwatch_redundant_indexes_supports_fk{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
                     supports_fk_result = self.query_instant(supports_fk_query)
                     supports_fk = bool(
                         int(supports_fk_result['data']['result'][0]['value'][1])) if supports_fk_result.get('data',
@@ -1612,17 +1595,28 @@ class PostgresReportGenerator:
         Returns:
             List of database names
         """
-        # Query for all databases using pg_stat_database metrics
-        db_query = f'pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}", datname!="template1"}}'
+        # Try to get databases from metrics that use 'dbname' label (custom metrics)
+        db_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
         result = self.query_instant(db_query)
-
+        
         databases = []
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
-                db_name = item['metric'].get('datname', '')
+                db_name = item['metric'].get('dbname', '')
                 if db_name and db_name not in databases:
                     databases.append(db_name)
-        # If no databases found, try alternative query
+        
+        # If no databases found using dbname, try using datname (catalog metrics)
+        if not databases:
+            db_query = f'pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}", datname!="template1"}}'
+            result = self.query_instant(db_query)
+            if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                for item in result['data']['result']:
+                    db_name = item['metric'].get('datname', '')
+                    if db_name and db_name not in databases:
+                        databases.append(db_name)
+        
+        # If still no databases found, try another alternative query
         if not databases:
             db_query = f'pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}'
             result = self.query_instant(db_query)
