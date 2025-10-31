@@ -1889,9 +1889,8 @@ metrics:
       11: |
         select
           datname as tag_database_name,
-          stats_reset,
-          extract(epoch from stats_reset) as stats_reset_epoch,
-          extract(epoch from now() - stats_reset) as seconds_since_reset
+          extract(epoch from stats_reset)::int as stats_reset_epoch,
+          extract(epoch from now() - stats_reset)::int as seconds_since_reset
         from pg_stat_database
         where datname = current_database()
           and stats_reset is not null;

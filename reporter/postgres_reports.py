@@ -317,6 +317,20 @@ class PostgresReportGenerator:
 
         unused_indexes_by_db = {}
         for db_name in databases:
+            # Query stats_reset timestamp for this database
+            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", database_name="{db_name}"}}[10h])'
+            stats_reset_result = self.query_instant(stats_reset_query)
+            
+            stats_reset_epoch = None
+            days_since_reset = None
+            stats_reset_time = None
+            
+            if stats_reset_result.get('status') == 'success' and stats_reset_result.get('data', {}).get('result'):
+                stats_reset_epoch = float(stats_reset_result['data']['result'][0]['value'][1]) if stats_reset_result['data']['result'] else None
+                if stats_reset_epoch:
+                    stats_reset_time = datetime.fromtimestamp(stats_reset_epoch).isoformat()
+                    days_since_reset = (datetime.now() - datetime.fromtimestamp(stats_reset_epoch)).days
+
             # Query unused indexes for each database using last_over_time to get most recent value
             unused_indexes_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
             unused_result = self.query_instant(unused_indexes_query)
@@ -363,7 +377,12 @@ class PostgresReportGenerator:
                 "unused_indexes": unused_indexes,
                 "total_count": len(unused_indexes),
                 "total_size_bytes": total_unused_size,
-                "total_size_pretty": self.format_bytes(total_unused_size)
+                "total_size_pretty": self.format_bytes(total_unused_size),
+                "stats_reset": {
+                    "stats_reset_epoch": stats_reset_epoch,
+                    "stats_reset_time": stats_reset_time,
+                    "days_since_reset": days_since_reset
+                }
             }
 
         return self.format_report_data("H002", unused_indexes_by_db, node_name)
