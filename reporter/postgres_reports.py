@@ -318,7 +318,7 @@ class PostgresReportGenerator:
         unused_indexes_by_db = {}
         for db_name in databases:
             # Query stats_reset timestamp for this database
-            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", database_name="{db_name}"}}[10h])'
+            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
             stats_reset_result = self.query_instant(stats_reset_query)
             
             stats_reset_epoch = None
