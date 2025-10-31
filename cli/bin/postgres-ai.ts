@@ -503,8 +503,8 @@ targets
         return;
       }
       
-      // Filter out demo placeholder
-      const filtered = instances.filter((inst) => inst.name && inst.name !== "target-database");
+      // Filter out disabled instances (e.g., demo placeholders)
+      const filtered = instances.filter((inst) => inst.name && inst.is_enabled !== false);
       
       if (filtered.length === 0) {
         console.log("No monitoring targets configured");

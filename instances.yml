@@ -2,7 +2,7 @@
   conn_str: postgresql://monitor:monitor_pass@target-db:5432/target_database
   preset_metrics: full
   custom_metrics:
-  is_enabled: true
+  is_enabled: false
   group: default
   custom_tags:
     env: demo
