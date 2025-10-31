@@ -119,10 +119,24 @@ const stub = (name: string) => async (): Promise<void> => {
  * Resolve project paths
  */
 function resolvePaths(): PathResolution {
-  const projectDir = process.cwd();
-  const composeFile = path.resolve(projectDir, "docker-compose.yml");
-  const instancesFile = path.resolve(projectDir, "instances.yml");
-  return { fs, path, projectDir, composeFile, instancesFile };
+  const startDir = process.cwd();
+  let currentDir = startDir;
+
+  while (true) {
+    const composeFile = path.resolve(currentDir, "docker-compose.yml");
+    if (fs.existsSync(composeFile)) {
+      const instancesFile = path.resolve(currentDir, "instances.yml");
+      return { fs, path, projectDir: currentDir, composeFile, instancesFile };
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+  }
+
+  throw new Error(
+    `docker-compose.yml not found. Run monitoring commands from the PostgresAI project directory or one of its subdirectories (starting search from ${startDir}).`
+  );
 }
 
 /**
@@ -140,7 +154,15 @@ function getComposeCmd(): string[] | null {
  * Run docker compose command
  */
 async function runCompose(args: string[]): Promise<number> {
-  const { composeFile } = resolvePaths();
+  let composeFile: string;
+  try {
+    ({ composeFile } = resolvePaths());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+    return 1;
+  }
   const cmd = getComposeCmd();
   if (!cmd) {
     console.error("docker compose not found (need docker-compose or docker compose)");
@@ -287,7 +309,17 @@ mon
   .command("config")
   .description("show monitoring services configuration")
   .action(async () => {
-    const { fs, projectDir, composeFile, instancesFile } = resolvePaths();
+    let projectDir: string;
+    let composeFile: string;
+    let instancesFile: string;
+    try {
+      ({ projectDir, composeFile, instancesFile } = resolvePaths());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      process.exitCode = 1;
+      return;
+    }
     console.log(`Project Directory: ${projectDir}`);
     console.log(`Docker Compose File: ${composeFile}`);
     console.log(`Instances File: ${instancesFile}`);
