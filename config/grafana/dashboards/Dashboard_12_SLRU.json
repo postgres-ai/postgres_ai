@@ -814,7 +814,7 @@
     },
     "timepicker": {},
     "timezone": "browser",
-    "title": "12. Experimental: SLRU cache statistics",
+    "title": "X - SLRU cache stats",
     "uid": "slru_stats",
     "version": 2
   }
