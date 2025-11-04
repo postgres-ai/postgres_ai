@@ -140,6 +140,18 @@ function resolvePaths(): PathResolution {
 }
 
 /**
+ * Check if Docker daemon is running
+ */
+function isDockerRunning(): boolean {
+  try {
+    const result = spawnSync("docker", ["info"], { stdio: "pipe" });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get docker compose command
  */
 function getComposeCmd(): string[] | null {
@@ -148,6 +160,27 @@ function getComposeCmd(): string[] | null {
   if (tryCmd("docker-compose", ["version"])) return ["docker-compose"];
   if (tryCmd("docker", ["compose", "version"])) return ["docker", "compose"];
   return null;
+}
+
+/**
+ * Check if monitoring containers are already running
+ */
+function checkRunningContainers(): { running: boolean; containers: string[] } {
+  try {
+    const result = spawnSync(
+      "docker",
+      ["ps", "--filter", "name=grafana-with-datasources", "--filter", "name=pgwatch", "--format", "{{.Names}}"],
+      { stdio: "pipe", encoding: "utf8" }
+    );
+    
+    if (result.status === 0 && result.stdout) {
+      const containers = result.stdout.trim().split("\n").filter(Boolean);
+      return { running: containers.length > 0, containers };
+    }
+    return { running: false, containers: [] };
+  } catch {
+    return { running: false, containers: [] };
+  }
 }
 
 /**
@@ -163,6 +196,14 @@ async function runCompose(args: string[]): Promise<number> {
     process.exitCode = 1;
     return 1;
   }
+  
+  // Check if Docker daemon is running
+  if (!isDockerRunning()) {
+    console.error("Docker is not running. Please start Docker and try again");
+    process.exitCode = 1;
+    return 1;
+  }
+  
   const cmd = getComposeCmd();
   if (!cmd) {
     console.error("docker compose not found (need docker-compose or docker compose)");
@@ -187,6 +228,14 @@ mon
   .description("complete setup (generate config, start monitoring services)")
   .option("--demo", "demo mode", false)
   .action(async () => {
+    // Check if containers are already running
+    const { running, containers } = checkRunningContainers();
+    if (running) {
+      console.log(`Monitoring services are already running: ${containers.join(", ")}`);
+      console.log("Use 'postgres-ai mon restart' to restart them");
+      return;
+    }
+    
     const code1 = await runCompose(["run", "--rm", "sources-generator"]);
     if (code1 !== 0) {
       process.exitCode = code1;
@@ -200,6 +249,14 @@ mon
   .command("start")
   .description("start monitoring services")
   .action(async () => {
+    // Check if containers are already running
+    const { running, containers } = checkRunningContainers();
+    if (running) {
+      console.log(`Monitoring services are already running: ${containers.join(", ")}`);
+      console.log("Use 'postgres-ai mon restart' to restart them");
+      return;
+    }
+    
     const code = await runCompose(["up", "-d"]);
     if (code !== 0) process.exitCode = code;
   });
