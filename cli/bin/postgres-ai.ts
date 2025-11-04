@@ -13,7 +13,7 @@ import * as readline from "readline";
 import * as http from "https";
 import { URL } from "url";
 import { startMcpServer } from "../lib/mcp-server";
-import { fetchIssues } from "../lib/issues";
+import { fetchIssues, fetchIssueComments, createIssueComment } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 
 const execPromise = promisify(exec);
@@ -1188,6 +1188,76 @@ issues
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
       const result = await fetchIssues({ apiKey, apiBaseUrl, debug: !!opts.debug });
+      if (typeof result === "string") {
+        process.stdout.write(result);
+        if (!/\n$/.test(result)) console.log();
+      } else {
+        console.log(JSON.stringify(result, null, 2));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("comments <issueId>")
+  .description("list comments for an issue")
+  .option("--debug", "enable debug output")
+  .action(async (issueId: string, opts: { debug?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
+      if (typeof result === "string") {
+        process.stdout.write(result);
+        if (!/\n$/.test(result)) console.log();
+      } else {
+        console.log(JSON.stringify(result, null, 2));
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("post_comment <issueId> <content>")
+  .description("post a new comment to an issue")
+  .option("--parent <uuid>", "parent comment id")
+  .option("--debug", "enable debug output")
+  .action(async (issueId: string, content: string, opts: { parent?: string; debug?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await createIssueComment({
+        apiKey,
+        apiBaseUrl,
+        issueId,
+        content,
+        parentCommentId: opts.parent,
+        debug: !!opts.debug,
+      });
       if (typeof result === "string") {
         process.stdout.write(result);
         if (!/\n$/.test(result)) console.log();

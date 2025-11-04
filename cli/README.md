@@ -118,6 +118,17 @@ Cursor configuration example (Settings → MCP):
 Tools exposed:
 - list_issues: returns the same JSON as `pgai issues list`.
 
+### Issues management (`issues` group)
+
+```bash
+pgai issues list                                  # List issues
+pgai issues comments <issueId>                    # List comments for an issue
+pgai issues post_comment <issueId> <content>      # Post a comment to an issue
+# Options:
+#   --parent <uuid>  Parent comment ID (for replies)
+#   --debug          Enable debug output
+```
+
 #### Grafana management
 ```bash
 postgres-ai mon generate-grafana-password      # Generate new Grafana password
