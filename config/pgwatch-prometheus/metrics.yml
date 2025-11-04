@@ -1093,6 +1093,37 @@ metrics:
       - latest_end_time
       - upstream_node
     statement_timeout_seconds: 15
+  pg_stat_slru:
+    description: >
+      Retrieves statistics from the PostgreSQL `pg_stat_slru` view for SLRU (Simple Least Recently Used) caches.
+      It tracks various SLRU caches like subtrans, multixact_offset, multixact_member, notify, serial, and clog.
+      Each cache reports blocks zeroed, hit, read, written, exists checks, flushes, truncates, and last stats reset time.
+      This metric helps administrators monitor SLRU cache performance and identify potential issues with transaction ID wraparound or other system caches.
+    sqls:
+      11: "; -- not available before PG 13"
+      13: |-
+        select /* pgwatch_generated */
+          current_database() as tag_datname,
+          name as tag_name,
+          blks_zeroed,
+          blks_hit,
+          blks_read,
+          blks_written,
+          blks_exists,
+          flushes,
+          truncates,
+          extract(epoch from stats_reset)::int8 as stats_reset_epoch
+        from pg_stat_slru
+    gauges:
+      - blks_zeroed
+      - blks_hit
+      - blks_read
+      - blks_written
+      - blks_exists
+      - flushes
+      - truncates
+      - stats_reset_epoch
+    statement_timeout_seconds: 15
   pg_stuck_idle_in_transaction:
     sqls:
       11: |
@@ -2193,6 +2224,7 @@ presets:
       pg_stat_all_indexes: 30
       pg_stat_statements: 30
       pg_stat_replication: 30
+      pg_stat_slru: 30
       pg_statio_all_tables: 30
       pg_statio_all_indexes: 30
       pg_total_relation_size: 30
