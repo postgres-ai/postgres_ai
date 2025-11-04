@@ -1194,17 +1194,15 @@ mcp
   .command("install [client]")
   .description("install MCP server configuration for AI coding tool")
   .action(async (client?: string) => {
-    const supportedClients = ["cursor", "claude", "claude-code", "vscode", "windsurf", "codex"];
+    const supportedClients = ["cursor", "claude", "windsurf", "codex"];
     
     // If no client specified, prompt user to choose
     if (!client) {
       console.log("Available AI coding tools:");
       console.log("  1. Cursor");
       console.log("  2. Claude Desktop");
-      console.log("  3. Claude Code");
-      console.log("  4. VS Code (with Cline/Continue)");
-      console.log("  5. Windsurf");
-      console.log("  6. Codex");
+      console.log("  3. Windsurf");
+      console.log("  4. Codex");
       console.log("");
       
       const rl = readline.createInterface({
@@ -1213,17 +1211,15 @@ mcp
       });
       
       const answer = await new Promise<string>((resolve) => {
-        rl.question("Select your AI coding tool (1-6): ", resolve);
+        rl.question("Select your AI coding tool (1-4): ", resolve);
       });
       rl.close();
       
       const choices: Record<string, string> = {
         "1": "cursor",
         "2": "claude",
-        "3": "claude-code",
-        "4": "vscode",
-        "5": "windsurf",
-        "6": "codex"
+        "3": "windsurf",
+        "4": "codex"
       };
       
       client = choices[answer.trim()];
@@ -1263,11 +1259,6 @@ mcp
           } else {
             configPath = path.join(homeDir, ".config", "Claude", "claude_desktop_config.json");
           }
-          configDir = path.dirname(configPath);
-          break;
-        
-        case "claude-code":
-          configPath = path.join(homeDir, ".claude-code", "mcp.json");
           configDir = path.dirname(configPath);
           break;
         
