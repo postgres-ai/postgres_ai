@@ -90,6 +90,24 @@ function getConfig(opts: CliOptions): ConfigResult {
   return { apiKey };
 }
 
+// Human-friendly output helper: YAML for TTY by default, JSON when --json or non-TTY
+function printResult(result: unknown, json?: boolean): void {
+  if (typeof result === "string") {
+    process.stdout.write(result);
+    if (!/\n$/.test(result)) console.log();
+    return;
+  }
+  if (json || !process.stdout.isTTY) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    let text = yaml.dump(result as any);
+    if (Array.isArray(result)) {
+      text = text.replace(/\n- /g, "\n\n- ");
+    }
+    console.log(text);
+  }
+}
+
 const program = new Command();
 
 program
@@ -1192,7 +1210,8 @@ issues
   .command("list")
   .description("list issues")
   .option("--debug", "enable debug output")
-  .action(async (opts: { debug?: boolean }) => {
+  .option("--json", "output raw JSON")
+  .action(async (opts: { debug?: boolean; json?: boolean }) => {
     try {
       const rootOpts = program.opts<CliOptions>();
       const cfg = config.readConfig();
@@ -1206,12 +1225,7 @@ issues
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
       const result = await fetchIssues({ apiKey, apiBaseUrl, debug: !!opts.debug });
-      if (typeof result === "string") {
-        process.stdout.write(result);
-        if (!/\n$/.test(result)) console.log();
-      } else {
-        console.log(JSON.stringify(result, null, 2));
-      }
+      printResult(result, opts.json);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
@@ -1223,7 +1237,8 @@ issues
   .command("comments <issueId>")
   .description("list comments for an issue")
   .option("--debug", "enable debug output")
-  .action(async (issueId: string, opts: { debug?: boolean }) => {
+  .option("--json", "output raw JSON")
+  .action(async (issueId: string, opts: { debug?: boolean; json?: boolean }) => {
     try {
       const rootOpts = program.opts<CliOptions>();
       const cfg = config.readConfig();
@@ -1237,12 +1252,7 @@ issues
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
       const result = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
-      if (typeof result === "string") {
-        process.stdout.write(result);
-        if (!/\n$/.test(result)) console.log();
-      } else {
-        console.log(JSON.stringify(result, null, 2));
-      }
+      printResult(result, opts.json);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
@@ -1255,7 +1265,8 @@ issues
   .description("post a new comment to an issue")
   .option("--parent <uuid>", "parent comment id")
   .option("--debug", "enable debug output")
-  .action(async (issueId: string, content: string, opts: { parent?: string; debug?: boolean }) => {
+  .option("--json", "output raw JSON")
+  .action(async (issueId: string, content: string, opts: { parent?: string; debug?: boolean; json?: boolean }) => {
     try {
       // Interpret escape sequences in content (e.g., \n -> newline)
       if (opts.debug) {
@@ -1287,12 +1298,7 @@ issues
         parentCommentId: opts.parent,
         debug: !!opts.debug,
       });
-      if (typeof result === "string") {
-        process.stdout.write(result);
-        if (!/\n$/.test(result)) console.log();
-      } else {
-        console.log(JSON.stringify(result, null, 2));
-      }
+      printResult(result, opts.json);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);

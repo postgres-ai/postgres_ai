@@ -129,6 +129,23 @@ pgai issues post_comment <issueId> <content>      # Post a comment to an issue
 # Options:
 #   --parent <uuid>  Parent comment ID (for replies)
 #   --debug          Enable debug output
+#   --json           Output raw JSON (overrides default YAML)
+```
+
+#### Output format for issues commands
+
+By default, issues commands print human-friendly YAML when writing to a terminal. For scripting, you can:
+
+- Use `--json` to force JSON output:
+
+```bash
+pgai issues list --json | jq '.[] | {id, title}'
+```
+
+- Rely on auto-detection: when stdout is not a TTY (e.g., piped or redirected), output is JSON automatically:
+
+```bash
+pgai issues comments <issueId> > comments.json
 ```
 
 #### Grafana management
