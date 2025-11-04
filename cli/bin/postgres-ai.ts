@@ -1167,6 +1167,24 @@ mon
     console.log("");
   });
 
+/**
+ * Interpret escape sequences in a string (e.g., \n -> newline)
+ * Note: In regex, to match literal backslash-n, we need \\n in the pattern
+ * which requires \\\\n in the JavaScript string literal
+ */
+function interpretEscapes(str: string): string {
+  // First handle double backslashes by temporarily replacing them
+  // Then handle other escapes, then restore double backslashes as single
+  return str
+    .replace(/\\\\/g, '\x00') // Temporarily mark double backslashes
+    .replace(/\\n/g, '\n') // Match literal backslash-n (\\\\n in JS string -> \\n in regex -> matches \n)
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\x00/g, '\\'); // Restore double backslashes as single
+}
+
 // Issues management
 const issues = program.command("issues").description("issues management");
 
@@ -1239,6 +1257,17 @@ issues
   .option("--debug", "enable debug output")
   .action(async (issueId: string, content: string, opts: { parent?: string; debug?: boolean }) => {
     try {
+      // Interpret escape sequences in content (e.g., \n -> newline)
+      if (opts.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+      }
+      content = interpretEscapes(content);
+      if (opts.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+      }
+
       const rootOpts = program.opts<CliOptions>();
       const cfg = config.readConfig();
       const { apiKey } = getConfig(rootOpts);
