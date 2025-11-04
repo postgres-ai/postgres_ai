@@ -1,6 +1,6 @@
 import * as pkg from "../package.json";
 import * as config from "./config";
-import { fetchIssues } from "./issues";
+import { fetchIssues, fetchIssueComments, createIssueComment } from "./issues";
 import { resolveBaseUrls } from "./util";
 
 // MCP SDK imports
@@ -29,6 +29,16 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
     { capabilities: { tools: {} } }
   );
 
+  // Interpret escape sequences (e.g., \n -> newline). Input comes from JSON, but
+  // we still normalize common escapes for consistency.
+  const interpretEscapes = (str: string): string =>
+    (str || "")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r")
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'");
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: [
@@ -43,6 +53,34 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
             additionalProperties: false,
           },
         },
+        {
+          name: "list_issue_comments",
+          description: "List comments for a specific issue (issue_id UUID)",
+          inputSchema: {
+            type: "object",
+            properties: {
+              issue_id: { type: "string", description: "Issue ID (UUID)" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            required: ["issue_id"],
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "post_issue_comment",
+          description: "Post a new comment to an issue (optionally as a reply)",
+          inputSchema: {
+            type: "object",
+            properties: {
+              issue_id: { type: "string", description: "Issue ID (UUID)" },
+              content: { type: "string", description: "Comment text (supports \\n as newline)" },
+              parent_comment_id: { type: "string", description: "Parent comment ID (UUID) for replies" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            required: ["issue_id", "content"],
+            additionalProperties: false,
+          },
+        },
       ],
     };
   });
@@ -50,10 +88,6 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
   server.setRequestHandler(CallToolRequestSchema, async (req: any) => {
     const toolName = req.params.name;
     const args = (req.params.arguments as Record<string, unknown>) || {};
-
-    if (toolName !== "list_issues") {
-      throw new Error(`Unknown tool: ${toolName}`);
-    }
 
     const cfg = config.readConfig();
     const apiKey = (rootOpts?.apiKey || process.env.PGAI_API_KEY || cfg.apiKey || "").toString();
@@ -74,20 +108,39 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
     }
 
     try {
-      const result = await fetchIssues({ apiKey, apiBaseUrl, debug });
-      return {
-        content: [
-          { type: "text", text: JSON.stringify(result, null, 2) },
-        ],
-      };
+      if (toolName === "list_issues") {
+        const result = await fetchIssues({ apiKey, apiBaseUrl, debug });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (toolName === "list_issue_comments") {
+        const issueId = String(args.issue_id || "").trim();
+        if (!issueId) {
+          return { content: [{ type: "text", text: "issue_id is required" }], isError: true };
+        }
+        const result = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (toolName === "post_issue_comment") {
+        const issueId = String(args.issue_id || "").trim();
+        const rawContent = String(args.content || "");
+        const parentCommentId = args.parent_comment_id ? String(args.parent_comment_id) : undefined;
+        if (!issueId) {
+          return { content: [{ type: "text", text: "issue_id is required" }], isError: true };
+        }
+        if (!rawContent) {
+          return { content: [{ type: "text", text: "content is required" }], isError: true };
+        }
+        const content = interpretEscapes(rawContent);
+        const result = await createIssueComment({ apiKey, apiBaseUrl, issueId, content, parentCommentId, debug });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      throw new Error(`Unknown tool: ${toolName}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return {
-        content: [
-          { type: "text", text: message },
-        ],
-        isError: true,
-      };
+      return { content: [{ type: "text", text: message }], isError: true };
     }
   });
 

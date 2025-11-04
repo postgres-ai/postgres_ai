@@ -96,7 +96,7 @@ postgres-ai mon shell <service>                # Open shell to monitoring servic
 ### MCP server (`mcp` group)
 
 ```bash
-pgai mcp start                 # Start MCP stdio server exposing list_issues tool
+pgai mcp start                 # Start MCP stdio server exposing tools
 ```
 
 Cursor configuration example (Settings → MCP):
@@ -117,6 +117,8 @@ Cursor configuration example (Settings → MCP):
 
 Tools exposed:
 - list_issues: returns the same JSON as `pgai issues list`.
+- list_issue_comments: list comments for an issue (args: { issue_id, debug? })
+- post_issue_comment: post a comment (args: { issue_id, content, parent_comment_id?, debug? })
 
 ### Issues management (`issues` group)
 
