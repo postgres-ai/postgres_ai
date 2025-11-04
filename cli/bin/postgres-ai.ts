@@ -1190,5 +1190,140 @@ mcp
     await startMcpServer(rootOpts, { debug: !!opts.debug });
   });
 
+mcp
+  .command("install [client]")
+  .description("install MCP server configuration for AI coding tool")
+  .action(async (client?: string) => {
+    const supportedClients = ["cursor", "claude", "vscode", "windsurf", "codex"];
+    
+    // If no client specified, prompt user to choose
+    if (!client) {
+      console.log("Available AI coding tools:");
+      console.log("  1. Cursor");
+      console.log("  2. Claude Desktop");
+      console.log("  3. VS Code (with Cline/Continue)");
+      console.log("  4. Windsurf");
+      console.log("  5. Codex");
+      console.log("");
+      
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      
+      const answer = await new Promise<string>((resolve) => {
+        rl.question("Select your AI coding tool (1-5): ", resolve);
+      });
+      rl.close();
+      
+      const choices: Record<string, string> = {
+        "1": "cursor",
+        "2": "claude",
+        "3": "vscode",
+        "4": "windsurf",
+        "5": "codex"
+      };
+      
+      client = choices[answer.trim()];
+      if (!client) {
+        console.error("Invalid selection");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    
+    client = client.toLowerCase();
+    
+    if (!supportedClients.includes(client)) {
+      console.error(`Unsupported client: ${client}`);
+      console.error(`Supported clients: ${supportedClients.join(", ")}`);
+      process.exitCode = 1;
+      return;
+    }
+    
+    try {
+      const homeDir = os.homedir();
+      let configPath: string;
+      let configDir: string;
+      
+      // Determine config file location based on client
+      switch (client) {
+        case "cursor":
+          configPath = path.join(homeDir, ".cursor", "mcp.json");
+          configDir = path.dirname(configPath);
+          break;
+        
+        case "claude":
+          if (process.platform === "darwin") {
+            configPath = path.join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json");
+          } else if (process.platform === "win32") {
+            configPath = path.join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json");
+          } else {
+            configPath = path.join(homeDir, ".config", "Claude", "claude_desktop_config.json");
+          }
+          configDir = path.dirname(configPath);
+          break;
+        
+        case "vscode":
+          configPath = path.join(homeDir, ".vscode", "mcp.json");
+          configDir = path.dirname(configPath);
+          break;
+        
+        case "windsurf":
+          configPath = path.join(homeDir, ".windsurf", "mcp.json");
+          configDir = path.dirname(configPath);
+          break;
+        
+        case "codex":
+          configPath = path.join(homeDir, ".codex", "mcp.json");
+          configDir = path.dirname(configPath);
+          break;
+        
+        default:
+          console.error(`Configuration not implemented for: ${client}`);
+          process.exitCode = 1;
+          return;
+      }
+      
+      // Ensure config directory exists
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      
+      // Read existing config or create new one
+      let config: any = { mcpServers: {} };
+      if (fs.existsSync(configPath)) {
+        try {
+          const content = fs.readFileSync(configPath, "utf8");
+          config = JSON.parse(content);
+          if (!config.mcpServers) {
+            config.mcpServers = {};
+          }
+        } catch (err) {
+          console.error(`Warning: Could not parse existing config, creating new one`);
+        }
+      }
+      
+      // Add or update PostgresAI MCP server configuration
+      config.mcpServers.postgresai = {
+        command: "pgai",
+        args: ["mcp", "start"]
+      };
+      
+      // Write updated config
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+      
+      console.log(`✓ PostgresAI MCP server configured for ${client}`);
+      console.log(`  Config file: ${configPath}`);
+      console.log("");
+      console.log("Please restart your AI coding tool to activate the MCP server");
+      
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to install MCP server: ${message}`);
+      process.exitCode = 1;
+    }
+  });
+
 program.parseAsync(process.argv);
 
