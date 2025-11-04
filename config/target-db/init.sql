@@ -44,6 +44,9 @@ GRANT SELECT ON pg_stat_database TO monitor;
 GRANT SELECT ON pg_stat_user_tables TO monitor; 
 -- Grant pg_monitor role to monitor user for enhanced monitoring capabilities
 GRANT pg_monitor TO monitor;
-
+GRANT EXECUTE ON FUNCTION pg_stat_file(text) TO monitor;
+GRANT EXECUTE ON FUNCTION pg_stat_file(text, boolean) TO monitor;
+GRANT EXECUTE ON FUNCTION pg_ls_dir(text) TO monitor;
+GRANT EXECUTE ON FUNCTION pg_ls_dir(text, boolean, boolean) TO monitor;
 -- Set search path for the monitor user
 ALTER USER monitor SET search_path = "$user", public, pg_catalog;
