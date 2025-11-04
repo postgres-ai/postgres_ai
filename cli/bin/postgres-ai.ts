@@ -172,7 +172,7 @@ function checkRunningContainers(): { running: boolean; containers: string[] } {
       ["ps", "--filter", "name=grafana-with-datasources", "--filter", "name=pgwatch", "--format", "{{.Names}}"],
       { stdio: "pipe", encoding: "utf8" }
     );
-    
+
     if (result.status === 0 && result.stdout) {
       const containers = result.stdout.trim().split("\n").filter(Boolean);
       return { running: containers.length > 0, containers };
@@ -188,30 +188,53 @@ function checkRunningContainers(): { running: boolean; containers: string[] } {
  */
 async function runCompose(args: string[]): Promise<number> {
   let composeFile: string;
+  let projectDir: string;
   try {
-    ({ composeFile } = resolvePaths());
+    ({ composeFile, projectDir } = resolvePaths());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
     process.exitCode = 1;
     return 1;
   }
-  
+
   // Check if Docker daemon is running
   if (!isDockerRunning()) {
     console.error("Docker is not running. Please start Docker and try again");
     process.exitCode = 1;
     return 1;
   }
-  
+
   const cmd = getComposeCmd();
   if (!cmd) {
     console.error("docker compose not found (need docker-compose or docker compose)");
     process.exitCode = 1;
     return 1;
   }
+
+  // Read Grafana password from .pgwatch-config and pass to Docker Compose
+  const env = { ...process.env };
+  const cfgPath = path.resolve(projectDir, ".pgwatch-config");
+  if (fs.existsSync(cfgPath)) {
+    try {
+      const stats = fs.statSync(cfgPath);
+      if (!stats.isDirectory()) {
+        const content = fs.readFileSync(cfgPath, "utf8");
+        const match = content.match(/^grafana_password=([^\r\n]+)/m);
+        if (match) {
+          env.GF_SECURITY_ADMIN_PASSWORD = match[1].trim();
+        }
+      }
+    } catch (err) {
+      // If we can't read the config, continue without setting the password
+    }
+  }
+
   return new Promise<number>((resolve) => {
-    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], { stdio: "inherit" });
+    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], {
+      stdio: "inherit",
+      env: env
+    });
     child.on("close", (code) => resolve(code || 0));
   });
 }
@@ -235,7 +258,7 @@ mon
       console.log("Use 'postgres-ai mon restart' to restart them");
       return;
     }
-    
+
     const code1 = await runCompose(["run", "--rm", "sources-generator"]);
     if (code1 !== 0) {
       process.exitCode = code1;
@@ -256,7 +279,7 @@ mon
       console.log("Use 'postgres-ai mon restart' to restart them");
       return;
     }
-    
+
     const code = await runCompose(["up", "-d"]);
     if (code !== 0) process.exitCode = code;
   });
@@ -311,32 +334,32 @@ mon
       { name: "PGWatch (Postgres)", url: "http://localhost:58080/health" },
       { name: "PGWatch (Prometheus)", url: "http://localhost:58089/health" },
     ];
-    
+
     const waitTime = opts.wait || 0;
     const maxAttempts = waitTime > 0 ? Math.ceil(waitTime / 5) : 1;
-    
+
     console.log("Checking service health...\n");
-    
+
     let allHealthy = false;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`Retrying (attempt ${attempt}/${maxAttempts})...\n`);
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
-      
+
       allHealthy = true;
       for (const service of services) {
         try {
           // Use native fetch instead of requiring curl to be installed
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
-          
+
           const response = await fetch(service.url, {
             signal: controller.signal,
             method: 'GET',
           });
           clearTimeout(timeoutId);
-          
+
           if (response.status === 200) {
             console.log(`✓ ${service.name}: healthy`);
           } else {
@@ -348,12 +371,12 @@ mon
           allHealthy = false;
         }
       }
-      
+
       if (allHealthy) {
         break;
       }
     }
-    
+
     console.log("");
     if (allHealthy) {
       console.log("All services are healthy");
@@ -399,7 +422,7 @@ mon
   .description("update monitoring stack")
   .action(async () => {
     console.log("Updating PostgresAI monitoring stack...\n");
-    
+
     try {
       // Check if we're in a git repo
       const gitDir = path.resolve(process.cwd(), ".git");
@@ -408,25 +431,25 @@ mon
         process.exitCode = 1;
         return;
       }
-      
+
       // Fetch latest changes
       console.log("Fetching latest changes...");
       await execPromise("git fetch origin");
-      
+
       // Check current branch
       const { stdout: branch } = await execPromise("git rev-parse --abbrev-ref HEAD");
       const currentBranch = branch.trim();
       console.log(`Current branch: ${currentBranch}`);
-      
+
       // Pull latest changes
       console.log("Pulling latest changes...");
       const { stdout: pullOut } = await execPromise("git pull origin " + currentBranch);
       console.log(pullOut);
-      
+
       // Update Docker images
       console.log("\nUpdating Docker images...");
       const code = await runCompose(["pull"]);
-      
+
       if (code === 0) {
         console.log("\n✓ Update completed successfully");
         console.log("\nTo apply updates, restart monitoring services:");
@@ -449,32 +472,32 @@ mon
       input: process.stdin,
       output: process.stdout,
     });
-    
+
     const question = (prompt: string): Promise<string> =>
       new Promise((resolve) => rl.question(prompt, resolve));
-    
+
     try {
       if (service) {
         // Reset specific service
         console.log(`\nThis will stop '${service}', remove its volume, and restart it.`);
         console.log("All data for this service will be lost!\n");
-        
+
         const answer = await question("Continue? (y/N): ");
         if (answer.toLowerCase() !== "y") {
           console.log("Cancelled");
           rl.close();
           return;
         }
-        
+
         console.log(`\nStopping ${service}...`);
         await runCompose(["stop", service]);
-        
+
         console.log(`Removing volume for ${service}...`);
         await runCompose(["rm", "-f", "-v", service]);
-        
+
         console.log(`Restarting ${service}...`);
         const code = await runCompose(["up", "-d", service]);
-        
+
         if (code === 0) {
           console.log(`\n✓ Service '${service}' has been reset`);
         } else {
@@ -485,17 +508,17 @@ mon
         // Reset all services
         console.log("\nThis will stop all services and remove all data!");
         console.log("Volumes, networks, and containers will be deleted.\n");
-        
+
         const answer = await question("Continue? (y/N): ");
         if (answer.toLowerCase() !== "y") {
           console.log("Cancelled");
           rl.close();
           return;
         }
-        
+
         console.log("\nStopping services and removing data...");
         const downCode = await runCompose(["down", "-v"]);
-        
+
         if (downCode === 0) {
           console.log("✓ Environment reset completed - all containers and data removed");
         } else {
@@ -503,7 +526,7 @@ mon
           process.exitCode = 1;
         }
       }
-      
+
       rl.close();
     } catch (error) {
       rl.close();
@@ -517,7 +540,7 @@ mon
   .description("cleanup monitoring services artifacts")
   .action(async () => {
     console.log("Cleaning up Docker resources...\n");
-    
+
     try {
       // Remove stopped containers
       const { stdout: containers } = await execFilePromise("docker", ["ps", "-aq", "--filter", "status=exited"]);
@@ -528,19 +551,19 @@ mon
       } else {
         console.log("✓ No stopped containers to remove");
       }
-      
+
       // Remove unused volumes
       await execFilePromise("docker", ["volume", "prune", "-f"]);
       console.log("✓ Removed unused volumes");
-      
+
       // Remove unused networks
       await execFilePromise("docker", ["network", "prune", "-f"]);
       console.log("✓ Removed unused networks");
-      
+
       // Remove dangling images
       await execFilePromise("docker", ["image", "prune", "-f"]);
       console.log("✓ Removed dangling images");
-      
+
       console.log("\nCleanup completed");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -576,11 +599,11 @@ targets
       process.exitCode = 1;
       return;
     }
-    
+
     try {
       const content = fs.readFileSync(instancesPath, "utf8");
       const instances = yaml.load(content) as Instance[] | null;
-      
+
       if (!instances || !Array.isArray(instances) || instances.length === 0) {
         console.log("No monitoring targets configured");
         console.log("");
@@ -591,10 +614,10 @@ targets
         console.log("  postgres-ai mon targets add 'postgresql://user:pass@host:5432/db' my-db");
         return;
       }
-      
+
       // Filter out disabled instances (e.g., demo placeholders)
       const filtered = instances.filter((inst) => inst.name && inst.is_enabled !== false);
-      
+
       if (filtered.length === 0) {
         console.log("No monitoring targets configured");
         console.log("");
@@ -605,7 +628,7 @@ targets
         console.log("  postgres-ai mon targets add 'postgresql://user:pass@host:5432/db' my-db");
         return;
       }
-      
+
       for (const inst of filtered) {
         console.log(`Target: ${inst.name}`);
       }
@@ -634,7 +657,7 @@ targets
     const host = m[3];
     const db = m[5];
     const instanceName = name && name.trim() ? name.trim() : `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
-    
+
     // Check if instance already exists
     try {
       if (fs.existsSync(file)) {
@@ -658,7 +681,7 @@ targets
         return;
       }
     }
-    
+
     // Add new instance
     const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
     const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
@@ -675,25 +698,25 @@ targets
       process.exitCode = 1;
       return;
     }
-    
+
     try {
       const content = fs.readFileSync(file, "utf8");
       const instances = yaml.load(content) as Instance[] | null;
-      
+
       if (!instances || !Array.isArray(instances)) {
         console.error("Invalid instances.yml format");
         process.exitCode = 1;
         return;
       }
-      
+
       const filtered = instances.filter((inst) => inst.name !== name);
-      
+
       if (filtered.length === instances.length) {
         console.error(`Monitoring target '${name}' not found`);
         process.exitCode = 1;
         return;
       }
-      
+
       fs.writeFileSync(file, yaml.dump(filtered), "utf8");
       console.log(`Monitoring target '${name}' removed`);
     } catch (err) {
@@ -712,37 +735,37 @@ targets
       process.exitCode = 1;
       return;
     }
-    
+
     try {
       const content = fs.readFileSync(instancesPath, "utf8");
       const instances = yaml.load(content) as Instance[] | null;
-      
+
       if (!instances || !Array.isArray(instances)) {
         console.error("Invalid instances.yml format");
         process.exitCode = 1;
         return;
       }
-      
+
       const instance = instances.find((inst) => inst.name === name);
-      
+
       if (!instance) {
         console.error(`Monitoring target '${name}' not found`);
         process.exitCode = 1;
         return;
       }
-      
+
       if (!instance.conn_str) {
         console.error(`Connection string not found for monitoring target '${name}'`);
         process.exitCode = 1;
         return;
       }
-      
+
       console.log(`Testing connection to monitoring target '${name}'...`);
-      
+
       // Use native pg client instead of requiring psql to be installed
       const { Client } = require('pg');
       const client = new Client({ connectionString: instance.conn_str });
-      
+
       try {
         await client.connect();
         const result = await client.query('select version();');
@@ -767,34 +790,34 @@ program
   .action(async (opts: { port?: number; debug?: boolean }) => {
     const pkce = require("../lib/pkce");
     const authServer = require("../lib/auth-server");
-    
+
     console.log("Starting authentication flow...\n");
-    
+
     // Generate PKCE parameters
     const params = pkce.generatePKCEParams();
 
     const rootOpts = program.opts<CliOptions>();
     const cfg = config.readConfig();
     const { apiBaseUrl, uiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
-    
+
     if (opts.debug) {
       console.log(`Debug: Resolved API base URL: ${apiBaseUrl}`);
       console.log(`Debug: Resolved UI base URL: ${uiBaseUrl}`);
     }
-    
+
     try {
       // Step 1: Start local callback server FIRST to get actual port
       console.log("Starting local callback server...");
       const requestedPort = opts.port || 0; // 0 = OS assigns available port
       const callbackServer = authServer.createCallbackServer(requestedPort, params.state, 120000); // 2 minute timeout
-      
+
       // Wait a bit for server to start and get port
       await new Promise(resolve => setTimeout(resolve, 100));
       const actualPort = callbackServer.getPort();
       const redirectUri = `http://localhost:${actualPort}/callback`;
-      
+
       console.log(`Callback server listening on port ${actualPort}`);
-      
+
       // Step 2: Initialize OAuth session on backend
       console.log("Initializing authentication session...");
       const initData = JSON.stringify({
@@ -804,15 +827,15 @@ program
         code_challenge_method: params.codeChallengeMethod,
         redirect_uri: redirectUri,
       });
-      
+
       // Build init URL by appending to the API base path (keep /api/general)
       const initUrl = new URL(`${apiBaseUrl}/rpc/oauth_init`);
-      
+
       if (opts.debug) {
         console.log(`Debug: Trying to POST to: ${initUrl.toString()}`);
         console.log(`Debug: Request data: ${initData}`);
       }
-      
+
       const initReq = http.request(
         initUrl,
         {
@@ -828,7 +851,7 @@ program
           res.on("end", async () => {
             if (res.statusCode !== 200) {
               console.error(`Failed to initialize auth session: ${res.statusCode}`);
-              
+
               // Check if response is HTML (common for 404 pages)
               if (data.trim().startsWith("<!") || data.trim().startsWith("<html")) {
                 console.error("Error: Received HTML response instead of JSON. This usually means:");
@@ -839,31 +862,31 @@ program
               } else {
                 console.error(data);
               }
-              
+
               callbackServer.server.close();
               process.exit(1);
             }
-            
+
             // Step 3: Open browser
             const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
-            
+
             if (opts.debug) {
               console.log(`Debug: Auth URL: ${authUrl}`);
             }
-            
+
             console.log(`\nOpening browser for authentication...`);
             console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
-            
+
             // Open browser (cross-platform)
             const openCommand = process.platform === "darwin" ? "open" :
                                process.platform === "win32" ? "start" :
                                "xdg-open";
             spawn(openCommand, [authUrl], { detached: true, stdio: "ignore" }).unref();
-            
+
             // Step 4: Wait for callback
             console.log("Waiting for authorization...");
             console.log("(Press Ctrl+C to cancel)\n");
-            
+
             // Handle Ctrl+C gracefully
             const cancelHandler = () => {
               console.log("\n\nAuthentication cancelled by user.");
@@ -871,13 +894,13 @@ program
               process.exit(130); // Standard exit code for SIGINT
             };
             process.on("SIGINT", cancelHandler);
-            
+
             try {
               const { code } = await callbackServer.promise;
-              
+
               // Remove the cancel handler after successful auth
               process.off("SIGINT", cancelHandler);
-              
+
               // Step 5: Exchange code for token
               console.log("\nExchanging authorization code for API token...");
               const exchangeData = JSON.stringify({
@@ -901,7 +924,7 @@ program
                   exchangeRes.on("end", () => {
                     if (exchangeRes.statusCode !== 200) {
                       console.error(`Failed to exchange code for token: ${exchangeRes.statusCode}`);
-                      
+
                       // Check if response is HTML (common for 404 pages)
                       if (exchangeBody.trim().startsWith("<!") || exchangeBody.trim().startsWith("<html")) {
                         console.error("Error: Received HTML response instead of JSON. This usually means:");
@@ -912,23 +935,23 @@ program
                       } else {
                         console.error(exchangeBody);
                       }
-                      
+
                       process.exit(1);
                       return;
                     }
-                    
+
                     try {
                       const result = JSON.parse(exchangeBody);
                       const apiToken = result.api_token || result?.[0]?.result?.api_token; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
                       const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
-                      
+
                       // Step 6: Save token to config
                       config.writeConfig({
                         apiKey: apiToken,
                         baseUrl: apiBaseUrl,
                         orgId: orgId,
                       });
-                      
+
                       console.log("\nAuthentication successful!");
                       console.log(`API key saved to: ${config.getConfigPath()}`);
                       console.log(`Organization ID: ${orgId}`);
@@ -942,21 +965,21 @@ program
                   });
                 }
               );
-              
+
               exchangeReq.on("error", (err: Error) => {
                 console.error(`Exchange request failed: ${err.message}`);
                 process.exit(1);
               });
-              
+
               exchangeReq.write(exchangeData);
               exchangeReq.end();
-              
+
             } catch (err) {
               // Remove the cancel handler in error case too
               process.off("SIGINT", cancelHandler);
-              
+
               const message = err instanceof Error ? err.message : String(err);
-              
+
               // Provide more helpful error messages
               if (message.includes("timeout")) {
                 console.error(`\nAuthentication timed out.`);
@@ -965,22 +988,22 @@ program
               } else {
                 console.error(`\nAuthentication failed: ${message}`);
               }
-              
+
               process.exit(1);
             }
           });
         }
       );
-      
+
       initReq.on("error", (err: Error) => {
         console.error(`Failed to connect to API: ${err.message}`);
         callbackServer.server.close();
         process.exit(1);
       });
-      
+
       initReq.write(initData);
       initReq.end();
-      
+
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Authentication error: ${message}`);
@@ -1023,17 +1046,17 @@ program
     const hasNewConfig = fs.existsSync(newConfigPath);
     const legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
     const hasLegacyConfig = fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile();
-    
+
     if (!hasNewConfig && !hasLegacyConfig) {
       console.log("No API key configured");
       return;
     }
-    
+
     // Remove from new config
     if (hasNewConfig) {
       config.deleteConfigKeys(["apiKey", "orgId"]);
     }
-    
+
     // Remove from legacy config
     if (hasLegacyConfig) {
       try {
@@ -1049,7 +1072,7 @@ program
         console.warn(`Warning: Could not update legacy config: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-    
+
     console.log("API key removed");
     console.log(`\nTo authenticate again, run: pgai auth`);
   });
@@ -1058,20 +1081,20 @@ mon
   .description("generate Grafana password for monitoring services")
   .action(async () => {
     const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
-    
+
     try {
       // Generate secure password using openssl
       const { stdout: password } = await execPromise(
         "openssl rand -base64 12 | tr -d '\n'"
       );
       const newPassword = password.trim();
-      
+
       if (!newPassword) {
         console.error("Failed to generate password");
         process.exitCode = 1;
         return;
       }
-      
+
       // Read existing config
       let configContent = "";
       if (fs.existsSync(cfgPath)) {
@@ -1082,14 +1105,14 @@ mon
           configContent = fs.readFileSync(cfgPath, "utf8");
         }
       }
-      
+
       // Update or add grafana_password
       const lines = configContent.split(/\r?\n/).filter((l) => !/^grafana_password=/.test(l));
       lines.push(`grafana_password=${newPassword}`);
-      
+
       // Write back
       fs.writeFileSync(cfgPath, lines.filter(Boolean).join("\n") + "\n", "utf8");
-      
+
       console.log("✓ New Grafana password generated and saved");
       console.log("\nNew credentials:");
       console.log("  URL:      http://localhost:3000");
@@ -1114,14 +1137,14 @@ mon
       process.exitCode = 1;
       return;
     }
-    
+
     const stats = fs.statSync(cfgPath);
     if (stats.isDirectory()) {
       console.error(".pgwatch-config is a directory, expected a file. Cannot read credentials.");
       process.exitCode = 1;
       return;
     }
-    
+
     const content = fs.readFileSync(cfgPath, "utf8");
     const lines = content.split(/\r?\n/);
     let password = "";
@@ -1195,7 +1218,7 @@ mcp
   .description("install MCP server configuration for AI coding tool")
   .action(async (client?: string) => {
     const supportedClients = ["cursor", "claude-code", "windsurf", "codex"];
-    
+
     // If no client specified, prompt user to choose
     if (!client) {
       console.log("Available AI coding tools:");
@@ -1204,24 +1227,24 @@ mcp
       console.log("  3. Windsurf");
       console.log("  4. Codex");
       console.log("");
-      
+
       const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
       });
-      
+
       const answer = await new Promise<string>((resolve) => {
         rl.question("Select your AI coding tool (1-4): ", resolve);
       });
       rl.close();
-      
+
       const choices: Record<string, string> = {
         "1": "cursor",
         "2": "claude-code",
         "3": "windsurf",
         "4": "codex"
       };
-      
+
       client = choices[answer.trim()];
       if (!client) {
         console.error("Invalid selection");
@@ -1229,54 +1252,90 @@ mcp
         return;
       }
     }
-    
+
     client = client.toLowerCase();
-    
+
     if (!supportedClients.includes(client)) {
       console.error(`Unsupported client: ${client}`);
       console.error(`Supported clients: ${supportedClients.join(", ")}`);
       process.exitCode = 1;
       return;
     }
-    
+
     try {
+      // Get the path to the current pgai executable
+      let pgaiPath: string;
+      try {
+        const execPath = await execPromise("which pgai");
+        pgaiPath = execPath.stdout.trim();
+      } catch {
+        // Fallback to just "pgai" if which fails
+        pgaiPath = "pgai";
+      }
+
+      // Claude Code uses its own CLI to manage MCP servers
+      if (client === "claude-code") {
+        console.log("Installing PostgresAI MCP server for Claude Code...");
+
+        try {
+          const { stdout, stderr } = await execPromise(
+            `claude mcp add -s user postgresai ${pgaiPath} mcp start`
+          );
+
+          if (stdout) console.log(stdout);
+          if (stderr) console.error(stderr);
+
+          console.log("");
+          console.log("Successfully installed PostgresAI MCP server for Claude Code");
+          console.log("");
+          console.log("Next steps:");
+          console.log("  1. Restart Claude Code to load the new configuration");
+          console.log("  2. The PostgresAI MCP server will be available as 'postgresai'");
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("Failed to install MCP server using Claude CLI");
+          console.error(message);
+          console.error("");
+          console.error("Make sure the 'claude' CLI tool is installed and in your PATH");
+          console.error("See: https://docs.anthropic.com/en/docs/build-with-claude/mcp");
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      // For other clients (Cursor, Windsurf, Codex), use JSON config editing
       const homeDir = os.homedir();
       let configPath: string;
       let configDir: string;
-      
+
       // Determine config file location based on client
       switch (client) {
         case "cursor":
           configPath = path.join(homeDir, ".cursor", "mcp.json");
           configDir = path.dirname(configPath);
           break;
-        
-        case "claude-code":
-          configPath = path.join(homeDir, ".claude-code", "mcp.json");
-          configDir = path.dirname(configPath);
-          break;
-        
+
         case "windsurf":
           configPath = path.join(homeDir, ".windsurf", "mcp.json");
           configDir = path.dirname(configPath);
           break;
-        
+
         case "codex":
           configPath = path.join(homeDir, ".codex", "mcp.json");
           configDir = path.dirname(configPath);
           break;
-        
+
         default:
           console.error(`Configuration not implemented for: ${client}`);
           process.exitCode = 1;
           return;
       }
-      
+
       // Ensure config directory exists
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
       }
-      
+
       // Read existing config or create new one
       let config: any = { mcpServers: {} };
       if (fs.existsSync(configPath)) {
@@ -1290,21 +1349,21 @@ mcp
           console.error(`Warning: Could not parse existing config, creating new one`);
         }
       }
-      
+
       // Add or update PostgresAI MCP server configuration
       config.mcpServers.postgresai = {
-        command: "pgai",
+        command: pgaiPath,
         args: ["mcp", "start"]
       };
-      
+
       // Write updated config
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
-      
+
       console.log(`✓ PostgresAI MCP server configured for ${client}`);
       console.log(`  Config file: ${configPath}`);
       console.log("");
       console.log("Please restart your AI coding tool to activate the MCP server");
-      
+
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to install MCP server: ${message}`);
