@@ -14,8 +14,21 @@ metrics:
     gauges:
       - '*' 
   
+  index_definitions:
+    description: "Index definitions from all databases"
+    sqls:
+      11: |-
+        select /* pgwatch_generated */
+          indexname,
+          pg_get_indexdef(indexrelid) as index_definition
+        from pg_stat_all_indexes
+        order by schemaname, tablename, indexname;
+    gauges:
+      - '*'
+  
 presets:
   full:
     description: "Full metrics for PostgreSQL storage"
     metrics:
       pgss_queryid_queries: 300
+      index_definitions: 3600
