@@ -1194,13 +1194,13 @@ mcp
   .command("install [client]")
   .description("install MCP server configuration for AI coding tool")
   .action(async (client?: string) => {
-    const supportedClients = ["cursor", "claude", "windsurf", "codex"];
+    const supportedClients = ["cursor", "claude-code", "windsurf", "codex"];
     
     // If no client specified, prompt user to choose
     if (!client) {
       console.log("Available AI coding tools:");
       console.log("  1. Cursor");
-      console.log("  2. Claude Desktop");
+      console.log("  2. Claude Code");
       console.log("  3. Windsurf");
       console.log("  4. Codex");
       console.log("");
@@ -1217,7 +1217,7 @@ mcp
       
       const choices: Record<string, string> = {
         "1": "cursor",
-        "2": "claude",
+        "2": "claude-code",
         "3": "windsurf",
         "4": "codex"
       };
@@ -1251,19 +1251,8 @@ mcp
           configDir = path.dirname(configPath);
           break;
         
-        case "claude":
-          if (process.platform === "darwin") {
-            configPath = path.join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json");
-          } else if (process.platform === "win32") {
-            configPath = path.join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json");
-          } else {
-            configPath = path.join(homeDir, ".config", "Claude", "claude_desktop_config.json");
-          }
-          configDir = path.dirname(configPath);
-          break;
-        
-        case "vscode":
-          configPath = path.join(homeDir, ".vscode", "mcp.json");
+        case "claude-code":
+          configPath = path.join(homeDir, ".claude-code", "mcp.json");
           configDir = path.dirname(configPath);
           break;
         
