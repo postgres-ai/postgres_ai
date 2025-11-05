@@ -13,7 +13,7 @@ import * as readline from "readline";
 import * as http from "https";
 import { URL } from "url";
 import { startMcpServer } from "../lib/mcp-server";
-import { fetchIssues, fetchIssueComments, createIssueComment } from "../lib/issues";
+import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 
 const execPromise = promisify(exec);
@@ -1225,7 +1225,15 @@ issues
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
       const result = await fetchIssues({ apiKey, apiBaseUrl, debug: !!opts.debug });
-      printResult(result, opts.json);
+      const trimmed = Array.isArray(result)
+        ? (result as any[]).map((r) => ({
+            id: (r as any).id,
+            title: (r as any).title,
+            status: (r as any).status,
+            created_at: (r as any).created_at,
+          }))
+        : result;
+      printResult(trimmed, opts.json);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
@@ -1234,8 +1242,8 @@ issues
   });
 
 issues
-  .command("comments <issueId>")
-  .description("list comments for an issue")
+  .command("view <issueId>")
+  .description("view issue details and comments")
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
   .action(async (issueId: string, opts: { debug?: boolean; json?: boolean }) => {
@@ -1251,8 +1259,16 @@ issues
 
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
-      const result = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
-      printResult(result, opts.json);
+      const issue = await fetchIssue({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
+      if (!issue) {
+        console.error("Issue not found");
+        process.exitCode = 1;
+        return;
+      }
+
+      const comments = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
+      const combined = { issue, comments };
+      printResult(combined, opts.json);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);

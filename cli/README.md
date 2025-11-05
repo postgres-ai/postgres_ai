@@ -117,14 +117,14 @@ Cursor configuration example (Settings → MCP):
 
 Tools exposed:
 - list_issues: returns the same JSON as `pgai issues list`.
-- list_issue_comments: list comments for an issue (args: { issue_id, debug? })
+- view_issue: view a single issue with its comments (args: { issue_id, debug? })
 - post_issue_comment: post a comment (args: { issue_id, content, parent_comment_id?, debug? })
 
 ### Issues management (`issues` group)
 
 ```bash
-pgai issues list                                  # List issues
-pgai issues comments <issueId>                    # List comments for an issue
+pgai issues list                                  # List issues (shows: id, title, status, created_at)
+pgai issues view <issueId>                        # View issue details and comments
 pgai issues post_comment <issueId> <content>      # Post a comment to an issue
 # Options:
 #   --parent <uuid>  Parent comment ID (for replies)
@@ -145,7 +145,7 @@ pgai issues list --json | jq '.[] | {id, title}'
 - Rely on auto-detection: when stdout is not a TTY (e.g., piped or redirected), output is JSON automatically:
 
 ```bash
-pgai issues comments <issueId> > comments.json
+pgai issues view <issueId> > issue.json
 ```
 
 #### Grafana management

@@ -1,6 +1,6 @@
 import * as pkg from "../package.json";
 import * as config from "./config";
-import { fetchIssues, fetchIssueComments, createIssueComment } from "./issues";
+import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "./issues";
 import { resolveBaseUrls } from "./util";
 
 // MCP SDK imports
@@ -54,8 +54,8 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
           },
         },
         {
-          name: "list_issue_comments",
-          description: "List comments for a specific issue (issue_id UUID)",
+          name: "view_issue",
+          description: "View a specific issue with its comments",
           inputSchema: {
             type: "object",
             properties: {
@@ -110,16 +110,29 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
     try {
       if (toolName === "list_issues") {
         const result = await fetchIssues({ apiKey, apiBaseUrl, debug });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        const trimmed = Array.isArray(result)
+          ? (result as any[]).map((r) => ({
+              id: (r as any).id,
+              title: (r as any).title,
+              status: (r as any).status,
+              created_at: (r as any).created_at,
+            }))
+          : result;
+        return { content: [{ type: "text", text: JSON.stringify(trimmed, null, 2) }] };
       }
 
-      if (toolName === "list_issue_comments") {
+      if (toolName === "view_issue") {
         const issueId = String(args.issue_id || "").trim();
         if (!issueId) {
           return { content: [{ type: "text", text: "issue_id is required" }], isError: true };
         }
-        const result = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        const issue = await fetchIssue({ apiKey, apiBaseUrl, issueId, debug });
+        if (!issue) {
+          return { content: [{ type: "text", text: "Issue not found" }], isError: true };
+        }
+        const comments = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug });
+        const combined = { issue, comments };
+        return { content: [{ type: "text", text: JSON.stringify(combined, null, 2) }] };
       }
 
       if (toolName === "post_issue_comment") {
