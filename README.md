@@ -101,7 +101,7 @@ grant select on pg_stat_user_tables to postgres_ai_mon;
 grant select on pg_stat_user_indexes to postgres_ai_mon;
 grant select on pg_index to postgres_ai_mon;
 
--- Create a public view for pg_statistic access (required for bloat metrics on user schemas)
+-- Create a public view for pg_statistic access (optional, for bloat analysis)
 create view public.pg_statistic as
 select 
     n.nspname as schemaname,
