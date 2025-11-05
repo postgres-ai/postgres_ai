@@ -2214,7 +2214,7 @@ metrics:
             ) as has_rds_fn,
             coalesce(pg_has_role('pg_read_server_files','usage'), false) as has_read_files,
             (select rolsuper from pg_roles where rolname = current_user) as is_super,
-            exists (select 1 from pg_proc where proname = 'pg_ls_dir')    as has_ls,
+            exists (select from pg_proc where proname = 'pg_ls_dir')    as has_ls,
             exists (select 1 from pg_proc where proname = 'pg_stat_file') as has_stat
         ),
         can_local as (
