@@ -2220,6 +2220,9 @@ metrics:
         can_local as (
           select (has_ls and has_stat and (has_read_files or is_super)) as ok from env
         ),
+        -- Use query_to_xml to safely execute RDS-specific multixact directory listing query.
+        -- The XML wrapper allows the query to fail gracefully if rds_tools.pg_ls_multixactdir()
+        -- is unavailable or returns errors, preventing the entire metric from failing.
         rds_probe_xml as (
           select query_to_xml($q$
             with files as (
@@ -2242,6 +2245,9 @@ metrics:
           $q$, true, true, '') as x
           where (select has_rds_fn from env)
         ),
+        -- Use query_to_xml to safely execute standard Postgres multixact directory listing query.
+        -- The XML wrapper allows the query to fail gracefully if pg_stat_file() or pg_ls_dir()
+        -- are unavailable or return permission errors, preventing the entire metric from failing.
         local_probe_xml as (
           select query_to_xml($q$
             with dirs as (
