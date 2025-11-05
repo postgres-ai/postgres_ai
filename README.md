@@ -128,7 +128,7 @@ create extension if not exists rds_tools;
 grant execute on function rds_tools.pg_ls_multixactdir() to postgres_ai_mon;
 ```
 
-If you're self-hosting your database:
+For self-managed Postgres:
 
 ```sql
 grant execute on function pg_stat_file(text) to postgres_ai_mon;
