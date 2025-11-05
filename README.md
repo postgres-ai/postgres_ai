@@ -95,10 +95,6 @@ create user postgres_ai_mon with password '<password>';
 grant connect on database <database_name> to postgres_ai_mon;
 
 grant pg_monitor to postgres_ai_mon;
-grant select on pg_stat_statements to postgres_ai_mon;
-grant select on pg_stat_database to postgres_ai_mon;
-grant select on pg_stat_user_tables to postgres_ai_mon;
-grant select on pg_stat_user_indexes to postgres_ai_mon;
 grant select on pg_index to postgres_ai_mon;
 
 -- Create a public view for pg_statistic access (optional, for bloat analysis)
