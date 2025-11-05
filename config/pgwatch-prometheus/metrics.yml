@@ -2207,7 +2207,7 @@ metrics:
         with env as (
           select
             exists (
-              select 1
+              select
               from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
               where p.proname = 'pg_ls_multixactdir' and n.nspname = 'rds_tools'
