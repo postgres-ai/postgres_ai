@@ -117,7 +117,9 @@ alter user postgres_ai_mon set search_path = "$user", public, pg_catalog;
 commit;
 ```
 
-If your database is hosted on AWS:
+### Optional permissions to analyze risks of certain performance cliffs
+
+For RDS Postgres and Aurora:
 
 ```sql
 create extension if not exists rds_tools;
