@@ -78,18 +78,18 @@ class PostgresReportGenerator:
             with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 # Query the index_definitions table for the most recent data
                 query = """
-                    SELECT DISTINCT ON (data->>'indexname')
-                        data->>'indexname' as indexname,
+                    SELECT DISTINCT ON (data->>'indexrelname')
+                        data->>'indexrelname' as indexrelname,
                         data->>'index_definition' as index_definition
                     FROM public.index_definitions
-                    WHERE data ? 'indexname' AND data ? 'index_definition'
-                    ORDER BY data->>'indexname', time DESC
+                    WHERE data ? 'indexrelname' AND data ? 'index_definition'
+                    ORDER BY data->>'indexrelname', time DESC
                 """
                 cursor.execute(query)
                 
                 for row in cursor.fetchall():
-                    if row['indexname']:
-                        index_definitions[row['indexname']] = row['index_definition']
+                    if row['indexrelname']:
+                        index_definitions[row['indexrelname']] = row['index_definition']
         
         except Exception as e:
             print(f"Error fetching index definitions from Postgres sink: {e}")
@@ -1846,9 +1846,9 @@ def make_request(api_url, endpoint, request_data):
 def main():
     parser = argparse.ArgumentParser(description='Generate PostgreSQL reports using PromQL')
     parser.add_argument('--prometheus-url', default='http://sink-prometheus:9090',
-                        help='Prometheus URL (default: http://sink-prometheus:9090 for Docker, use http://localhost:59090 for external access)')
-    parser.add_argument('--postgres-sink-url', default='postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements',
-                        help='Postgres sink connection string (default: postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements for Docker, use postgresql://pgwatch:pgwatchadmin@localhost:55433/measurements for external access)')
+                        help='Prometheus URL (default: http://sink-prometheus:9090)')
+    parser.add_argument('--postgres-sink-url', default='postgresql://pgwatch@sink-postgres:5432/measurements',
+                        help='Postgres sink connection string (default: postgresql://pgwatch@sink-postgres:5432/measurements)')
     parser.add_argument('--cluster', default='local',
                         help='Cluster name (default: local)')
     parser.add_argument('--node-name', default='node-01',

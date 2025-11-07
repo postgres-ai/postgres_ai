@@ -34,13 +34,15 @@ services:
         "-c",
         "pg_stat_statements.track=all",
       ]
-    ports:
-      - "${BIND_HOST:-}55432:5432"
     volumes:
       - target_db_data:/var/lib/postgresql/data
       - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
+  # Note: pg_hba.conf is configured to allow passwordless connections (trust)
+  # for local connections within the Docker network. This simplifies pgwatch
+  # and postgres-exporter connectivity without compromising security since
+  # the database is not exposed externally.
   sink-postgres:
     image: postgres:15
     container_name: sink-postgres
@@ -48,10 +50,10 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "${BIND_HOST:-}55433:5432"
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
+      - ./config/sink-postgres/00-configure-pg-hba.sh:/docker-entrypoint-initdb.d/00-configure-pg-hba.sh
       - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   # VictoriaMetrics Sink - Storage for metrics in Prometheus format
@@ -79,11 +81,9 @@ services:
       [
         "--sources=/etc/pgwatch/sources.yml",
         "--metrics=/etc/pgwatch/metrics.yml",
-        "--sink=postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements",
+        "--sink=postgresql://pgwatch@sink-postgres:5432/measurements?sslmode=disable",
         "--web-addr=:8080",
       ]
-    ports:
-      - "${BIND_HOST:-}58080:8080"
     depends_on:
       - sources-generator
       - sink-postgres
@@ -103,9 +103,6 @@ services:
         "--sink=prometheus://0.0.0.0:9091/pgwatch",
         "--web-addr=:8089",
       ]
-    ports:
-      - "${BIND_HOST:-}58089:8089"
-      - "${BIND_HOST:-}59091:9091"
     depends_on:
       - sources-generator
       - sink-prometheus
@@ -143,8 +140,6 @@ services:
       - PROMETHEUS_URL=http://sink-prometheus:9090
     depends_on:
       - sink-prometheus
-    ports:
-      - "${BIND_HOST:-}55000:5000"
     restart: unless-stopped
   # PostgreSQL Reports Generator - Runs reports after 1 hour
   postgres-reports:
@@ -194,8 +189,6 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.51.0
     container_name: cadvisor
     privileged: true
-    ports:
-      - "58081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -212,8 +205,6 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: node-exporter
-    ports:
-      - "59100:9100"
     command:
       - '--path.rootfs=/host'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
@@ -227,8 +218,6 @@ services:
     container_name: postgres-exporter-sink
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:postgres@sink-postgres:5432/measurements?sslmode=disable"
-    ports:
-      - "59187:9187"
     depends_on:
       - sink-postgres
     restart: unless-stopped

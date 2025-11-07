@@ -19,10 +19,13 @@ metrics:
     sqls:
       11: |-
         select /* pgwatch_generated */
-          indexname,
+          indexrelname,
+          schemaname,
+          relname,
           pg_get_indexdef(indexrelid) as index_definition
         from pg_stat_all_indexes
-        order by schemaname, tablename, indexname;
+        order by schemaname, relname, indexrelname
+        limit 10000;
     gauges:
       - '*'
   
