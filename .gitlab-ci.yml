@@ -128,29 +128,29 @@ cli:node:full:dind:
     - npm --prefix cli install --no-audit --no-fund
   script:
     - echo "=== Testing quickstart (demo mode) ==="
-    - node ./cli/dist/bin/postgres-ai.js quickstart --demo
+    - node ./cli/dist/bin/postgres-ai.js mon quickstart --demo
     - sleep 10
-    - node ./cli/dist/bin/postgres-ai.js status
+    - node ./cli/dist/bin/postgres-ai.js mon status
     - echo ""
     - echo "=== Testing install command ==="
-    - node ./cli/dist/bin/postgres-ai.js install
+    - node ./cli/dist/bin/postgres-ai.js mon install
     - echo ""
     - echo "=== Testing update command ==="
-    - node ./cli/dist/bin/postgres-ai.js update || true
+    - node ./cli/dist/bin/postgres-ai.js mon update || true
     - echo ""
     - echo "=== Testing shell command ==="
-    - echo "SELECT 1;" | node ./cli/dist/bin/postgres-ai.js shell target-db || true
+    - echo "SELECT 1;" | node ./cli/dist/bin/postgres-ai.js mon shell target-db || true
     - echo ""
     - echo "=== Testing complete workflow ==="
-    - node ./cli/dist/bin/postgres-ai.js add-instance "postgresql://monitor:monitor_pass@target-db:5432/target_database" demo-test
-    - node ./cli/dist/bin/postgres-ai.js list-instances
-    - node ./cli/dist/bin/postgres-ai.js test-instance demo-test || true
-    - node ./cli/dist/bin/postgres-ai.js health --wait 120
-    - node ./cli/dist/bin/postgres-ai.js show-grafana-credentials
+    - node ./cli/dist/bin/postgres-ai.js mon add-instance "postgresql://monitor:monitor_pass@target-db:5432/target_database" demo-test
+    - node ./cli/dist/bin/postgres-ai.js mon list-instances
+    - node ./cli/dist/bin/postgres-ai.js mon test-instance demo-test || true
+    - node ./cli/dist/bin/postgres-ai.js mon health --wait 120
+    - node ./cli/dist/bin/postgres-ai.js mon show-grafana-credentials
     - echo ""
     - echo "=== Cleanup ==="
-    - node ./cli/dist/bin/postgres-ai.js stop
-    - node ./cli/dist/bin/postgres-ai.js clean || true
+    - node ./cli/dist/bin/postgres-ai.js mon stop
+    - node ./cli/dist/bin/postgres-ai.js mon clean || true
   after_script:
     - docker ps -a || true
   rules:

@@ -4,7 +4,7 @@
 
 set -e
 
-CLI_CMD="node ./cli/dist/bin/postgres-ai.js"
+CLI_CMD="node ./cli/dist/bin/postgres-ai.js mon"
 
 echo "=== Testing service commands ==="
 $CLI_CMD check || true
