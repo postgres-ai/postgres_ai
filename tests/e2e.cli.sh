@@ -4,26 +4,27 @@
 
 set -e
 
-CLI_CMD="node ./cli/dist/bin/postgres-ai.js mon"
+CLI_CMD="node ./cli/dist/bin/postgres-ai.js"
+MON_CMD="$CLI_CMD mon"
 
 echo "=== Testing service commands ==="
-$CLI_CMD check || true
-$CLI_CMD config || true
-$CLI_CMD update-config
-$CLI_CMD start
+$MON_CMD check || true
+$MON_CMD config || true
+$MON_CMD update-config
+$MON_CMD start
 sleep 10
-$CLI_CMD status
-$CLI_CMD logs --tail 5 grafana || true
-$CLI_CMD health --wait 60 || true
+$MON_CMD status
+$MON_CMD logs --tail 5 grafana || true
+$MON_CMD health --wait 60 || true
 
 echo ""
 echo "=== Testing instance commands ==="
-$CLI_CMD list-instances
-$CLI_CMD add-instance "postgresql://monitor:monitor_pass@target-db:5432/target_database" ci-test
-$CLI_CMD list-instances | grep -q ci-test
+$MON_CMD targets list
+$MON_CMD targets add "postgresql://monitor:monitor_pass@target-db:5432/target_database" ci-test
+$MON_CMD targets list | grep -q ci-test
 sleep 5
-$CLI_CMD test-instance ci-test || true
-$CLI_CMD remove-instance ci-test
+$MON_CMD targets test ci-test || true
+$MON_CMD targets remove ci-test
 
 echo ""
 echo "=== Testing API key commands ==="
@@ -33,17 +34,17 @@ $CLI_CMD remove-key
 
 echo ""
 echo "=== Testing Grafana commands ==="
-$CLI_CMD show-grafana-credentials || true
-$CLI_CMD generate-grafana-password || true
-$CLI_CMD show-grafana-credentials || true
+$MON_CMD show-grafana-credentials || true
+$MON_CMD generate-grafana-password || true
+$MON_CMD show-grafana-credentials || true
 
 echo ""
 echo "=== Testing service management ==="
-$CLI_CMD restart grafana
+$MON_CMD restart grafana
 sleep 3
-$CLI_CMD status
-$CLI_CMD stop
-$CLI_CMD clean || true
+$MON_CMD status
+$MON_CMD stop
+$MON_CMD clean || true
 
 echo ""
 echo "✓ All E2E tests passed"

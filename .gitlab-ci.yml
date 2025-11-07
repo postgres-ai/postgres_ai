@@ -70,8 +70,8 @@ cli:node:smoke:
     - node -v && npm -v
     - npm --prefix cli install --no-audit --no-fund
     - node ./cli/dist/bin/postgres-ai.js --help
-    - node ./cli/dist/bin/postgres-ai.js status --help
-    - node ./cli/dist/bin/postgres-ai.js list-instances --help
+    - node ./cli/dist/bin/postgres-ai.js mon status --help
+    - node ./cli/dist/bin/postgres-ai.js mon targets list --help
     - npm install -g ./cli
     - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
     - command -v postgres-ai && postgres-ai --help
@@ -83,9 +83,9 @@ cli:node:smoke:
     - grep -q 'test_key' ~/.config/postgresai/config.json
     - node ./cli/dist/bin/postgres-ai.js remove-key
     - if grep -q 'apiKey' ~/.config/postgresai/config.json; then echo 'key not removed' && exit 1; fi
-    - node ./cli/dist/bin/postgres-ai.js list-instances | head -n 1 || true
-    - node ./cli/dist/bin/postgres-ai.js add-instance 'postgresql://user:pass@host:5432/db' ci-test || true
-    - node ./cli/dist/bin/postgres-ai.js remove-instance ci-test || true
+    - node ./cli/dist/bin/postgres-ai.js mon targets list | head -n 1 || true
+    - node ./cli/dist/bin/postgres-ai.js mon targets add 'postgresql://user:pass@host:5432/db' ci-test || true
+    - node ./cli/dist/bin/postgres-ai.js mon targets remove ci-test || true
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
@@ -142,9 +142,9 @@ cli:node:full:dind:
     - echo "SELECT 1;" | node ./cli/dist/bin/postgres-ai.js mon shell target-db || true
     - echo ""
     - echo "=== Testing complete workflow ==="
-    - node ./cli/dist/bin/postgres-ai.js mon add-instance "postgresql://monitor:monitor_pass@target-db:5432/target_database" demo-test
-    - node ./cli/dist/bin/postgres-ai.js mon list-instances
-    - node ./cli/dist/bin/postgres-ai.js mon test-instance demo-test || true
+    - node ./cli/dist/bin/postgres-ai.js mon targets add "postgresql://monitor:monitor_pass@target-db:5432/target_database" demo-test
+    - node ./cli/dist/bin/postgres-ai.js mon targets list
+    - node ./cli/dist/bin/postgres-ai.js mon targets test demo-test || true
     - node ./cli/dist/bin/postgres-ai.js mon health --wait 120
     - node ./cli/dist/bin/postgres-ai.js mon show-grafana-credentials
     - echo ""
