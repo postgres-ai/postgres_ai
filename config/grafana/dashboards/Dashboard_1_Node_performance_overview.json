@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 1,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -297,25 +297,12 @@
       "type": "timeseries"
     },
     {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 19
-      },
-      "id": 2,
-      "panels": [],
-      "title": "Host stats",
-      "type": "row"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 19
       },
       "id": 3,
       "panels": [],
@@ -483,7 +470,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 20
       },
       "id": 4,
       "options": {
@@ -716,7 +703,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 20
       },
       "id": 39,
       "options": {
@@ -770,109 +757,6 @@
         }
       ],
       "title": "Non-idle Sessions",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ops/s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 29
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "Calls",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Calls (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -970,8 +854,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 29
+        "x": 0,
+        "y": 28
       },
       "id": 7,
       "options": {
@@ -1012,7 +896,338 @@
           "refId": "A"
         }
       ],
-      "title": "Transactions",
+      "title": "TPS",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "Calls",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "QPS (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "description": "To see planning time, enable pg_stat_statements.track_planning",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/1000",
+          "interval": "20",
+          "legendFormat": "Execution time",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/1000",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Planning time",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Query total time (pg_stat_statements)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "description": "To see planning time, enable pg_stat_statements.track_planning",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 48,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/1000/ sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "interval": "20",
+          "legendFormat": "Execution time per call",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/1000/ sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "hide": false,
+          "instant": false,
+          "interval": "20",
+          "legendFormat": "Planning time per call",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Query time per call (latency) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1071,7 +1286,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -1079,443 +1295,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 37
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "refId": "A"
-        }
-      ],
-      "title": "TODO: Postgres logs",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 100,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 37
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))+sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
-          "hide": false,
-          "instant": false,
-          "interval": "20",
-          "legendFormat": "Rollbacks",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_db_stats_xact_commit{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))+sum(irate(pgwatch_db_stats_xact_rollback{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
-          "interval": "20",
-          "legendFormat": "Commits",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Commit vs Rollback ratio",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s/s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 45
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])))/1000",
-          "interval": "20",
-          "legendFormat": "Statements total time",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Statements total time (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 45
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "(sum(irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) / sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "Statements time per call",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "Statements time per call  (pg_stat_statements) aka latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 53
+        "y": 44
       },
       "id": 12,
       "options": {
@@ -1538,1766 +1318,13 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_rows[$__rate_interval]))",
-          "interval": "20",
-          "legendFormat": "No. of rows ",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Total rows  (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 53
-      },
-      "id": 13,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "interval": "20",
-          "legendFormat": "Rows per call",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Rows per call  (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s/s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 61
-      },
-      "id": 14,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "interval": "20",
-          "legendFormat": "blk_read_time",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "hide": false,
-          "interval": "20",
-          "legendFormat": "blk_write_time",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "blk_read_time vs blk_write_time (s/s) (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 61
-      },
-      "id": 15,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "interval": "20",
-          "legendFormat": "blk_read_time",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_block_write_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "hide": false,
-          "interval": "20",
-          "legendFormat": "blk_write_time",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "blk_read_time vs blk_write_time per call (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 69
-      },
-      "id": 16,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "expr": "irate(pgwatch_db_stats_tup_returned{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_hit (bytes) (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 69
-      },
-      "id": 17,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes per call",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_hit (bytes) per call (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 77
-      },
-      "id": 18,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_read (bytes) (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 77
-      },
-      "id": 19,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes per call",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_read (bytes) per call (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 85
-      },
-      "id": 20,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_written (bytes) (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 85
-      },
-      "id": 21,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes per call",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_written (bytes) per call (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 93
-      },
-      "id": 22,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_dirtied (bytes) (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 93
-      },
-      "id": 23,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes per call",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "shared_blks_dirtied (bytes) per call (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 100,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 101
-      },
-      "id": 24,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/(sum(irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval])) + sum(irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))) * 100",
-          "interval": "20",
-          "legendFormat": "shared_blks_read_ratio",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "shared_blks_read_ratio (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 109
-      },
-      "id": 25,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_wal_xlog_location_b{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "WAL bytes (pg_current_wal_lsn)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 109
-      },
-      "id": 26,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_wal_xlog_location_b{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "WAL bytes per call (pg_current_wal_lsn)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 117
-      },
-      "id": 27,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "WAL fpi (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 117
-      },
-      "id": 28,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "shared bytes",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "WAL fpi per call (pg_current_wal_lsn)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "binBps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 125
-      },
-      "id": 29,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "interval": "20",
-          "legendFormat": "Temp bytes read",
+          "legendFormat": "Tuples returned",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -3307,132 +1334,20 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "hide": false,
-          "interval": "20",
-          "legendFormat": "Temp bytes written",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "temp_bytes_read vs temp_bytes_written (pg_stat_statements)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 125
-      },
-      "id": 31,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "expr": "irate(pgwatch_db_stats_tup_fetched{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
+          "hide": false,
           "includeNullMetadata": true,
           "interval": "20",
-          "legendFormat": "Temp bytes read",
+          "legendFormat": "Tuples fetched",
           "range": true,
-          "refId": "A",
+          "refId": "B",
           "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "sum(irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))/sum(irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "hide": false,
-          "interval": "20",
-          "legendFormat": "Temp bytes written",
-          "range": true,
-          "refId": "B"
         }
       ],
-      "title": "temp_bytes_read vs temp_bytes_written per call (pg_stat_statements)",
+      "title": "Tuples fetched and tuples returned per second",
       "type": "timeseries"
     },
     {
@@ -3498,22 +1413,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Inserts"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Deletes"
+              "options": "Tuples deleted"
             },
             "properties": [
               {
@@ -3524,46 +1424,16 @@
                 }
               }
             ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "HOT updates"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Non-HOT updates"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
           }
         ]
       },
       "gridPos": {
-        "h": 13,
-        "w": 24,
-        "x": 0,
-        "y": 133
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 44
       },
-      "id": 45,
+      "id": 47,
       "options": {
         "legend": {
           "calcs": [
@@ -3573,9 +1443,7 @@
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Max",
-          "sortDesc": true
+          "showLegend": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -3586,17 +1454,13 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
           "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_ins{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "editorMode": "builder",
+          "expr": "irate(pgwatch_db_stats_tup_inserted{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Inserts",
+          "interval": "20",
+          "legendFormat": "Tuples inserted",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -3608,12 +1472,12 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "irate(pgwatch_db_stats_tup_updated{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Updates",
+          "interval": "20",
+          "legendFormat": "Tuples updated (HOT + non-HOT)",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -3625,14 +1489,117 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_hot_upd{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "expr": "irate(pgwatch_db_stats_tup_deleted{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "HOT updates",
+          "interval": "20",
+          "legendFormat": "Tuples deleted",
           "range": true,
           "refId": "C",
+          "useBackend": false
+        }
+      ],
+      "title": "Tuples operations per second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "irate(pgwatch_db_stats_blks_read{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "blks_read",
+          "range": true,
+          "refId": "A",
           "useBackend": false
         },
         {
@@ -3641,59 +1608,425 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "sum by (node_name, dbname, cluster) (irate(pgwatch_table_stats_n_tup_del{datname=\"$db_name\", cluster=\"$cluster_name\", node_name=\"$node_name\"}[$__rate_interval]))",
+          "editorMode": "builder",
+          "expr": "irate(pgwatch_db_stats_blks_hit{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "interval": "60",
-          "legendFormat": "Deletes",
+          "interval": "20",
+          "legendFormat": "blks_hit",
           "range": true,
-          "refId": "D",
+          "refId": "B",
           "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(pgwatch_settings_numeric_value{setting_name=\"block_size\"}[1h])",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "block_size",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Tuple operations",
+      "title": "blk_reads and blk_hits per second (bytes)",
       "transformations": [
         {
           "id": "calculateField",
           "options": {
-            "alias": "Non-HOT updates",
+            "alias": "blks_read (bytes)",
             "binary": {
               "left": {
                 "matcher": {
                   "id": "byName",
-                  "options": "Updates"
+                  "options": "blks_read"
                 }
               },
-              "operator": "-",
+              "operator": "*",
               "right": {
                 "matcher": {
                   "id": "byName",
-                  "options": "HOT updates"
+                  "options": "block_size"
                 }
               }
             },
             "mode": "binary",
             "reduce": {
               "reducer": "sum"
-            }
+            },
+            "replaceFields": false
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "blks_hit (bytes)",
+            "binary": {
+              "left": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "blks_hit"
+                }
+              },
+              "operator": "*",
+              "right": {
+                "matcher": {
+                  "id": "byName",
+                  "options": "block_size"
+                }
+              }
+            },
+            "mode": "binary",
+            "reduce": {
+              "reducer": "sum"
+            },
+            "replaceFields": false
           }
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Updates": true
+              "blks_hit": true,
+              "blks_read": true,
+              "block_size": true
             },
             "includeByName": {},
             "indexByName": {},
             "renameByName": {
-              "Hot Updates": "HOT Updates"
+              "blks_hit (bytes)": "blks_hit",
+              "blks_read (bytes)": "blks_read"
             }
           }
         }
       ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "description": "To see planning time, enable track_io_timing",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "id": 49,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "irate(pgwatch_db_stats_blk_read_time{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "blk_read_time",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "irate(pgwatch_db_stats_blk_write_time{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
+          "hide": false,
+          "interval": "20",
+          "legendFormat": "blk_write_time",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "blk_read_time and blk_write_time (s/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 60
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "sum(irate(pgwatch_wal_xlog_location_b{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "shared bytes",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "WAL bytes per second (pg_current_wal_lsn)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 60
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "irate(pgwatch_db_stats_temp_bytes{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}[$__rate_interval])",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "interval": "20",
+          "legendFormat": "Temp bytes",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "temp_bytes written per second",
       "type": "timeseries"
     },
     {
@@ -3764,7 +2097,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 146
+        "y": 68
       },
       "id": 32,
       "options": {
@@ -3901,7 +2234,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 146
+        "y": 68
       },
       "id": 33,
       "options": {
@@ -3999,7 +2332,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 154
+        "y": 76
       },
       "id": 34,
       "options": {
@@ -4052,7 +2385,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -4096,7 +2429,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 154
+        "y": 76
       },
       "id": 35,
       "options": {
@@ -4149,7 +2482,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -4164,10 +2497,10 @@
               "type": "linear"
             },
             "showPoints": "auto",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -4194,7 +2527,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 162
+        "y": 84
       },
       "id": 41,
       "options": {
@@ -4218,8 +2551,8 @@
       "targets": [
         {
           "disableTextWrap": false,
-          "editorMode": "code",
-          "expr": "rate(pgwatch_bgwriter_buffers_checkpoint{datname=\"$db_name\"}[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
+          "editorMode": "builder",
+          "expr": "irate(pgwatch_checkpointer_buffers_written{datname=\"$db_name\"}[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
@@ -4233,7 +2566,7 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "editorMode": "code",
+          "editorMode": "builder",
           "expr": "irate(pgwatch_bgwriter_buffers_clean[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
           "hide": false,
           "instant": false,
@@ -4247,14 +2580,18 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "editorMode": "code",
-          "expr": "irate(pgwatch_bgwriter_buffers_backend[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "irate(pg_stat_bgwriter_buffers_backend_total[$__rate_interval]) * on(datname) pgwatch_settings_numeric_value{datname=\"$db_name\", setting_name=\"block_size\"}",
+          "fullMetaSearch": false,
           "hide": false,
+          "includeNullMetadata": true,
           "instant": false,
           "interval": "20",
           "legendFormat": "Cleaned by backends",
           "range": true,
-          "refId": "C"
+          "refId": "C",
+          "useBackend": false
         }
       ],
       "title": "bgwriter and checkpointer",
@@ -4356,7 +2693,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 172
+        "y": 94
       },
       "id": 42,
       "options": {
@@ -4477,7 +2814,7 @@
         "h": 14,
         "w": 24,
         "x": 0,
-        "y": 183
+        "y": 105
       },
       "id": 44,
       "options": {
@@ -4679,7 +3016,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 197
+        "y": 119
       },
       "id": 46,
       "options": {
@@ -4736,7 +3073,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 209
+        "y": 131
       },
       "id": 40,
       "options": {
@@ -4822,5 +3159,5 @@
   "timezone": "utc",
   "title": "01. Single node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 4
+  "version": 31
 }
