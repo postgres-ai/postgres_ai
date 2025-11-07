@@ -22,12 +22,438 @@
   "links": [],
   "panels": [
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
+      },
+      "id": 44,
+      "panels": [
+        {
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aerffb0z8rjlsc"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Table Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Index Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "TOAST Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Seq Scans"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 120
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Idx Scans"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 120
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Inserts"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Updates"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Deletes"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "HOT Updates"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Heap Blks Read"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Heap Blks Hit"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Idx Blks Read"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Idx Blks Hit"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Schema"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 150
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Table Name"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 300
+                  },
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "targetBlank": true,
+                        "title": "Single Table Analysis",
+                        "url": "/d/9-single-table-analysis/9-single-table-analysis?orgId=1&var-cluster_name=${cluster_name}&var-node_name=${node_name}&var-db_name=${db_name}&var-schema_name=${__data.fields[\"Schema\"]}&var-table_name=${__data.fields[\"Table Name\"]}&from=${__from:date}&to=${__to:date}"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 19,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "id": 45,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Total Size"
+              }
+            ]
+          },
+          "pluginVersion": "12.0.2",
+          "targets": [
+            {
+              "columns": [
+                {
+                  "selector": "schema",
+                  "text": "Schema",
+                  "type": "string"
+                },
+                {
+                  "selector": "table_name",
+                  "text": "Table Name",
+                  "type": "string"
+                },
+                {
+                  "selector": "total_size",
+                  "text": "Total Size",
+                  "type": "number"
+                },
+                {
+                  "selector": "table_size",
+                  "text": "Table Size",
+                  "type": "number"
+                },
+                {
+                  "selector": "index_size",
+                  "text": "Index Size",
+                  "type": "number"
+                },
+                {
+                  "selector": "toast_size",
+                  "text": "TOAST Size",
+                  "type": "number"
+                },
+                {
+                  "selector": "seq_scan",
+                  "text": "Seq Scans",
+                  "type": "number"
+                },
+                {
+                  "selector": "idx_scan",
+                  "text": "Idx Scans",
+                  "type": "number"
+                },
+                {
+                  "selector": "n_tup_ins",
+                  "text": "Inserts",
+                  "type": "number"
+                },
+                {
+                  "selector": "n_tup_upd",
+                  "text": "Updates",
+                  "type": "number"
+                },
+                {
+                  "selector": "n_tup_del",
+                  "text": "Deletes",
+                  "type": "number"
+                },
+                {
+                  "selector": "n_tup_hot_upd",
+                  "text": "HOT Updates",
+                  "type": "number"
+                },
+                {
+                  "selector": "heap_blks_read",
+                  "text": "Heap Blks Read",
+                  "type": "number"
+                },
+                {
+                  "selector": "heap_blks_hit",
+                  "text": "Heap Blks Hit",
+                  "type": "number"
+                },
+                {
+                  "selector": "idx_blks_read",
+                  "text": "Idx Blks Read",
+                  "type": "number"
+                },
+                {
+                  "selector": "idx_blks_hit",
+                  "text": "Idx Blks Hit",
+                  "type": "number"
+                }
+              ],
+              "computed_columns": [],
+              "datasource": {
+                "type": "yesoreyeram-infinity-datasource",
+                "uid": "aerffb0z8rjlsc"
+              },
+              "filters": [],
+              "format": "table",
+              "global_query_id": "",
+              "parser": "backend",
+              "refId": "A",
+              "root_selector": "",
+              "source": "url",
+              "type": "csv",
+              "url": "http://flask-pgss-api:5000/table_info/csv",
+              "url_options": {
+                "data": "",
+                "method": "GET",
+                "params": [
+                  {
+                    "key": "db_name",
+                    "value": "${db_name}"
+                  },
+                  {
+                    "key": "cluster_name",
+                    "value": "${cluster_name}"
+                  },
+                  {
+                    "key": "node_name",
+                    "value": "${node_name}"
+                  },
+                  {
+                    "key": "schemaname",
+                    "value": "${schema_name}"
+                  }
+                ]
+              }
+            }
+          ],
+          "title": "",
+          "transformations": [],
+          "type": "table"
+        }
+      ],
+      "title": "Detailed table view (aggregated table statistics)",
+      "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 1
       },
       "id": 27,
       "panels": [],
