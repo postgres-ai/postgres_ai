@@ -267,23 +267,308 @@ const mon = program.command("mon").description("monitoring services management")
 mon
   .command("quickstart")
   .description("complete setup (generate config, start monitoring services)")
-  .option("--demo", "demo mode", false)
-  .action(async () => {
-    // Check if containers are already running
-    const { running, containers } = checkRunningContainers();
-    if (running) {
-      console.log(`Monitoring services are already running: ${containers.join(", ")}`);
-      console.log("Use 'postgres-ai mon restart' to restart them");
+  .option("--demo", "demo mode with sample database", false)
+  .option("--api-key <key>", "Postgres AI API key for automated report uploads")
+  .option("--db-url <url>", "PostgreSQL connection URL to monitor")
+  .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
+  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; yes: boolean }) => {
+    console.log("\n=================================");
+    console.log("  PostgresAI Monitoring Quickstart");
+    console.log("=================================\n");
+    console.log("This will install, configure, and start the monitoring system\n");
+
+    // Validate conflicting options
+    if (opts.demo && opts.dbUrl) {
+      console.log("⚠ Both --demo and --db-url provided. Demo mode includes its own database.");
+      console.log("⚠ The --db-url will be ignored in demo mode.\n");
+      opts.dbUrl = undefined;
+    }
+
+    if (opts.demo && opts.apiKey) {
+      console.error("✗ Cannot use --api-key with --demo mode");
+      console.error("✗ Demo mode is for testing only and does not support API key integration");
+      console.error("\nUse demo mode without API key: postgres-ai mon quickstart --demo");
+      console.error("Or use production mode with API key: postgres-ai mon quickstart --api-key=your_key");
+      process.exitCode = 1;
       return;
     }
 
+    // Check if containers are already running
+    const { running, containers } = checkRunningContainers();
+    if (running) {
+      console.log(`⚠ Monitoring services are already running: ${containers.join(", ")}`);
+      console.log("Use 'postgres-ai mon restart' to restart them\n");
+      return;
+    }
+
+    // Step 1: API key configuration (only in production mode)
+    if (!opts.demo) {
+      console.log("Step 1: Postgres AI API Configuration (Optional)");
+      console.log("An API key enables automatic upload of PostgreSQL reports to Postgres AI\n");
+
+      if (opts.apiKey) {
+        console.log("Using API key provided via --api-key parameter");
+        config.writeConfig({ apiKey: opts.apiKey });
+        console.log("✓ API key saved\n");
+      } else if (opts.yes) {
+        // Auto-yes mode without API key - skip API key setup
+        console.log("Auto-yes mode: no API key provided, skipping API key setup");
+        console.log("⚠ Reports will be generated locally only");
+        console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+      } else {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const question = (prompt: string): Promise<string> =>
+          new Promise((resolve) => rl.question(prompt, resolve));
+
+        try {
+          const answer = await question("Do you have a Postgres AI API key? (Y/n): ");
+          const proceedWithApiKey = !answer || answer.toLowerCase() === "y";
+
+          if (proceedWithApiKey) {
+            while (true) {
+              const inputApiKey = await question("Enter your Postgres AI API key: ");
+              const trimmedKey = inputApiKey.trim();
+
+              if (trimmedKey) {
+                config.writeConfig({ apiKey: trimmedKey });
+                console.log("✓ API key saved\n");
+                break;
+              }
+
+              console.log("⚠ API key cannot be empty");
+              const retry = await question("Try again or skip API key setup, retry? (Y/n): ");
+              if (retry.toLowerCase() === "n") {
+                console.log("⚠ Skipping API key setup - reports will be generated locally only");
+                console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+                break;
+              }
+            }
+          } else {
+            console.log("⚠ Skipping API key setup - reports will be generated locally only");
+            console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+          }
+        } finally {
+          rl.close();
+        }
+      }
+    } else {
+      console.log("Step 1: Demo mode - API key configuration skipped");
+      console.log("Demo mode is for testing only and does not support API key integration\n");
+    }
+
+    // Step 2: Add PostgreSQL instance (if not demo mode)
+    if (!opts.demo) {
+      console.log("Step 2: Add PostgreSQL Instance to Monitor\n");
+
+      // Clear instances.yml in production mode (start fresh)
+      const instancesPath = path.resolve(process.cwd(), "instances.yml");
+      const emptyInstancesContent = "# PostgreSQL instances to monitor\n# Add your instances using: postgres-ai mon targets add\n\n";
+      fs.writeFileSync(instancesPath, emptyInstancesContent, "utf8");
+
+      if (opts.dbUrl) {
+        console.log("Using database URL provided via --db-url parameter");
+        console.log(`Adding PostgreSQL instance from: ${opts.dbUrl}\n`);
+
+        const match = opts.dbUrl.match(/^postgresql:\/\/[^@]+@([^:/]+)/);
+        const autoInstanceName = match ? match[1] : "db-instance";
+
+        const connStr = opts.dbUrl;
+        const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
+
+        if (!m) {
+          console.error("✗ Invalid connection string format");
+          process.exitCode = 1;
+          return;
+        }
+
+        const host = m[3];
+        const db = m[5];
+        const instanceName = `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
+
+        const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
+        fs.appendFileSync(instancesPath, body, "utf8");
+        console.log(`✓ Monitoring target '${instanceName}' added\n`);
+
+        // Test connection
+        console.log("Testing connection to the added instance...");
+        try {
+          const { Client } = require("pg");
+          const client = new Client({ connectionString: connStr });
+          await client.connect();
+          const result = await client.query("select version();");
+          console.log("✓ Connection successful");
+          console.log(`${result.rows[0].version}\n`);
+          await client.end();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`✗ Connection failed: ${message}\n`);
+        }
+      } else if (opts.yes) {
+        // Auto-yes mode without database URL - skip database setup
+        console.log("Auto-yes mode: no database URL provided, skipping database setup");
+        console.log("⚠ No PostgreSQL instance added");
+        console.log("You can add one later with: postgres-ai mon targets add\n");
+      } else {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const question = (prompt: string): Promise<string> =>
+          new Promise((resolve) => rl.question(prompt, resolve));
+
+        try {
+          console.log("You need to add at least one PostgreSQL instance to monitor");
+          const answer = await question("Do you want to add a PostgreSQL instance now? (Y/n): ");
+          const proceedWithInstance = !answer || answer.toLowerCase() === "y";
+
+          if (proceedWithInstance) {
+            console.log("\nYou can provide either:");
+            console.log("  1. A full connection string: postgresql://user:pass@host:port/database");
+            console.log("  2. Press Enter to skip for now\n");
+
+            const connStr = await question("Enter connection string (or press Enter to skip): ");
+
+            if (connStr.trim()) {
+              const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
+              if (!m) {
+                console.error("✗ Invalid connection string format");
+                console.log("⚠ Continuing without adding instance\n");
+              } else {
+                const host = m[3];
+                const db = m[5];
+                const instanceName = `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
+
+                const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
+                fs.appendFileSync(instancesPath, body, "utf8");
+                console.log(`✓ Monitoring target '${instanceName}' added\n`);
+
+                // Test connection
+                console.log("Testing connection to the added instance...");
+                try {
+                  const { Client } = require("pg");
+                  const client = new Client({ connectionString: connStr });
+                  await client.connect();
+                  const result = await client.query("select version();");
+                  console.log("✓ Connection successful");
+                  console.log(`${result.rows[0].version}\n`);
+                  await client.end();
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  console.error(`✗ Connection failed: ${message}\n`);
+                }
+              }
+            } else {
+              console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
+            }
+          } else {
+            console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
+          }
+        } finally {
+          rl.close();
+        }
+      }
+    } else {
+      console.log("Step 2: Demo mode enabled - using included demo PostgreSQL database\n");
+    }
+
+    // Step 3: Update configuration
+    console.log(opts.demo ? "Step 3: Updating configuration..." : "Step 3: Updating configuration...");
     const code1 = await runCompose(["run", "--rm", "sources-generator"]);
     if (code1 !== 0) {
       process.exitCode = code1;
       return;
     }
+    console.log("✓ Configuration updated\n");
+
+    // Step 4: Ensure Grafana password is configured
+    console.log(opts.demo ? "Step 4: Configuring Grafana security..." : "Step 4: Configuring Grafana security...");
+    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    let grafanaPassword = "";
+
+    try {
+      if (fs.existsSync(cfgPath)) {
+        const stats = fs.statSync(cfgPath);
+        if (!stats.isDirectory()) {
+          const content = fs.readFileSync(cfgPath, "utf8");
+          const match = content.match(/^grafana_password=([^\r\n]+)/m);
+          if (match) {
+            grafanaPassword = match[1].trim();
+          }
+        }
+      }
+
+      if (!grafanaPassword) {
+        console.log("Generating secure Grafana password...");
+        const { stdout: password } = await execPromise("openssl rand -base64 12 | tr -d '\n'");
+        grafanaPassword = password.trim();
+
+        let configContent = "";
+        if (fs.existsSync(cfgPath)) {
+          const stats = fs.statSync(cfgPath);
+          if (!stats.isDirectory()) {
+            configContent = fs.readFileSync(cfgPath, "utf8");
+          }
+        }
+
+        const lines = configContent.split(/\r?\n/).filter((l) => !/^grafana_password=/.test(l));
+        lines.push(`grafana_password=${grafanaPassword}`);
+        fs.writeFileSync(cfgPath, lines.filter(Boolean).join("\n") + "\n", "utf8");
+      }
+
+      console.log("✓ Grafana password configured\n");
+    } catch (error) {
+      console.log("⚠ Could not generate Grafana password automatically");
+      console.log("Using default password: demo\n");
+      grafanaPassword = "demo";
+    }
+
+    // Step 5: Start services
+    console.log(opts.demo ? "Step 5: Starting monitoring services..." : "Step 5: Starting monitoring services...");
     const code2 = await runCompose(["up", "-d"]);
-    if (code2 !== 0) process.exitCode = code2;
+    if (code2 !== 0) {
+      process.exitCode = code2;
+      return;
+    }
+    console.log("✓ Services started\n");
+
+    // Final summary
+    console.log("=================================");
+    console.log("  🎉 Quickstart setup completed!");
+    console.log("=================================\n");
+
+    console.log("What's running:");
+    if (opts.demo) {
+      console.log("  ✅ Demo PostgreSQL database (monitoring target)");
+    }
+    console.log("  ✅ PostgreSQL monitoring infrastructure");
+    console.log("  ✅ Grafana dashboards (with secure password)");
+    console.log("  ✅ Prometheus metrics storage");
+    console.log("  ✅ Flask API backend");
+    console.log("  ✅ Automated report generation (every 24h)");
+    console.log("  ✅ Host stats monitoring (CPU, memory, disk, I/O)\n");
+
+    if (!opts.demo) {
+      console.log("Next steps:");
+      console.log("  • Add more PostgreSQL instances: postgres-ai mon targets add");
+      console.log("  • View configured instances: postgres-ai mon targets list");
+      console.log("  • Check service health: postgres-ai mon health\n");
+    } else {
+      console.log("Demo mode next steps:");
+      console.log("  • Explore Grafana dashboards at http://localhost:3000");
+      console.log("  • Connect to demo database: postgresql://postgres:postgres@localhost:55432/target_database");
+      console.log("  • Generate some load on the demo database to see metrics\n");
+    }
+
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🚀 MAIN ACCESS POINT - Start here:");
+    console.log("   Grafana Dashboard: http://localhost:3000");
+    console.log(`   Login: monitor / ${grafanaPassword}`);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   });
 
 mon

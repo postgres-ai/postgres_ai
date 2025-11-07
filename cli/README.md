@@ -55,7 +55,19 @@ Start monitoring with demo database:
 postgres-ai mon quickstart --demo
 ```
 
+Start monitoring with your own database:
+```bash
+postgres-ai mon quickstart --db-url postgresql://user:pass@host:5432/db
+```
+
+Complete automated setup with API key and database:
+```bash
+postgres-ai mon quickstart --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
+```
+
 This will:
+- Configure API key for automated report uploads (if provided)
+- Add PostgreSQL instance to monitor (if provided)
 - Generate secure Grafana password
 - Start all monitoring services
 - Open Grafana at http://localhost:3000
@@ -66,13 +78,27 @@ This will:
 
 #### Service lifecycle
 ```bash
-postgres-ai mon quickstart [--demo]    # Complete setup (generate config, start services)
+# Complete setup with various options
+postgres-ai mon quickstart                                  # Interactive setup for production
+postgres-ai mon quickstart --demo                           # Demo mode with sample database
+postgres-ai mon quickstart --api-key <key>                  # Setup with API key
+postgres-ai mon quickstart --db-url <url>                   # Setup with database URL
+postgres-ai mon quickstart --api-key <key> --db-url <url>   # Complete automated setup
+postgres-ai mon quickstart -y                               # Auto-accept all defaults
+
+# Service management
 postgres-ai mon start                  # Start monitoring services
 postgres-ai mon stop                   # Stop monitoring services
 postgres-ai mon restart [service]      # Restart all or specific monitoring service
 postgres-ai mon status                 # Show monitoring services status
 postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 ```
+
+##### Quickstart options
+- `--demo` - Demo mode with sample database (testing only, cannot use with --api-key)
+- `--api-key <key>` - Postgres AI API key for automated report uploads
+- `--db-url <url>` - PostgreSQL connection URL to monitor (format: `postgresql://user:pass@host:port/db`)
+- `-y, --yes` - Accept all defaults and skip interactive prompts
 
 #### Monitoring target databases (`mon targets` subgroup)
 ```bash
