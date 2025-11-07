@@ -95,13 +95,9 @@ create user postgres_ai_mon with password '<password>';
 grant connect on database <database_name> to postgres_ai_mon;
 
 grant pg_monitor to postgres_ai_mon;
-grant select on pg_stat_statements to postgres_ai_mon;
-grant select on pg_stat_database to postgres_ai_mon;
-grant select on pg_stat_user_tables to postgres_ai_mon;
-grant select on pg_stat_user_indexes to postgres_ai_mon;
 grant select on pg_index to postgres_ai_mon;
 
--- Create a public view for pg_statistic access (required for bloat metrics on user schemas)
+-- Create a public view for pg_statistic access (optional, for bloat analysis)
 create view public.pg_statistic as
 select 
     n.nspname as schemaname,
@@ -116,9 +112,27 @@ join pg_namespace n on n.oid = c.relnamespace
 join pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
 where a.attnum > 0 and not a.attisdropped;
 
-grant select on public.pg_statistic to pg_monitor;
+grant select on public.pg_statistic to postgres_ai_mon;
 alter user postgres_ai_mon set search_path = "$user", public, pg_catalog;
 commit;
+```
+
+### Optional permissions to analyze risks of certain performance cliffs
+
+For RDS Postgres and Aurora:
+
+```sql
+create extension if not exists rds_tools;
+grant execute on function rds_tools.pg_ls_multixactdir() to postgres_ai_mon;
+```
+
+For self-managed Postgres:
+
+```sql
+grant execute on function pg_stat_file(text) to postgres_ai_mon;
+grant execute on function pg_stat_file(text, boolean) to postgres_ai_mon;
+grant execute on function pg_ls_dir(text) to postgres_ai_mon;
+grant execute on function pg_ls_dir(text, boolean, boolean) to postgres_ai_mon;
 ```
 
 **One command setup:**
