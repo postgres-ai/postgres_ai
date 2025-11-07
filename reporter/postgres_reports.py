@@ -20,14 +20,14 @@ import psycopg2.extras
 
 class PostgresReportGenerator:
     def __init__(self, prometheus_url: str = "http://sink-prometheus:9090", 
-                 postgres_sink_url: str = "postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements"):
+                 postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements"):
         """
         Initialize the PostgreSQL report generator.
         
         Args:
             prometheus_url: URL of the Prometheus instance (default: http://sink-prometheus:9090)
             postgres_sink_url: Connection string for the Postgres sink database 
-                              (default: postgresql://pgwatch:pgwatchadmin@sink-postgres:5432/measurements)
+                              (default: postgresql://pgwatch@sink-postgres:5432/measurements)
         """
         self.prometheus_url = prometheus_url
         self.base_url = f"{prometheus_url}/api/v1"
@@ -78,12 +78,12 @@ class PostgresReportGenerator:
             with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 # Query the index_definitions table for the most recent data
                 query = """
-                    SELECT DISTINCT ON (data->>'indexrelname')
+                    select distinct on (data->>'indexrelname')
                         data->>'indexrelname' as indexrelname,
                         data->>'index_definition' as index_definition
-                    FROM public.index_definitions
-                    WHERE data ? 'indexrelname' AND data ? 'index_definition'
-                    ORDER BY data->>'indexrelname', time DESC
+                    from public.index_definitions
+                    where data ? 'indexrelname' and data ? 'index_definition'
+                    order by data->>'indexrelname', time desc
                 """
                 cursor.execute(query)
                 
