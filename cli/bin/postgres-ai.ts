@@ -60,14 +60,6 @@ interface PathResolution {
 }
 
 /**
- * Health check service
- */
-interface HealthService {
-  name: string;
-  url: string;
-}
-
-/**
  * Get configuration from various sources
  * @param opts - Command line options
  * @returns Configuration object
@@ -529,7 +521,7 @@ mon
 
     // Step 5: Start services
     console.log(opts.demo ? "Step 5: Starting monitoring services..." : "Step 5: Starting monitoring services...");
-    const code2 = await runCompose(["up", "-d"]);
+    const code2 = await runCompose(["up", "-d", "--force-recreate"]);
     if (code2 !== 0) {
       process.exitCode = code2;
       return;
@@ -631,11 +623,13 @@ mon
   .description("health check for monitoring services")
   .option("--wait <seconds>", "wait time in seconds for services to become healthy", parseInt, 0)
   .action(async (opts: { wait: number }) => {
-    const services: HealthService[] = [
-      { name: "Grafana", url: "http://localhost:3000/api/health" },
-      { name: "Prometheus", url: "http://localhost:59090/-/healthy" },
-      { name: "PGWatch (Postgres)", url: "http://localhost:58080/health" },
-      { name: "PGWatch (Prometheus)", url: "http://localhost:58089/health" },
+    const services = [
+      { name: "Grafana", container: "grafana-with-datasources" },
+      { name: "Prometheus", container: "sink-prometheus" },
+      { name: "PGWatch (Postgres)", container: "pgwatch-postgres" },
+      { name: "PGWatch (Prometheus)", container: "pgwatch-prometheus" },
+      { name: "Target DB", container: "target-db" },
+      { name: "Sink Postgres", container: "sink-postgres" },
     ];
 
     const waitTime = opts.wait || 0;
@@ -653,20 +647,16 @@ mon
       allHealthy = true;
       for (const service of services) {
         try {
-          // Use native fetch instead of requiring curl to be installed
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const { execSync } = require("child_process");
+          const status = execSync(`docker inspect -f '{{.State.Status}}' ${service.container} 2>/dev/null`, {
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe']
+          }).trim();
 
-          const response = await fetch(service.url, {
-            signal: controller.signal,
-            method: 'GET',
-          });
-          clearTimeout(timeoutId);
-
-          if (response.status === 200) {
+          if (status === 'running') {
             console.log(`✓ ${service.name}: healthy`);
           } else {
-            console.log(`✗ ${service.name}: unhealthy (HTTP ${response.status})`);
+            console.log(`✗ ${service.name}: unhealthy (status: ${status})`);
             allHealthy = false;
           }
         } catch (error) {
