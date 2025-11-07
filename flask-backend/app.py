@@ -487,16 +487,42 @@ def get_btree_bloat_csv():
 @app.route('/table_info/csv', methods=['GET'])
 def get_table_info_csv():
     """
-    Get comprehensive table information including bloat metrics, detailed size information, and I/O statistics as a CSV table.
-    Combines pg_table_bloat, table_size_detailed, and pg_statio_all_tables metrics for complete table analysis.
+    Get comprehensive table information including size metrics, tuple statistics, and I/O statistics as a CSV table.
+    Supports both instant queries (without time parameters) and rate calculations over a time period.
+    
+    Query parameters:
+    - time_start: Start time (ISO format or Unix timestamp) - optional
+    - time_end: End time (ISO format or Unix timestamp) - optional
+    - cluster_name: Cluster name filter (optional)
+    - node_name: Node name filter (optional)
+    - db_name: Database name filter (optional)
+    - schemaname: Schema name filter (optional, supports regex with ~)
+    - tblname: Table name filter (optional)
     """
     try:
         # Get query parameters
+        time_start = request.args.get('time_start')
+        time_end = request.args.get('time_end')
         cluster_name = request.args.get('cluster_name')
         node_name = request.args.get('node_name')
         db_name = request.args.get('db_name')
         schemaname = request.args.get('schemaname')
         tblname = request.args.get('tblname')
+
+        # Determine if we should calculate rates
+        calculate_rates = bool(time_start and time_end)
+        
+        if calculate_rates:
+            # Parse time parameters
+            try:
+                start_dt = datetime.fromtimestamp(float(time_start), tz=timezone.utc)
+            except ValueError:
+                start_dt = datetime.fromisoformat(time_start.replace('Z', '+00:00'))
+
+            try:
+                end_dt = datetime.fromtimestamp(float(time_end), tz=timezone.utc)
+            except ValueError:
+                end_dt = datetime.fromisoformat(time_end.replace('Z', '+00:00'))
 
         # Build label filters
         filters = []
@@ -505,7 +531,8 @@ def get_table_info_csv():
         if node_name:
             filters.append(f'node_name="{node_name}"')
         if schemaname:
-            filters.append(f'schemaname="{schemaname}"')
+            # Support regex pattern matching with =~
+            filters.append(f'schemaname=~"{schemaname}"')
         if tblname:
             filters.append(f'tblname="{tblname}"')
         if db_name:
@@ -513,170 +540,141 @@ def get_table_info_csv():
 
         filter_str = '{' + ','.join(filters) + '}' if filters else ''
 
-        # Metrics to fetch with last_over_time to get only the most recent value
-        # Include bloat metrics, detailed size metrics, and I/O metrics
-        metric_queries = [
-            # Bloat metrics
-            f'last_over_time(pgwatch_pg_table_bloat_real_size_mib{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_table_bloat_extra_size{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_table_bloat_extra_pct{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_table_bloat_fillfactor{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_table_bloat_bloat_size{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_table_bloat_is_na{filter_str}[1d])',
-            # Detailed size metrics
-            f'last_over_time(pgwatch_table_size_detailed_table_main_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_table_fsm_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_table_vm_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_table_indexes_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_toast_main_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_toast_fsm_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_toast_vm_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_toast_indexes_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_total_relation_size_b{filter_str}[1d])',
-            f'last_over_time(pgwatch_table_size_detailed_total_toast_size_b{filter_str}[1d])',
-            # I/O metrics
-            f'last_over_time(pgwatch_pg_statio_all_tables_heap_blks_read{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_heap_blks_hit{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_idx_blks_read{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_idx_blks_hit{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_toast_blks_read{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_toast_blks_hit{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_tidx_blks_read{filter_str}[1d])',
-            f'last_over_time(pgwatch_pg_statio_all_tables_tidx_blks_hit{filter_str}[1d])',
-        ]
-
         prom = get_prometheus_client()
-        metric_results = {}
-
-        for query in metric_queries:
-            try:
-                result = prom.custom_query(query=query)
-                for entry in result:
-                    metric_labels = entry.get('metric', {})
-                    key = (
-                        metric_labels.get('datname', ''),
-                        metric_labels.get('schemaname', ''),
-                        metric_labels.get('tblname', ''),
+        
+        # Define base metrics to query (without last_over_time wrapper for rate calculation)
+        base_metrics = {
+            # Size metrics
+            'total_size': f'pgwatch_pg_class_total_relation_size_bytes{filter_str}',
+            'table_size': f'pgwatch_table_size_detailed_table_main_size_b{filter_str}',
+            'index_size': f'pgwatch_table_size_detailed_table_indexes_size_b{filter_str}',
+            'toast_size': f'pgwatch_table_size_detailed_total_toast_size_b{filter_str}',
+            # Scan statistics
+            'seq_scan': f'pgwatch_pg_stat_all_tables_seq_scan{filter_str}',
+            'idx_scan': f'pgwatch_pg_stat_all_tables_idx_scan{filter_str}',
+            # Tuple statistics
+            'n_tup_ins': f'pgwatch_table_stats_n_tup_ins{filter_str}',
+            'n_tup_upd': f'pgwatch_table_stats_n_tup_upd{filter_str}',
+            'n_tup_del': f'pgwatch_table_stats_n_tup_del{filter_str}',
+            'n_tup_hot_upd': f'pgwatch_table_stats_n_tup_hot_upd{filter_str}',
+            # I/O statistics
+            'heap_blks_read': f'pgwatch_pg_statio_all_tables_heap_blks_read{filter_str}',
+            'heap_blks_hit': f'pgwatch_pg_statio_all_tables_heap_blks_hit{filter_str}',
+            'idx_blks_read': f'pgwatch_pg_statio_all_tables_idx_blks_read{filter_str}',
+            'idx_blks_hit': f'pgwatch_pg_statio_all_tables_idx_blks_hit{filter_str}',
+        }
+        
+        if calculate_rates:
+            # Get metrics at start and end times
+            start_data = {}
+            end_data = {}
+            
+            for metric_name, metric_query in base_metrics.items():
+                try:
+                    # Get data at start time
+                    start_result = prom.get_metric_range_data(
+                        metric_name=metric_query,
+                        start_time=start_dt - timedelta(minutes=1),
+                        end_time=start_dt + timedelta(minutes=1)
                     )
-                    if key not in metric_results:
-                        metric_results[key] = {
-                            'database': metric_labels.get('datname', ''),
-                            'schemaname': metric_labels.get('schemaname', ''),
-                            'tblname': metric_labels.get('tblname', ''),
-                        }
-                    value = float(entry['value'][1])
+                    if start_result:
+                        start_data[metric_name] = start_result
                     
-                    # Bloat metrics
-                    if 'real_size_mib' in query:
-                        metric_results[key]['real_size_mib'] = value
-                    elif 'extra_size' in query and 'extra_pct' not in query:
-                        metric_results[key]['extra_size'] = value
-                    elif 'extra_pct' in query:
-                        metric_results[key]['extra_pct'] = value
-                    elif 'fillfactor' in query:
-                        metric_results[key]['fillfactor'] = value
-                    elif 'bloat_size' in query:
-                        metric_results[key]['bloat_size'] = value
-                    elif 'bloat_pct' in query:
-                        metric_results[key]['bloat_pct'] = value
-                    elif 'is_na' in query:
-                        metric_results[key]['is_na'] = int(value)
-                    
-                    # Size metrics (convert bytes to MiB for consistency)
-                    elif 'table_main_size_b' in query:
-                        metric_results[key]['table_main_size_mib'] = value / (1024 * 1024)
-                    elif 'table_fsm_size_b' in query:
-                        metric_results[key]['table_fsm_size_mib'] = value / (1024 * 1024)
-                    elif 'table_vm_size_b' in query:
-                        metric_results[key]['table_vm_size_mib'] = value / (1024 * 1024)
-                    elif 'table_indexes_size_b' in query:
-                        metric_results[key]['table_indexes_size_mib'] = value / (1024 * 1024)
-                    elif 'toast_main_size_b' in query:
-                        metric_results[key]['toast_main_size_mib'] = value / (1024 * 1024)
-                    elif 'toast_fsm_size_b' in query:
-                        metric_results[key]['toast_fsm_size_mib'] = value / (1024 * 1024)
-                    elif 'toast_vm_size_b' in query:
-                        metric_results[key]['toast_vm_size_mib'] = value / (1024 * 1024)
-                    elif 'toast_indexes_size_b' in query:
-                        metric_results[key]['toast_indexes_size_mib'] = value / (1024 * 1024)
-                    elif 'total_relation_size_b' in query:
-                        metric_results[key]['total_relation_size_mib'] = value / (1024 * 1024)
-                    elif 'total_toast_size_b' in query:
-                        metric_results[key]['total_toast_size_mib'] = value / (1024 * 1024)
-                    
-                    # I/O metrics
-                    elif 'heap_blks_read' in query:
-                        metric_results[key]['heap_blks_read'] = int(value)
-                    elif 'heap_blks_hit' in query:
-                        metric_results[key]['heap_blks_hit'] = int(value)
-                    elif 'idx_blks_read' in query:
-                        metric_results[key]['idx_blks_read'] = int(value)
-                    elif 'idx_blks_hit' in query:
-                        metric_results[key]['idx_blks_hit'] = int(value)
-                    elif 'toast_blks_read' in query:
-                        metric_results[key]['toast_blks_read'] = int(value)
-                    elif 'toast_blks_hit' in query:
-                        metric_results[key]['toast_blks_hit'] = int(value)
-                    elif 'tidx_blks_read' in query:
-                        metric_results[key]['tidx_blks_read'] = int(value)
-                    elif 'tidx_blks_hit' in query:
-                        metric_results[key]['tidx_blks_hit'] = int(value)
-            except Exception as e:
-                logger.warning(f"Failed to query: {query}, error: {e}")
-                continue
-
-        # Calculate I/O hit ratios
-        for key, row in metric_results.items():
-            # Heap hit ratio
-            heap_total = row.get('heap_blks_read', 0) + row.get('heap_blks_hit', 0)
-            if heap_total > 0:
-                row['heap_hit_ratio'] = round(row.get('heap_blks_hit', 0) / heap_total * 100, 2)
-            else:
-                row['heap_hit_ratio'] = 0.0
-                
-            # Index hit ratio
-            idx_total = row.get('idx_blks_read', 0) + row.get('idx_blks_hit', 0)
-            if idx_total > 0:
-                row['idx_hit_ratio'] = round(row.get('idx_blks_hit', 0) / idx_total * 100, 2)
-            else:
-                row['idx_hit_ratio'] = 0.0
-                
-            # TOAST hit ratio
-            toast_total = row.get('toast_blks_read', 0) + row.get('toast_blks_hit', 0)
-            if toast_total > 0:
-                row['toast_hit_ratio'] = round(row.get('toast_blks_hit', 0) / toast_total * 100, 2)
-            else:
-                row['toast_hit_ratio'] = 0.0
-                
-            # TOAST index hit ratio
-            tidx_total = row.get('tidx_blks_read', 0) + row.get('tidx_blks_hit', 0)
-            if tidx_total > 0:
-                row['tidx_hit_ratio'] = round(row.get('tidx_blks_hit', 0) / tidx_total * 100, 2)
-            else:
-                row['tidx_hit_ratio'] = 0.0
+                    # Get data at end time
+                    end_result = prom.get_metric_range_data(
+                        metric_name=metric_query,
+                        start_time=end_dt - timedelta(minutes=1),
+                        end_time=end_dt + timedelta(minutes=1)
+                    )
+                    if end_result:
+                        end_data[metric_name] = end_result
+                except Exception as e:
+                    logger.warning(f"Failed to query metric {metric_name}: {e}")
+                    continue
+            
+            # Process the data to calculate rates
+            metric_results = process_table_stats_with_rates(start_data, end_data, start_dt, end_dt)
+        else:
+            # Get instant values using last_over_time
+            metric_results = {}
+            for metric_name, metric_query in base_metrics.items():
+                try:
+                    result = prom.custom_query(query=f'last_over_time({metric_query}[1d])')
+                    for entry in result:
+                        metric_labels = entry.get('metric', {})
+                        
+                        # Use different key depending on label names
+                        schema_label = metric_labels.get('schemaname') or metric_labels.get('schema', '')
+                        table_label = metric_labels.get('relname') or metric_labels.get('table_name') or metric_labels.get('tblname', '')
+                        
+                        key = (
+                            metric_labels.get('datname', ''),
+                            schema_label,
+                            table_label,
+                        )
+                        
+                        if key not in metric_results:
+                            metric_results[key] = {
+                                'database': metric_labels.get('datname', ''),
+                                'schema': schema_label,
+                                'table_name': table_label,
+                            }
+                        
+                        value = float(entry['value'][1])
+                        metric_results[key][metric_name] = value
+                except Exception as e:
+                    logger.warning(f"Failed to query metric {metric_name}: {e}")
+                    continue
 
         # Prepare CSV output
         output = io.StringIO()
-        fieldnames = [
-            'database', 'schemaname', 'tblname',
-            # Bloat metrics
-            'real_size_mib', 'extra_size', 'extra_pct', 'fillfactor',
-            'bloat_size', 'bloat_pct', 'is_na',
-            # Size metrics (all in MiB)
-            'table_main_size_mib', 'table_fsm_size_mib', 'table_vm_size_mib', 
-            'table_indexes_size_mib', 'toast_main_size_mib', 'toast_fsm_size_mib',
-            'toast_vm_size_mib', 'toast_indexes_size_mib', 'total_relation_size_mib',
-            'total_toast_size_mib',
-            # I/O metrics
-            'heap_blks_read', 'heap_blks_hit', 'heap_hit_ratio',
-            'idx_blks_read', 'idx_blks_hit', 'idx_hit_ratio',
-            'toast_blks_read', 'toast_blks_hit', 'toast_hit_ratio',
-            'tidx_blks_read', 'tidx_blks_hit', 'tidx_hit_ratio'
-        ]
+        
+        if calculate_rates:
+            # Fields with rate calculations
+            fieldnames = [
+                'schema', 'table_name',
+                # Size metrics (bytes)
+                'total_size', 'table_size', 'index_size', 'toast_size',
+                # Scan statistics with rates
+                'seq_scans', 'seq_scans_per_sec',
+                'idx_scans', 'idx_scans_per_sec',
+                # Tuple statistics with rates
+                'inserts', 'inserts_per_sec',
+                'updates', 'updates_per_sec',
+                'deletes', 'deletes_per_sec',
+                'hot_updates', 'hot_updates_per_sec',
+                # I/O statistics with rates (in bytes using block_size)
+                'heap_blks_read', 'heap_blks_read_per_sec',
+                'heap_blks_hit', 'heap_blks_hit_per_sec',
+                'idx_blks_read', 'idx_blks_read_per_sec',
+                'idx_blks_hit', 'idx_blks_hit_per_sec',
+                'duration_seconds'
+            ]
+        else:
+            # Fields without rate calculations
+            fieldnames = [
+                'schema', 'table_name',
+                'total_size', 'table_size', 'index_size', 'toast_size',
+                'seq_scan', 'idx_scan',
+                'n_tup_ins', 'n_tup_upd', 'n_tup_del', 'n_tup_hot_upd',
+                'heap_blks_read', 'heap_blks_hit',
+                'idx_blks_read', 'idx_blks_hit'
+            ]
+            
+            # Remove 'database' field from rows if present (not in fieldnames)
+            for row in metric_results.values():
+                row.pop('database', None)
+        
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
-        for row in metric_results.values():
+        
+        # Write rows (handle both dict and list)
+        if isinstance(metric_results, dict):
+            rows = metric_results.values()
+        else:
+            rows = metric_results
+        
+        for row in rows:
             writer.writerow(row)
 
         csv_content = output.getvalue()
@@ -685,12 +683,151 @@ def get_table_info_csv():
         # Create response
         response = make_response(csv_content)
         response.headers['Content-Type'] = 'text/csv'
-        response.headers['Content-Disposition'] = 'attachment; filename=table_info_latest.csv'
+        
+        if calculate_rates:
+            filename = f'table_stats_{start_dt.strftime("%Y%m%d_%H%M%S")}_{end_dt.strftime("%Y%m%d_%H%M%S")}.csv'
+        else:
+            filename = 'table_stats_latest.csv'
+        
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
         return response
 
     except Exception as e:
-        logger.error(f"Error processing table info request: {e}")
+        logger.error(f"Error processing table stats request: {e}")
         return jsonify({"error": str(e)}), 500
+
+def process_table_stats_with_rates(start_data, end_data, start_time, end_time):
+    """
+    Process table statistics and calculate rates between start and end times
+    """
+    # Convert data to dictionaries
+    start_metrics = prometheus_table_to_dict(start_data, start_time)
+    end_metrics = prometheus_table_to_dict(end_data, end_time)
+    
+    if not start_metrics and not end_metrics:
+        return []
+    
+    # Get all unique table identifiers
+    all_keys = set()
+    all_keys.update(start_metrics.keys())
+    all_keys.update(end_metrics.keys())
+    
+    result_rows = []
+    
+    for key in all_keys:
+        start_metric = start_metrics.get(key, {})
+        end_metric = end_metrics.get(key, {})
+        
+        # Extract identifier components from key
+        db_name, schema_name, table_name = key
+        
+        # Calculate actual duration
+        start_timestamp = start_metric.get('timestamp')
+        end_timestamp = end_metric.get('timestamp')
+        
+        if start_timestamp and end_timestamp:
+            start_dt = datetime.fromisoformat(start_timestamp)
+            end_dt = datetime.fromisoformat(end_timestamp)
+            actual_duration = (end_dt - start_dt).total_seconds()
+        else:
+            actual_duration = (end_time - start_time).total_seconds()
+        
+        # Create result row
+        row = {
+            'schema': schema_name,
+            'table_name': table_name,
+            'duration_seconds': actual_duration
+        }
+        
+        # Counter metrics to calculate differences and rates
+        counter_metrics = [
+            'seq_scan', 'idx_scan', 'n_tup_ins', 'n_tup_upd', 
+            'n_tup_del', 'n_tup_hot_upd', 'heap_blks_read', 'heap_blks_hit',
+            'idx_blks_read', 'idx_blks_hit'
+        ]
+        
+        # Mapping for display names
+        display_names = {
+            'seq_scan': 'seq_scans',
+            'idx_scan': 'idx_scans',
+            'n_tup_ins': 'inserts',
+            'n_tup_upd': 'updates',
+            'n_tup_del': 'deletes',
+            'n_tup_hot_upd': 'hot_updates',
+        }
+        
+        # Calculate differences and rates
+        for metric in counter_metrics:
+            start_val = start_metric.get(metric, 0)
+            end_val = end_metric.get(metric, 0)
+            diff = end_val - start_val
+            
+            # Use display name if available
+            display_name = display_names.get(metric, metric)
+            
+            row[display_name] = diff
+            
+            # Calculate rate per second
+            if actual_duration > 0:
+                row[f'{display_name}_per_sec'] = diff / actual_duration
+            else:
+                row[f'{display_name}_per_sec'] = 0
+        
+        # Size metrics (just use end values, these don't need rates)
+        for size_metric in ['total_size', 'table_size', 'index_size', 'toast_size']:
+            row[size_metric] = end_metric.get(size_metric, 0)
+        
+        result_rows.append(row)
+    
+    # Sort by total size descending
+    result_rows.sort(key=lambda x: x.get('total_size', 0), reverse=True)
+    
+    return result_rows
+
+def prometheus_table_to_dict(prom_data, timestamp):
+    """
+    Convert Prometheus table metrics to dictionary keyed by table identifiers
+    """
+    if not prom_data:
+        return {}
+    
+    metrics_dict = {}
+    
+    for metric_name, metric_results in prom_data.items():
+        for metric_data in metric_results:
+            metric = metric_data.get('metric', {})
+            values = metric_data.get('values', [])
+            
+            if not values:
+                continue
+            
+            # Get the closest value to our timestamp
+            closest_value = min(values, key=lambda x: abs(float(x[0]) - timestamp.timestamp()))
+            
+            # Handle different label names
+            schema_label = metric.get('schemaname') or metric.get('schema', '')
+            table_label = metric.get('relname') or metric.get('table_name') or metric.get('tblname', '')
+            
+            # Create unique key for this table
+            key = (
+                metric.get('datname', ''),
+                schema_label,
+                table_label,
+            )
+            
+            # Initialize metric dict if not exists
+            if key not in metrics_dict:
+                metrics_dict[key] = {
+                    'timestamp': datetime.fromtimestamp(float(closest_value[0]), tz=timezone.utc).isoformat(),
+                }
+            
+            # Add metric value
+            try:
+                metrics_dict[key][metric_name] = float(closest_value[1])
+            except (ValueError, IndexError):
+                metrics_dict[key][metric_name] = 0
+    
+    return metrics_dict
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
