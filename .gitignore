@@ -28,6 +28,19 @@ pids
 *.seed
 *.pid.lock
 
+# Node artifacts
+node_modules/
+cli/node_modules/
+cli/lib/node_modules/
+
+# TypeScript build output
+cli/dist/
+cli/**/*.js
+cli/**/*.js.map
+cli/**/*.d.ts
+cli/**/*.d.ts.map
+!cli/jest.config.js
+
 # Generated config files (these are created by the sources-generator)
 config/pgwatch-postgres/sources.yml
 config/pgwatch-prometheus/sources.yml

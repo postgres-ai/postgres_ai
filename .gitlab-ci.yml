@@ -1,0 +1,174 @@
+stages:
+  - test
+
+cli:smoke:test:
+  stage: test
+  image: alpine:3.20
+  variables:
+    GIT_STRATEGY: fetch
+  before_script:
+    - apk add --no-cache bash curl git docker-cli docker-compose
+  script:
+    - bash -n ./postgres_ai
+    - |
+      set -euo pipefail
+      out=$(./postgres_ai help | tr -d "\r")
+      echo "$out" | grep -q "Postgres AI CLI"
+      echo "$out" | grep -q "COMMANDS:"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+cli:e2e:dind:
+  stage: test
+  image: alpine:3.20
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    GIT_STRATEGY: fetch
+  before_script:
+    - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
+    - docker version
+  script:
+    - set -euo pipefail
+    - bash -n ./postgres_ai
+    - ./postgres_ai check || true
+    - ./postgres_ai quickstart --demo -y
+    - timeout 60 ./postgres_ai status
+    - timeout 10 ./postgres_ai logs grafana || true
+    - ./postgres_ai config
+    - ./postgres_ai update-config
+    - ./postgres_ai list-instances || true
+    - ./postgres_ai add-key "test_key_123"
+    - ./postgres_ai show-key
+    - ./postgres_ai remove-key
+    - ./postgres_ai generate-grafana-password || true
+    - ./postgres_ai show-grafana-credentials || true
+    - ./postgres_ai add-instance "postgresql://postgres:postgres@target-db:5432/target_database" "ci-demo"
+    - ./postgres_ai test-instance "ci-demo" || true
+    - printf "y\n" | ./postgres_ai reset sink-postgres
+    - ./postgres_ai restart
+    - ./postgres_ai stop
+    - ./postgres_ai start
+    - printf "y\n" | ./postgres_ai reset
+    - ./postgres_ai clean
+  after_script:
+    - docker ps -a || true
+    - docker system prune -af || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+cli:node:smoke:
+  stage: test
+  image: node:20-alpine
+  variables:
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+  script:
+    - node -v && npm -v
+    - npm --prefix cli install --no-audit --no-fund
+    - node ./cli/dist/bin/postgres-ai.js --help
+    - node ./cli/dist/bin/postgres-ai.js mon status --help
+    - node ./cli/dist/bin/postgres-ai.js mon targets list --help
+    - npm install -g ./cli
+    - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
+    - command -v postgres-ai && postgres-ai --help
+    - command -v pgai && pgai --help
+    - rm -f .pgwatch-config
+    - node ./cli/dist/bin/postgres-ai.js add-key "test_key_1234567890"
+    - node ./cli/dist/bin/postgres-ai.js show-key | grep -E "\*{2,}|[0-9]{4}$"
+    - test -f ~/.config/postgresai/config.json
+    - grep -q 'test_key' ~/.config/postgresai/config.json
+    - node ./cli/dist/bin/postgres-ai.js remove-key
+    - if grep -q 'apiKey' ~/.config/postgresai/config.json; then echo 'key not removed' && exit 1; fi
+    - node ./cli/dist/bin/postgres-ai.js mon targets list | head -n 1 || true
+    - node ./cli/dist/bin/postgres-ai.js mon targets add 'postgresql://user:pass@host:5432/db' ci-test || true
+    - node ./cli/dist/bin/postgres-ai.js mon targets remove ci-test || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+cli:node:e2e:dind:
+  stage: test
+  image: node:20-alpine
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+    - apk add --no-cache bash docker-cli docker-compose openssl postgresql-client
+    - node -v && npm -v && docker version
+    - npm --prefix cli install --no-audit --no-fund
+  script:
+    - ./tests/e2e.cli.sh
+  after_script:
+    - docker ps -a || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+cli:node:full:dind:
+  stage: test
+  image: node:20-alpine
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+    - apk add --no-cache bash git docker-cli docker-compose openssl postgresql-client
+    - node -v && npm -v && docker version
+    - npm --prefix cli install --no-audit --no-fund
+  script:
+    - echo "=== Testing quickstart (demo mode) ==="
+    - node ./cli/dist/bin/postgres-ai.js mon quickstart --demo
+    - sleep 10
+    - node ./cli/dist/bin/postgres-ai.js mon status
+    - echo ""
+    - echo "=== Testing shell command ==="
+    - echo "SELECT 1;" | node ./cli/dist/bin/postgres-ai.js mon shell target-db || true
+    - echo ""
+    - echo "=== Testing complete workflow ==="
+    - node ./cli/dist/bin/postgres-ai.js mon targets add "postgresql://monitor:monitor_pass@target-db:5432/target_database" demo-test
+    - node ./cli/dist/bin/postgres-ai.js mon targets list
+    - node ./cli/dist/bin/postgres-ai.js mon targets test demo-test || true
+    - node ./cli/dist/bin/postgres-ai.js mon health --wait 120
+    - node ./cli/dist/bin/postgres-ai.js mon show-grafana-credentials
+    - echo ""
+    - echo "=== Cleanup ==="
+    - node ./cli/dist/bin/postgres-ai.js mon stop
+    - node ./cli/dist/bin/postgres-ai.js mon clean || true
+  after_script:
+    - docker ps -a || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
+  allow_failure: false
+
+cli:node:integration:
+  stage: test
+  image: node:20-alpine
+  variables:
+    GIT_STRATEGY: fetch
+  before_script:
+    - corepack enable || true
+    - node -v && npm -v
+    - npm --prefix cli install --no-audit --no-fund
+  script:
+    - |
+      set -euo pipefail
+      : "${PGAI_API_KEY:?PGAI_API_KEY is required for integration tests}"
+      BASE_URL="${PGAI_BASE_URL:-https://v2.postgres.ai/api/general/}"
+      echo "Using BASE_URL=$BASE_URL"
+      # Placeholder: run CLI help until API-backed commands are implemented
+      node ./cli/dist/bin/postgres-ai.js --help
+  rules:
+    - if: '$PGAI_API_KEY'
+
+
