@@ -2212,13 +2212,11 @@ metrics:
               join pg_namespace n on n.oid = p.pronamespace
               where p.proname = 'pg_ls_multixactdir' and n.nspname = 'rds_tools'
             ) as has_rds_fn,
-            coalesce(pg_has_role('pg_read_server_files','usage'), false) as has_read_files,
-            (select rolsuper from pg_roles where rolname = current_user) as is_super,
             exists (select from pg_proc where proname = 'pg_ls_dir')    as has_pg_ls_dir_func,
             exists (select from pg_proc where proname = 'pg_stat_file') as has_pg_stat_file_func
         ),
         can_local as (
-          select (has_pg_ls_dir_func and has_pg_stat_file_func and (has_read_files or is_super)) as ok from env
+          select (has_pg_ls_dir_func and has_pg_stat_file_func) as ok from env
         ),
         -- Use query_to_xml to safely execute RDS-specific multixact directory listing query.
         -- The XML wrapper allows the query to fail gracefully if rds_tools.pg_ls_multixactdir()
