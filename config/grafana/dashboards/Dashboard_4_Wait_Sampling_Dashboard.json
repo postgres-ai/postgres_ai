@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 7,
   "links": [],
   "panels": [
     {
@@ -37,11 +37,11 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
-            "barWidthFactor": 0.5,
+            "barAlignment": 0,
+            "barWidthFactor": 1,
             "drawStyle": "bars",
-            "fillOpacity": 40,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -172,6 +172,81 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Activity"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "BufferPin"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "IPC"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "InjectionPoint"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "pink",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Extension"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -203,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"})",
+          "expr": "sort_by_label(sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}), 'wait_event_type')",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -268,214 +343,9 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "barAlignment": 0,
             "axisSoftMin": 0,
-            "barWidthFactor": 0.5,
-            "drawStyle": "bars",
-            "fillOpacity": 40,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "Timeout.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#6f450c",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "CPU.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "Lock.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "LWLock.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "IO.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "Client.*"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "super-light-yellow",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 21,
-        "w": 24,
-        "x": 0,
-        "y": 21
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (wait_event_type, wait_event) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", wait_event_type=~\"$wait_event_type\"})",
-          "hide": false,
-          "legendFormat": "{{wait_event_type}} - {{wait_event}}",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "sum by (event_type) (irate(pgwatch_wait_events_sampling_total[$__rate_interval]))>0",
-          "hide": true,
-          "interval": "20",
-          "legendFormat": " {{event_type}}",
-          "range": true,
-          "refId": "D"
-        }
-      ],
-      "title": "Active session history by event type",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
             "barAlignment": 0,
-            "axisSoftMin": 0,
-            "barWidthFactor": 0.5,
+            "barWidthFactor": 1,
             "drawStyle": "bars",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -611,6 +481,361 @@
           },
           {
             "matcher": {
+              "id": "byRegexp",
+              "options": "Activity.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "BufferPin.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "IPC.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "InjectionPoint.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "pink",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Extension.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 21,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sort_by_label(sum by (wait_event_type, wait_event) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", wait_event_type=~\"$wait_event_type\"}), 'wait_event_type')",
+          "hide": false,
+          "legendFormat": "{{wait_event_type}} - {{wait_event}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
+          "editorMode": "code",
+          "expr": "sum by (event_type) (irate(pgwatch_wait_events_sampling_total[$__rate_interval]))>0",
+          "hide": true,
+          "interval": "20",
+          "legendFormat": " {{event_type}}",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Active session history by event type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 1,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Timeout.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#6f450c",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "CPU.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Lock.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "LWLock.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "IO.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Client.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Activity.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "BufferPin.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "IPC.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "InjectionPoint.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "pink",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Extension.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
               "id": "byFrameRefID",
               "options": "A"
             },
@@ -657,24 +882,11 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (wait_event_type, wait_event, query_id) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", wait_event_type=~\"$wait_event_type\", wait_event=~\"$wait_event\"})",
+          "expr": "sort_by_label(sum by (wait_event_type, wait_event, query_id) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", wait_event_type=~\"$wait_event_type\", wait_event=~\"$wait_event\"}), 'wait_event_type', 'query_id')",
           "hide": false,
           "legendFormat": "{{wait_event_type}} - {{wait_event}} - {{query_id}}",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P7A0D6631BB10B34F"
-          },
-          "editorMode": "code",
-          "expr": "sum by (event_type) (irate(pgwatch_wait_events_sampling_total[$__rate_interval]))>0",
-          "hide": true,
-          "interval": "20",
-          "legendFormat": " {{event_type}}",
-          "range": true,
-          "refId": "D"
         }
       ],
       "title": "Active session history by event type and event",
@@ -715,15 +927,13 @@
       {
         "allowCustomValue": false,
         "current": {
-          "text": [
-            "CPU*"
-          ],
+          "text": "All",
           "value": [
-            "CPU*"
+            "$__all"
           ]
         },
         "definition": "label_values(pgwatch_wait_events_total,wait_event_type)",
-        "includeAll": false,
+        "includeAll": true,
         "label": "Wait event type",
         "multi": true,
         "name": "wait_event_type",
@@ -740,14 +950,13 @@
       {
         "allowCustomValue": false,
         "current": {
-          "text": [
-            "CPU*"
-          ],
+          "text": "All",
           "value": [
-            "CPU*"
+            "$__all"
           ]
         },
         "definition": "label_values(pgwatch_wait_events_total{wait_event_type=~\"$wait_event_type\"},wait_event)",
+        "includeAll": true,
         "label": "Wait event",
         "multi": true,
         "name": "wait_event",
@@ -763,8 +972,8 @@
       },
       {
         "current": {
-          "text": "local",
-          "value": "local"
+          "text": "default",
+          "value": "default"
         },
         "definition": "label_values(pgwatch_settings_configured,cluster)",
         "label": "Cluster name",
@@ -781,8 +990,8 @@
       },
       {
         "current": {
-          "text": "node-01",
-          "value": "node-01"
+          "text": "postgres_ai",
+          "value": "postgres_ai"
         },
         "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
@@ -799,8 +1008,8 @@
       },
       {
         "current": {
-          "text": "postgres",
-          "value": "postgres"
+          "text": "workloaddb",
+          "value": "workloaddb"
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
@@ -818,12 +1027,12 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-      "title": "04. Wait event analysis (Active Session History)",
+  "title": "04. Wait event analysis (Active Session History)",
   "uid": "a222b233-acef-4bac-a451-1591023e4d4f",
-  "version": 2
+  "version": 10
 }
