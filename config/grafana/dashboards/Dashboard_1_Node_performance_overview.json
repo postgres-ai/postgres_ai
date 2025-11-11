@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 2,
+  "id": 3,
   "links": [],
   "panels": [
     {
@@ -52,9 +52,9 @@
             "axisPlacement": "auto",
             "axisSoftMin": 0,
             "barAlignment": 0,
-            "barWidthFactor": 0.5,
+            "barWidthFactor": 1,
             "drawStyle": "bars",
-            "fillOpacity": 40,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -486,7 +486,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -719,7 +719,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -867,7 +867,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1084,7 +1084,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1198,7 +1198,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1311,7 +1311,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1788,7 +1788,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -1900,7 +1900,7 @@
           ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -1917,7 +1917,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
-          "legendFormat": "shared bytes",
+          "legendFormat": "WAL bytes",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -2543,7 +2543,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -2556,7 +2556,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "20",
-          "legendFormat": "Cleaned by the Checkpointer",
+          "legendFormat": "Cleaned by checkpointer",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -2571,7 +2571,7 @@
           "hide": false,
           "instant": false,
           "interval": "20",
-          "legendFormat": "Cleaned by the Background Writer",
+          "legendFormat": "Cleaned by bgwriter",
           "range": true,
           "refId": "B"
         },
@@ -2594,7 +2594,7 @@
           "useBackend": false
         }
       ],
-      "title": "bgwriter and checkpointer",
+      "title": "Background writer and checkpointer",
       "type": "timeseries"
     },
     {
@@ -3030,7 +3030,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -3042,7 +3042,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "pgwatch_multixact_size_members_bytes{cluster=\"$cluster_name\", node_name=\"$node_name\"}",
+          "expr": "last_over_time(pgwatch_multixact_size_members_bytes{cluster=\"$cluster_name\", node_name=\"$node_name\"}[1h])",
           "legendFormat": "members",
           "range": true,
           "refId": "A"
@@ -3159,5 +3159,5 @@
   "timezone": "utc",
   "title": "01. Single node performance overview (high-level)",
   "uid": "f90500a0-a12e-4081-a2f0-07ed96f27915",
-  "version": 31
+  "version": 12
 }
