@@ -14,8 +14,186 @@ metrics:
     gauges:
       - '*' 
   
+  index_definitions:
+    description: "Index definitions for unused and redundant indexes only"
+    sqls:
+      11: |-
+        with fk_indexes as (
+          select
+            n.nspname as schema_name,
+            ci.relname as index_name,
+            cr.relname as table_name,
+            (confrelid::regclass)::text as fk_table_ref,
+            array_to_string(indclass, ', ') as opclasses
+          from pg_index i
+          join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+          join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
+          join pg_namespace n on n.oid = ci.relnamespace
+          join pg_constraint cn on cn.conrelid = cr.oid
+          left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
+          where
+            contype = 'f'
+            and not i.indisunique
+            and conkey is not null
+            and ci.relpages > 5
+            and si.idx_scan < 10
+        ),
+        -- Unused indexes
+        table_scans as (
+          select relid,
+              tables.idx_scan + tables.seq_scan as all_scans,
+              (tables.n_tup_ins + tables.n_tup_upd + tables.n_tup_del) as writes,
+            pg_relation_size(relid) as table_size
+              from pg_stat_all_tables as tables
+              join pg_class c on c.oid = relid
+              where c.relpages > 5
+        ),
+        indexes as (
+          select
+            i.indrelid,
+            i.indexrelid,
+            n.nspname as schema_name,
+            cr.relname as table_name,
+            ci.relname as index_name,
+            si.idx_scan,
+            pg_relation_size(i.indexrelid) as index_bytes,
+            ci.relpages,
+            (a.amname = 'btree') as idx_is_btree,
+            array_to_string(i.indclass, ', ') as opclasses
+          from pg_index i
+            join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+            join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
+            join pg_namespace n on n.oid = ci.relnamespace
+            join pg_am a on ci.relam = a.oid
+            left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
+          where
+            not i.indisunique
+            and i.indisvalid
+            and ci.relpages > 5
+        ),
+        unused_index_ids as (
+          select
+            i.indexrelid as index_id,
+            i.schema_name,
+            i.table_name,
+            i.index_name
+          from indexes i
+          join table_scans ts on ts.relid = i.indrelid
+          where
+            i.idx_scan = 0
+            and i.idx_is_btree
+          order by i.index_bytes desc
+          limit 10000
+        ),
+        -- Redundant indexes
+        index_data as (
+          select
+            *,
+            indkey::text as columns,
+            array_to_string(indclass, ', ') as opclasses
+          from pg_index i
+          join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+          where
+            indisvalid
+            and ci.relpages > 5
+        ),
+        redundant_index_pairs as (
+          select
+            i2.indexrelid as redundant_index_id,
+            i1.indexrelid as reason_index_id,
+            tnsp.nspname as schema_name,
+            trel.relname as table_name,
+            irel.relname as index_name,
+            pg_relation_size(i2.indexrelid) as index_size_bytes
+          from (
+            select indrelid, indexrelid, opclasses, indclass, indexprs, indpred, indisprimary, indisunique, columns
+              from index_data
+              order by indexrelid
+            ) as i1
+            join index_data as i2 on
+                i1.indrelid = i2.indrelid
+                and i1.indexrelid <> i2.indexrelid
+            inner join pg_opclass op1 on i1.indclass[0] = op1.oid
+            inner join pg_opclass op2 on i2.indclass[0] = op2.oid
+            inner join pg_am am1 on op1.opcmethod = am1.oid
+            inner join pg_am am2 on op2.opcmethod = am2.oid
+            join pg_stat_all_indexes as s on s.indexrelid = i2.indexrelid
+            join pg_class as trel on trel.oid = i2.indrelid
+            join pg_namespace as tnsp on trel.relnamespace = tnsp.oid
+            join pg_class as irel on irel.oid = i2.indexrelid
+          where
+            not i2.indisprimary
+            and not i2.indisunique
+            and am1.amname = am2.amname
+            and i1.columns like (i2.columns || '%')
+            and i1.opclasses like (i2.opclasses || '%')
+            and pg_get_expr(i1.indexprs, i1.indrelid) is not distinct from pg_get_expr(i2.indexprs, i2.indrelid)
+            and pg_get_expr(i1.indpred, i1.indrelid) is not distinct from pg_get_expr(i2.indpred, i2.indrelid)
+        ),
+        redundant_indexes_tmp_num as (
+          select row_number() over () num, rip.*
+          from redundant_index_pairs rip
+        ),
+        redundant_indexes_tmp_links as (
+            select
+            ri1.*,
+            ri2.num as r_num
+            from redundant_indexes_tmp_num ri1
+            left join redundant_indexes_tmp_num ri2 on
+              ri2.reason_index_id = ri1.redundant_index_id
+              and ri1.reason_index_id = ri2.redundant_index_id
+        ),
+        redundant_index_ids as (
+          select distinct
+            index_id,
+            schema_name,
+            table_name,
+            index_name
+          from (
+            select
+              redundant_index_id as index_id,
+              schema_name,
+              table_name,
+              index_name,
+              index_size_bytes
+            from redundant_indexes_tmp_links
+            where num < r_num or r_num is null
+            union all
+            select
+              reason_index_id as index_id,
+              schema_name,
+              table_name,
+              index_name,
+              index_size_bytes
+            from redundant_indexes_tmp_links
+            where
+              num < r_num
+              or r_num is null
+          ) as combined
+          order by index_size_bytes desc
+          limit 10000
+        ),
+        -- Combine unused and redundant index IDs
+        all_target_indexes as (
+          select distinct index_id, schema_name, table_name, index_name
+          from unused_index_ids
+          union
+          select distinct index_id, schema_name, table_name, index_name
+          from redundant_index_ids
+        )
+        select /* pgwatch_generated */
+          ati.index_name as indexrelname,
+          ati.schema_name as schemaname,
+          ati.table_name as relname,
+          pg_get_indexdef(ati.index_id) as index_definition
+        from all_target_indexes ati
+        order by schemaname, relname, indexrelname;
+    gauges:
+      - '*'
+  
 presets:
   full:
     description: "Full metrics for PostgreSQL storage"
     metrics:
       pgss_queryid_queries: 300
+      index_definitions: 3600
