@@ -14,18 +14,25 @@ from typing import Dict, List, Any, Optional
 import argparse
 import sys
 import os
+import psycopg2
+import psycopg2.extras
 
 
 class PostgresReportGenerator:
-    def __init__(self, prometheus_url: str = "http://localhost:9090"):
+    def __init__(self, prometheus_url: str = "http://sink-prometheus:9090", 
+                 postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements"):
         """
         Initialize the PostgreSQL report generator.
         
         Args:
-            prometheus_url: URL of the Prometheus instance
+            prometheus_url: URL of the Prometheus instance (default: http://sink-prometheus:9090)
+            postgres_sink_url: Connection string for the Postgres sink database 
+                              (default: postgresql://pgwatch@sink-postgres:5432/measurements)
         """
         self.prometheus_url = prometheus_url
         self.base_url = f"{prometheus_url}/api/v1"
+        self.postgres_sink_url = postgres_sink_url
+        self.pg_conn = None
 
     def test_connection(self) -> bool:
         """Test connection to Prometheus."""
@@ -35,6 +42,84 @@ class PostgresReportGenerator:
         except Exception as e:
             print(f"Connection failed: {e}")
             return False
+
+    def connect_postgres_sink(self) -> bool:
+        """Connect to Postgres sink database."""
+        if not self.postgres_sink_url:
+            return False
+        
+        try:
+            self.pg_conn = psycopg2.connect(self.postgres_sink_url)
+            return True
+        except Exception as e:
+            print(f"Postgres sink connection failed: {e}")
+            return False
+
+    def close_postgres_sink(self):
+        """Close Postgres sink connection."""
+        if self.pg_conn:
+            self.pg_conn.close()
+            self.pg_conn = None
+
+    def get_index_definitions_from_sink(self, db_name: str = None) -> Dict[str, str]:
+        """
+        Get index definitions from the Postgres sink database.
+        
+        Args:
+            db_name: Optional database name to filter results
+        
+        Returns:
+            Dictionary mapping index names to their definitions
+        """
+        if not self.pg_conn:
+            if not self.connect_postgres_sink():
+                return {}
+        
+        index_definitions = {}
+        
+        try:
+            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Query the index_definitions table for the most recent data
+                # 
+                # PERFORMANCE NOTE: This query will use a Seq Scan on index_definitions table.
+                # This is acceptable because:
+                # 1. This method is called VERY rarely (only during report generation)
+                # 2. The table size is expected to remain small (< 10000 rows per database)
+                # 3. Current latency is well under 1 second for typical workloads
+                # 
+                # If the table grows significantly larger (>> 10000 rows) or latency exceeds 1s,
+                # consider adding a GIN index on the data JSONB column or materialized view.
+                if db_name:
+                    query = """
+                        select distinct on (data->>'indexrelname')
+                            data->>'indexrelname' as indexrelname,
+                            data->>'index_definition' as index_definition,
+                            dbname
+                        from public.index_definitions
+                        order by data->>'indexrelname', time desc
+                    """
+                    cursor.execute(query, (db_name,))
+                else:
+                    query = """
+                        select distinct on (dbname, data->>'indexrelname')
+                            data->>'indexrelname' as indexrelname,
+                            data->>'index_definition' as index_definition,
+                            dbname
+                        from public.index_definitions
+                        order by dbname, data->>'indexrelname', time desc
+                    """
+                    cursor.execute(query)
+                
+                for row in cursor.fetchall():
+                    if row['indexrelname']:
+                        # Include database name in the key to avoid collisions across databases
+                        key = f"{row['dbname']}.{row['indexrelname']}" if not db_name else row['indexrelname']
+                        index_definitions[key] = row['index_definition']
+        
+        except Exception as e:
+            print(f"Error fetching index definitions from Postgres sink: {e}")
+        
+        return index_definitions
 
     def query_instant(self, query: str) -> Dict[str, Any]:
         """
@@ -315,8 +400,22 @@ class PostgresReportGenerator:
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
 
+        # Query postmaster uptime to get startup time
+        postmaster_uptime_query = f'last_over_time(pgwatch_db_stats_postmaster_uptime_s{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
+        postmaster_uptime_result = self.query_instant(postmaster_uptime_query)
+        
+        postmaster_startup_time = None
+        postmaster_startup_epoch = None
+        if postmaster_uptime_result.get('status') == 'success' and postmaster_uptime_result.get('data', {}).get('result'):
+            uptime_seconds = float(postmaster_uptime_result['data']['result'][0]['value'][1]) if postmaster_uptime_result['data']['result'] else None
+            if uptime_seconds:
+                postmaster_startup_epoch = datetime.now().timestamp() - uptime_seconds
+                postmaster_startup_time = datetime.fromtimestamp(postmaster_startup_epoch).isoformat()
+
         unused_indexes_by_db = {}
         for db_name in databases:
+            # Get index definitions from Postgres sink database for this specific database
+            index_definitions = self.get_index_definitions_from_sink(db_name)
             # Query stats_reset timestamp for this database
             stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
             stats_reset_result = self.query_instant(stats_reset_query)
@@ -353,10 +452,14 @@ class PostgresReportGenerator:
                                                                                                               {}).get(
                         'result') else 0
 
+                    # Get index definition from collected metrics
+                    index_definition = index_definitions.get(index_name, 'Definition not available')
+
                     index_data = {
                         "schema_name": schema_name,
                         "table_name": table_name,
                         "index_name": index_name,
+                        "index_definition": index_definition,
                         "reason": reason,
                         "idx_scan": idx_scan,
                         "index_size_bytes": index_size_bytes,
@@ -381,7 +484,9 @@ class PostgresReportGenerator:
                 "stats_reset": {
                     "stats_reset_epoch": stats_reset_epoch,
                     "stats_reset_time": stats_reset_time,
-                    "days_since_reset": days_since_reset
+                    "days_since_reset": days_since_reset,
+                    "postmaster_startup_epoch": postmaster_startup_epoch,
+                    "postmaster_startup_time": postmaster_startup_time
                 }
             }
 
@@ -1764,8 +1869,10 @@ def make_request(api_url, endpoint, request_data):
 
 def main():
     parser = argparse.ArgumentParser(description='Generate PostgreSQL reports using PromQL')
-    parser.add_argument('--prometheus-url', default='http://localhost:9090',
-                        help='Prometheus URL (default: http://localhost:9090)')
+    parser.add_argument('--prometheus-url', default='http://sink-prometheus:9090',
+                        help='Prometheus URL (default: http://sink-prometheus:9090)')
+    parser.add_argument('--postgres-sink-url', default='postgresql://pgwatch@sink-postgres:5432/measurements',
+                        help='Postgres sink connection string (default: postgresql://pgwatch@sink-postgres:5432/measurements)')
     parser.add_argument('--cluster', default='local',
                         help='Cluster name (default: local)')
     parser.add_argument('--node-name', default='node-01',
@@ -1785,7 +1892,7 @@ def main():
 
     args = parser.parse_args()
 
-    generator = PostgresReportGenerator(args.prometheus_url)
+    generator = PostgresReportGenerator(args.prometheus_url, args.postgres_sink_url)
 
     # Test connection
     if not generator.test_connection():
@@ -1852,6 +1959,9 @@ def main():
         print(f"Error generating reports: {e}")
         raise e
         sys.exit(1)
+    finally:
+        # Clean up postgres connection
+        generator.close_postgres_sink()
 
 
 if __name__ == "__main__":

@@ -1575,9 +1575,7 @@ metrics:
             join pg_class as irel on irel.oid = i2.indexrelid
           where
             not i2.indisprimary -- index 1 is not primary
-            and not ( -- skip if index1 is (primary or uniq) and is NOT (primary and uniq)
-                i2.indisunique and not i1.indisprimary
-            )
+            and not i2.indisunique -- index 1 is not unique (unique indexes serve constraint purpose)
             and  am1.amname = am2.amname -- same access type
             and i1.columns like (i2.columns || '%') -- index 2 includes all columns from index 1
             and i1.opclasses like (i2.opclasses || '%')
