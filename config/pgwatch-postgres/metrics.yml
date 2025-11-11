@@ -148,7 +148,8 @@ metrics:
             index_id,
             schema_name,
             table_name,
-            index_name
+            index_name,
+            index_size_bytes
           from (
             select
               redundant_index_id as index_id,
