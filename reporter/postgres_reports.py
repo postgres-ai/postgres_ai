@@ -1722,36 +1722,41 @@ class PostgresReportGenerator:
         Returns:
             List of database names
         """
-        # Try to get databases from metrics that use 'dbname' label (custom metrics)
-        db_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
-        result = self.query_instant(db_query)
-        
-        databases = []
-        if result.get('status') == 'success' and result.get('data', {}).get('result'):
-            for item in result['data']['result']:
-                db_name = item['metric'].get('dbname', '')
-                if db_name and db_name not in databases:
-                    databases.append(db_name)
-        
-        # If no databases found using dbname, try using datname (catalog metrics)
-        if not databases:
-            db_query = f'pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}", datname!="template1"}}'
-            result = self.query_instant(db_query)
-            if result.get('status') == 'success' and result.get('data', {}).get('result'):
-                for item in result['data']['result']:
-                    db_name = item['metric'].get('datname', '')
-                    if db_name and db_name not in databases:
-                        databases.append(db_name)
-        
-        # If still no databases found, try another alternative query
-        if not databases:
-            db_query = f'pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}'
-            result = self.query_instant(db_query)
-            if result.get('status') == 'success' and result.get('data', {}).get('result'):
-                for item in result['data']['result']:
-                    db_name = item['metric'].get('datname', '')
-                    if db_name and db_name not in databases:
-                        databases.append(db_name)
+        # Build a source-agnostic database list by unifying labels from:
+        # 1) Generic per-database metric (wraparound) → datname
+        # 2) Custom index reports (unused/redundant) → dbname
+        # 3) Btree bloat (for completeness) → datname
+        databases: List[str] = []
+        database_set = set()
+
+        # Helper to add a name safely
+        def add_db(name: str) -> None:
+            if name and name not in ('template0', 'template1') and name not in database_set:
+                database_set.add(name)
+                databases.append(name)
+
+        # 1) Generic per-database metric
+        wrap_q = f'pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}"}}'
+        wrap_res = self.query_instant(wrap_q)
+        if wrap_res.get('status') == 'success' and wrap_res.get('data', {}).get('result'):
+            for item in wrap_res['data']['result']:
+                add_db(item["metric"].get("datname", ""))
+
+        # 2) Custom reports using dbname
+        unused_q = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
+        redun_q = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
+        for q in (unused_q, redun_q):
+            res = self.query_instant(q)
+            if res.get('status') == 'success' and res.get('data', {}).get('result'):
+                for item in res['data']['result']:
+                    add_db(item["metric"].get("dbname", ""))
+
+        # 3) Btree bloat family
+        bloat_q = f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}"}}[1d])'
+        bloat_res = self.query_instant(bloat_q)
+        if bloat_res.get('status') == 'success' and bloat_res.get('data', {}).get('result'):
+            for item in bloat_res['data']['result']:
+                add_db(item["metric"].get("datname", ""))
 
         return databases
 
