@@ -1,0 +1,25 @@
+apiVersion: v2
+appVersion: 1.0.0
+dependencies:
+- condition: grafana.enabled
+  name: grafana
+  repository: https://grafana.github.io/helm-charts
+  version: 10.1.4
+description: PostgresAI monitoring stack with PGWatch, VictoriaMetrics, and Grafana
+  for Kubernetes
+home: https://postgres.ai
+keywords:
+- postgresql
+- monitoring
+- pgwatch
+- victoriametrics
+- grafana
+- observability
+maintainers:
+- name: PostgresAI
+  url: https://postgres.ai
+name: postgres-ai-monitoring
+sources:
+- https://github.com/PostgresAI/double-pgwatch-poc
+type: application
+version: 0.12

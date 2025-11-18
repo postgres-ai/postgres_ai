@@ -1,0 +1,23 @@
+{{- if .Values.nodeExporter.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-node-exporter
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node-exporter
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 9100
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: node-exporter
+{{- end }}
+
+

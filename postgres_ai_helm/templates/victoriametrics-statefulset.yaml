@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-victoriametrics
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: victoriametrics
+spec:
+  serviceName: {{ include "postgres-ai-monitoring.fullname" . }}-victoriametrics
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: victoriametrics
+  template:
+    metadata:
+      labels:
+        {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: victoriametrics
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: victoriametrics
+          image: {{ .Values.victoriaMetrics.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - -storageDataPath=/victoria-metrics-data
+            - -retentionPeriod={{ .Values.victoriaMetrics.retentionPeriod }}
+            - -httpListenAddr=:8428
+            - -promscrape.config=/etc/prometheus/prometheus.yml
+            - -promscrape.config.strictParse=false
+            - -promscrape.maxScrapeSize=128000000
+            {{- range .Values.victoriaMetrics.extraArgs }}
+            - {{ . }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8428
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /victoria-metrics-data
+            - name: config
+              mountPath: /etc/prometheus
+          {{- with .Values.victoriaMetrics.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "postgres-ai-monitoring.fullname" . }}-prometheus-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: {{ .Values.storage.accessModes }}
+        {{- if .Values.storage.storageClassName }}
+        storageClassName: {{ .Values.storage.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.victoriaMetricsSize }}
+
+

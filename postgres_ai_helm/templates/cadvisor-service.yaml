@@ -1,0 +1,23 @@
+{{- if .Values.cadvisor.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-cadvisor
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cadvisor
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: cadvisor
+{{- end }}
+
+

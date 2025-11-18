@@ -1,0 +1,48 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-datasources
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+    grafana_datasource: "1"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        type: prometheus
+        access: proxy
+        uid: P7A0D6631BB10B34F
+        url: http://{{ include "postgres-ai-monitoring.fullname" . }}-victoriametrics:{{ .Values.victoriaMetrics.service.port }}
+        isDefault: true
+        editable: true
+      - name: SinkPostgres
+        type: postgres
+        access: proxy
+        uid: P031DD592934B2F1F
+        url: {{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres:5432
+        user: {{ .Values.sinkPostgres.user }}
+        editable: true
+        jsonData:
+          database: {{ .Values.sinkPostgres.database }}
+          sslmode: disable
+          postgresVersion: 1500
+        secureJsonData:
+          password: {{ .Values.secrets.postgres.password }}
+      {{- if .Values.flask.enabled }}
+      - name: Flask API
+        type: yesoreyeram-infinity-datasource
+        access: proxy
+        uid: aerffb0z8rjlsc
+        url: http://{{ include "postgres-ai-monitoring.fullname" . }}-flask:{{ .Values.flask.service.port }}
+        isDefault: false
+        editable: true
+        jsonData:
+          tlsSkipVerify: true
+      {{- end }}
+{{- end }}
+
+

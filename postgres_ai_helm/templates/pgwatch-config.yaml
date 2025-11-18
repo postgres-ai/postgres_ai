@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-pgwatch-config
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+data:
+  sources-postgres.yml: |
+    {{- $root := . -}}
+    {{- range $db := .Values.monitoredDatabases }}
+    - name: {{ $db.name }}
+      {{- if $db.connStr }}
+      conn_str: {{ $db.connStr }}
+      {{- else }}
+      # Password will be injected by init container from secrets
+      conn_str: postgresql://{{ $db.user }}:PASSWORD_PLACEHOLDER_{{ $db.passwordSecretKey }}@{{ $db.host }}:{{ $db.port | default 5432 }}/{{ $db.database }}
+      {{- end }}
+      preset_metrics: {{ $db.presetMetrics | default "full" }}
+      {{- if $db.customMetrics }}
+      custom_metrics:
+        {{- toYaml $db.customMetrics | nindent 8 }}
+      {{- end }}
+      is_enabled: {{ $db.isEnabled | default true }}
+      group: {{ $db.group | default "default" }}
+      {{- $tags := dict -}}
+      {{- with $root.Values.global.customTags }}
+        {{- range $key, $value := . }}
+          {{- $_ := set $tags $key $value }}
+        {{- end }}
+      {{- end }}
+      {{- with $root.Values.global.clusterName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "cluster" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $root.Values.global.nodeName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "node_name" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $db.clusterName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "cluster" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $db.nodeName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "node_name" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $db.customTags }}
+        {{- range $key, $value := . }}
+          {{- $_ := set $tags $key $value }}
+        {{- end }}
+      {{- end }}
+      custom_tags:
+        {{- if gt (len $tags) 0 }}
+{{ toYaml $tags | indent 8 }}
+        {{- end }}
+        sink_type: postgresql
+    {{- end }}
+
+  sources-prometheus.yml: |
+    {{- $root := . -}}
+    {{- range $db := .Values.monitoredDatabases }}
+    - name: {{ $db.name }}
+      {{- if $db.connStr }}
+      conn_str: {{ $db.connStr }}
+      {{- else }}
+      # Password will be injected by init container from secrets
+      conn_str: postgresql://{{ $db.user }}:PASSWORD_PLACEHOLDER_{{ $db.passwordSecretKey }}@{{ $db.host }}:{{ $db.port | default 5432 }}/{{ $db.database }}
+      {{- end }}
+      preset_metrics: {{ $db.presetMetrics | default "full" }}
+      {{- if $db.customMetrics }}
+      custom_metrics:
+        {{- toYaml $db.customMetrics | nindent 8 }}
+      {{- end }}
+      is_enabled: {{ $db.isEnabled | default true }}
+      group: {{ $db.group | default "default" }}
+      {{- $tags := dict -}}
+      {{- with $root.Values.global.customTags }}
+        {{- range $key, $value := . }}
+          {{- $_ := set $tags $key $value }}
+        {{- end }}
+      {{- end }}
+      {{- with $root.Values.global.clusterName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "cluster" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $root.Values.global.nodeName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "node_name" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $db.clusterName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "cluster" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $db.nodeName }}
+        {{- if ne . "" }}
+          {{- $_ := set $tags "node_name" . }}
+        {{- end }}
+      {{- end }}
+      {{- with $db.customTags }}
+        {{- range $key, $value := . }}
+          {{- $_ := set $tags $key $value }}
+        {{- end }}
+      {{- end }}
+      custom_tags:
+        {{- if gt (len $tags) 0 }}
+{{ toYaml $tags | indent 8 }}
+        {{- end }}
+        sink_type: prometheus
+    {{- end }}
+
+  metrics-postgres.yml: |
+{{ .Files.Get "config/metrics-postgres.yml" | indent 4 }}
+
+  metrics-prometheus.yml: |
+{{ .Files.Get "config/metrics-prometheus.yml" | indent 4 }}
+
+
