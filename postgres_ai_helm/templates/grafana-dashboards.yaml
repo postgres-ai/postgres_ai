@@ -1,0 +1,19 @@
+{{- if .Values.grafana.enabled }}
+{{- $files := .Files }}
+{{- range $path, $_ := .Files.Glob "config/grafana/dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" $ }}-dashboard-{{ regexReplaceAll "[^a-z0-9-]" (lower (base $path | trimSuffix ".json")) "-" }}
+  namespace: {{ include "postgres-ai-monitoring.namespace" $ }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: grafana
+    grafana_dashboard: "1"
+data:
+  {{ base $path | replace " " "-" }}: |-
+{{ $files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}
+

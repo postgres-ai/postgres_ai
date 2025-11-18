@@ -1,0 +1,68 @@
+{{- if .Values.postgresExporter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-postgres-exporter
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres-exporter
+  template:
+    metadata:
+      labels:
+        {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres-exporter
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-sink
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z {{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres 5432; do echo waiting for postgres; sleep 2; done']
+      containers:
+        - name: postgres-exporter
+          image: {{ .Values.postgresExporter.image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              export DATA_SOURCE_NAME="postgresql://{{ .Values.sinkPostgres.user }}:${POSTGRES_PASSWORD}@{{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres:5432/{{ .Values.sinkPostgres.database }}?sslmode=disable"
+              exec /bin/postgres_exporter
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgres-ai-monitoring.secretName" . }}
+                  key: postgres-password
+          ports:
+            - name: metrics
+              containerPort: 9187
+              protocol: TCP
+          {{- with .Values.postgresExporter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+{{- end }}
+
+

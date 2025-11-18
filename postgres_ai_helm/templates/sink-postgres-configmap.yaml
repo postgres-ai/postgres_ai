@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres-init
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sink-postgres
+data:
+  00-configure-pg-hba.sh: |
+    #!/bin/bash
+    set -e
+    # Configure pg_hba.conf to allow passwordless connections from within cluster
+    cat > "$PGDATA/pg_hba.conf" <<EOF
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            trust
+    host    all             all             ::1/128                 trust
+    host    all             all             0.0.0.0/0               trust
+    EOF
+  
+  init.sql: |
+    create database if not exists measurements;
+    create user if not exists pgwatch with password 'pgwatch';
+    grant all privileges on database measurements to pgwatch;
+
+

@@ -130,10 +130,8 @@ services:
       - sink-postgres
       - sink-prometheus
     restart: unless-stopped
-  flask-backend:
-    build:
-      context: ./flask-backend
-      dockerfile: Dockerfile
+  monitoring_flask_backend:
+    image: postgresai/monitoring_flask_backend:latest
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
@@ -143,7 +141,7 @@ services:
     restart: unless-stopped
   # PostgreSQL Reports Generator - Runs reports after 1 hour
   postgres-reports:
-    image: python:3.11-slim
+    image: postgresai/reporter:latest
     container_name: postgres-reports
     working_dir: /app
     volumes:

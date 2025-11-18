@@ -1,0 +1,100 @@
+{{- if .Values.pgwatchPrometheus.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-pgwatch-prometheus
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgwatch-prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pgwatch-prometheus
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/pgwatch-config.yaml") . | sha256sum }}
+      labels:
+        {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pgwatch-prometheus
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: inject-passwords
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              # Copy sources file from configmap
+              cp /config/sources-prometheus.yml /output/sources-prometheus.yml
+              {{- range $db := .Values.monitoredDatabases }}
+              {{- if not $db.connStr }}
+              # Replace password placeholder for {{ $db.name }}
+              if [ -n "${DB_PASSWORD_{{ $db.passwordSecretKey | upper | replace "-" "_" }}:-}" ]; then
+                sed -i "s|PASSWORD_PLACEHOLDER_{{ $db.passwordSecretKey }}|${DB_PASSWORD_{{ $db.passwordSecretKey | upper | replace "-" "_" }}}|g" /output/sources-prometheus.yml
+              fi
+              {{- end }}
+              {{- end }}
+          volumeMounts:
+            - name: config-template
+              mountPath: /config
+            - name: sources-config
+              mountPath: /output
+          env:
+            {{- range $db := .Values.monitoredDatabases }}
+            {{- if not $db.connStr }}
+            - name: DB_PASSWORD_{{ $db.passwordSecretKey | upper | replace "-" "_" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgres-ai-monitoring.secretName" $ }}
+                  key: db-password-{{ $db.passwordSecretKey }}
+            {{- end }}
+            {{- end }}
+      containers:
+        - name: pgwatch
+          image: {{ .Values.pgwatchPrometheus.image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /pgwatch/pgwatch
+            - --sources=/etc/pgwatch/sources.yml
+            - --metrics=/etc/pgwatch/metrics.yml
+            - --sink=prometheus://0.0.0.0:9091/pgwatch
+            - --web-addr=:8089
+          ports:
+            - name: http
+              containerPort: 8089
+              protocol: TCP
+            - name: metrics
+              containerPort: 9091
+              protocol: TCP
+          volumeMounts:
+            - name: sources-config
+              mountPath: /etc/pgwatch/sources.yml
+              subPath: sources-prometheus.yml
+            - name: metrics-config
+              mountPath: /etc/pgwatch/metrics.yml
+              subPath: metrics-prometheus.yml
+          {{- with .Values.pgwatchPrometheus.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config-template
+          configMap:
+            name: {{ include "postgres-ai-monitoring.fullname" . }}-pgwatch-config
+        - name: sources-config
+          emptyDir: {}
+        - name: metrics-config
+          configMap:
+            name: {{ include "postgres-ai-monitoring.fullname" . }}-pgwatch-config
+{{- end }}
+
+

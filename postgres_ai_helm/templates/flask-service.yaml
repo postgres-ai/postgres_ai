@@ -1,0 +1,22 @@
+{{- if .Values.flask.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-flask
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: flask-api
+spec:
+  type: {{ .Values.flask.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.flask.service.port | default 8000 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: flask-api
+{{- end }}
+
+

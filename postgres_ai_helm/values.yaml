@@ -1,0 +1,218 @@
+namespaceOverride: ""
+
+imagePullSecrets: []
+
+commonLabels: {}
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    grafana: postgres-ai-monitoring.example.com
+  tls: []
+
+storage:
+  postgresSize: 50Gi
+  victoriaMetricsSize: 150Gi
+  grafanaSize: 5Gi
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: ""
+
+global:
+  clusterName: default
+  nodeName: default
+  customTags: {}
+
+sinkPostgres:
+  image: postgres:15
+  database: measurements
+  user: pgwatch
+  resources: {}
+
+postgresExporter:
+  enabled: true
+  image: prometheuscommunity/postgres-exporter:v0.16.0
+  resources: {}
+
+victoriaMetrics:
+  image: victoriametrics/victoria-metrics:v1.105.0
+  retentionPeriod: 336h
+  scrapeInterval: 15s
+  extraArgs: []
+  service:
+    type: ClusterIP
+    port: 8428
+  resources: {}
+
+pgwatchPostgres:
+  enabled: true
+  image: cybertecpostgresql/pgwatch:3
+  resources: {}
+
+pgwatchPrometheus:
+  enabled: true
+  image: cybertecpostgresql/pgwatch:3
+  resources: {}
+
+flask:
+  enabled: true
+  image: postgresai/monitoring_flask_backend:latest
+  imagePullPolicy: IfNotPresent
+  containerPort: 8000
+  healthPath: /health
+  env: {}
+  service:
+    type: ClusterIP
+    port: 8000
+  resources: {}
+
+reporter:
+  enabled: true
+  image: postgresai/reporter:latest
+  imagePullPolicy: IfNotPresent
+  schedule: "0 */6 * * *"
+  # Legacy: If clusterName/nodeName are set here, they override global settings
+  # for backward compatibility. For multiple clusters, leave empty and set
+  # clusterName/nodeName per database in monitoredDatabases.
+  clusterName: ""
+  nodeName: ""
+  project: postgres-ai-monitoring
+  apiUrl: https://postgres.ai/api/general
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  env: {}
+  resources: {}
+  # When multiple clusters are configured in monitoredDatabases, a separate
+  # reporter cronjob will be created for each unique cluster/node combination.
+
+nodeExporter:
+  # Disabled due to compatibility issues
+  enabled: false
+  image: prom/node-exporter:v1.8.2
+  resources: {}
+
+cadvisor:
+  # Disabled due to compatibility issues
+  enabled: false
+  image: gcr.io/cadvisor/cadvisor:v0.51.0
+  resources: {}
+
+monitoredDatabases:
+  # Example: Database with default cluster/node from global settings
+  - name: example-database
+    # Connection details (password stored in secrets.monitoredDatabases)
+    host: postgres-host
+    port: 5432
+    database: database_name
+    user: monitor
+    passwordSecretKey: example-database-password  # References secrets.monitoredDatabases[example-database-password]
+    presetMetrics: full
+    customMetrics: {}
+    isEnabled: true
+    group: default
+    customTags:
+      env: production
+  
+  # Example: Database with custom cluster/node name
+  # - name: production-db-cluster-2
+  #   host: postgres-host-2
+  #   port: 5432
+  #   database: database_name
+  #   user: monitor
+  #   passwordSecretKey: production-db-cluster-2-password
+  #   presetMetrics: full
+  #   customMetrics: {}
+  #   isEnabled: true
+  #   group: production
+  #   clusterName: production-cluster-2
+  #   nodeName: node-02
+  #   customTags:
+  #     env: production
+  #     region: us-east-1
+
+# Secret configuration
+# IMPORTANT: By default, secrets should be provided via Kubernetes secrets, not values.yaml
+# This is more secure and follows Kubernetes best practices.
+
+# Option 1: Use existing Kubernetes secret (RECOMMENDED for production)
+# Create the secret manually before installation:
+#   kubectl create secret generic postgres-ai-monitoring-secrets \
+#     --namespace postgres_ai \
+#     --from-literal=postgres-password='...' \
+#     --from-literal=grafana-admin-user='admin' \
+#     --from-literal=grafana-admin-password='...' \
+#     --from-literal=pgai-api-key='...' \
+#     --from-literal=db-password-example-database='...'
+#
+# Then set existingSecret.name to reference it:
+existingSecret:
+  name: ""  # Set to your secret name (e.g., "postgres-ai-monitoring-secrets")
+
+# Option 2: Create secret from values.yaml (ONLY for development/testing)
+# WARNING: Never commit secrets to version control!
+# Set createFromValues: true to enable this (disabled by default)
+secrets:
+  createFromValues: false  # Set to true ONLY for development/testing
+  postgres:
+    password: "CHANGE_ME_postgres_password"
+  grafana:
+    adminUser: admin
+    adminPassword: "CHANGE_ME_grafana_password"
+  pgwatchConfig:
+    apiKey: ""
+  # Passwords for monitored databases
+  # Key names should match passwordSecretKey values in monitoredDatabases entries
+  monitoredDatabases:
+    example-database-password: "CHANGE_ME_database_password"
+
+grafana:
+  enabled: true
+  # Admin credentials are stored in secrets
+  # Secret name pattern: <release-name>-postgres-ai-monitoring-secrets (or <fullnameOverride>-secrets)
+  # Set admin.existingSecret manually if using custom release name or fullnameOverride
+  admin:
+    existingSecret: ""  # Set to: <your-release-name>-postgres-ai-monitoring-secrets (or configure manually)
+    userKey: grafana-admin-user
+    passwordKey: grafana-admin-password
+  plugins:
+    - yesoreyeram-infinity-datasource
+  
+  
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: ""
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  ingress:
+    enabled: false
+  
+  sidecar:
+    datasources:
+      enabled: true
+      label: grafana_datasource
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+  
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /tmp/dashboards

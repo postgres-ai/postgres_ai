@@ -1,0 +1,82 @@
+{{- if .Values.cadvisor.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "postgres-ai-monitoring.fullname" . }}-cadvisor
+  namespace: {{ include "postgres-ai-monitoring.namespace" . }}
+  labels:
+    {{- include "postgres-ai-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cadvisor
+spec:
+  selector:
+    matchLabels:
+      {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: cadvisor
+  template:
+    metadata:
+      labels:
+        {{- include "postgres-ai-monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cadvisor
+    spec:
+      hostNetwork: true
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cadvisor
+          image: {{ .Values.cadvisor.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --housekeeping_interval=30s
+            - --docker_only=false
+            - --disable_metrics=percpu,sched,tcp,udp,hugetlb,referenced_memory,cpu_topology,resctrl
+            - --store_container_labels=false
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: var-run
+              mountPath: /var/run
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: docker
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: disk
+              mountPath: /dev/disk
+              readOnly: true
+          {{- with .Values.cadvisor.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            privileged: true
+      volumes:
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: var-run
+          hostPath:
+            path: /var/run
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: docker
+          hostPath:
+            path: /var/lib/docker
+        - name: disk
+          hostPath:
+            path: /dev/disk
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+{{- end }}
+
+

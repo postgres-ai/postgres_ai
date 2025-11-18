@@ -4,6 +4,7 @@ import csv
 import io
 from datetime import datetime, timezone, timedelta
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -11,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Prometheus connection
-PROMETHEUS_URL = "http://sink-prometheus:9090"
+# Prometheus connection - use environment variable with fallback
+PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', 'http://localhost:8428')
 
 # Metric name mapping for cleaner CSV output
 METRIC_NAME_MAPPING = {
