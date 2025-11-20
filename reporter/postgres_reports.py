@@ -1862,6 +1862,7 @@ class PostgresReportGenerator:
             "filename": file_name,
             "data": data,
             "type": file_type,
+            "generate_issue": True
         }
 
         response = make_request(api_url, "/rpc/checkup_report_file_post", request_data)
