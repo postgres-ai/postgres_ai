@@ -1,6 +1,25 @@
 stages:
   - test
 
+reporter:tests:
+  stage: test
+  image: python:3.11-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    PIP_NO_CACHE_DIR: "1"
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - apt-get update
+    - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
+    - pip install -r reporter/requirements-dev.txt
+  script:
+    - chown -R postgres:postgres "$CI_PROJECT_DIR"
+    - su - postgres -c "cd \"$CI_PROJECT_DIR\" && python -m pytest --run-integration tests/reporter"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
 cli:smoke:test:
   stage: test
   image: alpine:3.20
