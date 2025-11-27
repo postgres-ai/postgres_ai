@@ -248,6 +248,54 @@ Get your access token at [PostgresAI](https://postgres.ai) for automated report 
 - Query plan analysis and automated recommendations
 - Enhanced AI integration capabilities
 
+## 🧪 Testing
+
+Python-based report generation lives under `reporter/` and now ships with a pytest suite.
+
+### Installation
+
+Install dev dependencies (includes `pytest`, `pytest-postgresql`, `psycopg`, etc.):
+```bash
+python3 -m pip install -r reporter/requirements-dev.txt
+```
+
+### Running Tests
+
+#### Unit Tests Only (Fast, No External Services Required)
+
+Run only unit tests with mocked Prometheus interactions:
+```bash
+pytest tests/reporter
+```
+
+This automatically skips integration tests. Or run specific test files:
+```bash
+pytest tests/reporter/test_generators_unit.py -v
+pytest tests/reporter/test_formatters.py -v
+```
+
+#### All Tests: Unit + Integration (Requires PostgreSQL)
+
+Run the complete test suite (both unit and integration tests):
+```bash
+pytest tests/reporter --run-integration
+```
+
+Integration tests create a temporary PostgreSQL instance automatically and require PostgreSQL binaries (`initdb`, `postgres`) on your PATH. No manual database setup or environment variables are required - the tests create and destroy their own temporary PostgreSQL instances.
+
+**Summary:**
+- `pytest tests/reporter` → **Unit tests only** (integration tests skipped)
+- `pytest tests/reporter --run-integration` → **Both unit and integration tests**
+
+### Test Coverage
+
+Generate coverage report:
+```bash
+pytest tests/reporter -m unit --cov=reporter --cov-report=html
+```
+
+View the coverage report by opening `htmlcov/index.html` in your browser.
+
 ## 🤝 Contributing
 
 We welcome contributions from Postgres experts! Please check our [GitLab repository](https://gitlab.com/postgres-ai/postgres_ai) for:

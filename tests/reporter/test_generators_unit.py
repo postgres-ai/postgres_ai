@@ -1,0 +1,1037 @@
+import json
+import sys
+from datetime import datetime, timedelta
+from typing import Any, Callable
+
+import pytest
+
+from reporter import postgres_reports as postgres_reports_module
+from reporter.postgres_reports import PostgresReportGenerator
+
+
+@pytest.fixture(name="generator")
+def fixture_generator() -> PostgresReportGenerator:
+    return PostgresReportGenerator(
+        prometheus_url="http://prom.test",
+        postgres_sink_url="",
+    )
+
+
+def _success_metric(value: str) -> dict[str, Any]:
+    return {
+        "status": "success",
+        "data": {
+            "result": [
+                {
+                    "value": [datetime.now().timestamp(), value],
+                }
+            ]
+        },
+    }
+
+
+def _query_stub_factory(prom_result, mapping: dict[str, Any]) -> Callable[[str], dict[str, Any]]:
+    """Return a query_instant stub that matches substrings defined in mapping keys.
+    
+    Args:
+        prom_result: Fallback callable that returns a default Prometheus response
+        mapping: Dict mapping query substrings to responses (either dict or callable)
+        
+    Returns:
+        A callable that takes a query string and returns a Prometheus-like response
+    """
+
+    def _fake(query: str) -> dict[str, Any]:
+        for needle, payload in mapping.items():
+            if needle in query:
+                return payload(query) if callable(payload) else payload
+        return prom_result()
+
+    return _fake
+
+
+@pytest.mark.unit
+def test_query_instant_hits_prometheus(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class DummyResponse:
+        status_code = 200
+        text = "{}"
+
+        @staticmethod
+        def json() -> dict[str, Any]:
+            return {"status": "success", "data": {"result": []}}
+
+    def fake_get(
+        url: str,
+        params: dict[str, Any] | None = None,
+        timeout: int | None = None,
+    ):
+        captured["url"] = url
+        captured["params"] = params
+        return DummyResponse()
+
+    monkeypatch.setattr(postgres_reports_module.requests, "get", fake_get)
+
+    payload = generator.query_instant("up")
+
+    assert payload["status"] == "success"
+    assert captured["url"].endswith("/api/v1/query")
+    assert captured["params"] == {"query": "up"}
+
+
+@pytest.mark.unit
+def test_query_range_hits_prometheus(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    end = start + timedelta(minutes=5)
+    captured: dict[str, Any] = {}
+
+    class DummyResponse:
+        status_code = 200
+        text = "{}"
+
+        @staticmethod
+        def json() -> dict[str, Any]:
+            return {"status": "success", "data": {"result": []}}
+
+    def fake_get(
+        url: str,
+        params: dict[str, Any] | None = None,
+        timeout: int | None = None,
+    ):
+        captured["url"] = url
+        captured["params"] = params
+        return DummyResponse()
+
+    monkeypatch.setattr(postgres_reports_module.requests, "get", fake_get)
+
+    payload = generator.query_range("up", start, end, step="60s")
+
+    assert payload == []
+    assert captured["url"].endswith("/api/v1/query_range")
+    assert captured["params"]["query"] == "up"
+    assert captured["params"]["start"] == start.timestamp()
+
+
+@pytest.mark.unit
+def test_generate_a002_version_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    values = {
+        "server_version": "15.3",
+        "server_version_num": "150003",
+        "max_connections": "200",
+        "shared_buffers": "1024",
+        "effective_cache_size": "2048",
+    }
+
+    def fake_query(query: str) -> dict[str, Any]:
+        for key, val in values.items():
+            if f'setting_name="{key}"' in query:
+                return {
+                    "status": "success",
+                    "data": {
+                        "result": [
+                            {
+                                "metric": {
+                                    "setting_value": val,
+                                }
+                            }
+                        ]
+                    },
+                }
+        return {"status": "success", "data": {"result": []}}
+
+    monkeypatch.setattr(generator, "query_instant", fake_query)
+
+    report = generator.generate_a002_version_report("local", "node-1")
+    version = report["results"]["node-1"]["data"]["version"]
+
+    assert version["version"] == "15.3"
+    assert version["server_major_ver"] == "15"
+    assert version["server_minor_ver"] == "3"
+
+
+@pytest.mark.unit
+def test_generate_a004_cluster_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    def fake_query(query: str) -> dict[str, Any]:
+        if "pgwatch_pg_database_size_bytes" in query and "sum(" not in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {"metric": {"datname": "db1"}, "value": [0, "1024"]},
+                        {"metric": {"datname": "db2"}, "value": [0, "2048"]},
+                    ]
+                },
+            }
+        return _success_metric("42")
+
+    monkeypatch.setattr(generator, "query_instant", fake_query)
+
+    report = generator.generate_a004_cluster_report("local", "node-1")
+    data = report["results"]["node-1"]["data"]
+
+    assert "general_info" in data and "database_sizes" in data
+    assert data["general_info"]["active_connections"]["value"] == "42"
+    assert data["database_sizes"] == {"db1": 1024.0, "db2": 2048.0}
+
+
+@pytest.mark.unit
+def test_prometheus_to_dict_and_process_pgss(generator: PostgresReportGenerator) -> None:
+    base_time = datetime(2024, 1, 1, 0, 0, 0)
+    later_time = base_time + timedelta(seconds=60)
+
+    def make_metric(name: str, value: float, ts: datetime) -> dict[str, Any]:
+        return {
+            "metric": {
+                "__name__": name,
+                "datname": "db1",
+                "queryid": "123",
+                "user": "postgres",
+                "instance": "inst1",
+            },
+            "values": [[ts.timestamp(), str(value)]],
+        }
+
+    start_metrics = [
+        make_metric("pgwatch_pg_stat_statements_calls", 10, base_time),
+        make_metric("pgwatch_pg_stat_statements_exec_time_total", 1000, base_time),
+        make_metric("pgwatch_pg_stat_statements_rows", 200, base_time),
+    ]
+    end_metrics = [
+        make_metric("pgwatch_pg_stat_statements_calls", 40, later_time),
+        make_metric("pgwatch_pg_stat_statements_exec_time_total", 4000, later_time),
+        make_metric("pgwatch_pg_stat_statements_rows", 260, later_time),
+    ]
+
+    mapping = {
+        "calls": "calls",
+        "exec_time_total": "total_time",
+        "rows": "rows",
+    }
+
+    rows = generator._process_pgss_data(
+        start_metrics,
+        end_metrics,
+        base_time,
+        later_time,
+        mapping,
+    )
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["calls"] == 30
+    assert row["total_time"] == 3000
+    assert pytest.approx(row["total_time_per_sec"], 0.01) == 50
+    assert row["rows_per_call"] == pytest.approx(2.0)
+
+
+@pytest.mark.unit
+def test_prometheus_to_dict_closest_value(generator: PostgresReportGenerator) -> None:
+    reference_time = datetime(2024, 1, 1, 12, 0, 0)
+
+    prom_data: list[dict[str, Any]] = [
+        {
+            "metric": {
+                "__name__": "pgwatch_pg_stat_statements_calls",
+                "datname": "db1",
+                "queryid": "q1",
+                "user": "postgres",
+                "instance": "inst1",
+            },
+            "values": [
+                [reference_time.timestamp() - 10, "10"],
+                [reference_time.timestamp() + 5, "20"],
+            ],
+        }
+    ]
+
+    converted = generator._prometheus_to_dict(prom_data, reference_time)
+
+    key = ("db1", "q1", "postgres", "inst1")
+    assert key in converted
+    assert converted[key]["calls"] == 20
+
+
+@pytest.mark.unit
+def test_generate_a003_settings_report(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    def fake_query(query: str) -> dict[str, Any]:
+        assert "pgwatch_settings_configured" in query
+        return {
+            "status": "success",
+            "data": {
+                "result": [
+                    {
+                        "metric": {
+                            "setting_name": "shared_buffers",
+                            "setting_value": "128",
+                            "category": "Memory",
+                            "unit": "8kB",
+                            "context": "postmaster",
+                            "vartype": "integer",
+                        }
+                    },
+                    {
+                        "metric": {
+                            "setting_name": "work_mem",
+                            "setting_value": "512",
+                            "category": "Memory",
+                            "unit": "",
+                            "context": "user",
+                            "vartype": "integer",
+                        }
+                    },
+                ]
+            },
+        }
+
+    monkeypatch.setattr(generator, "query_instant", fake_query)
+
+    report = generator.generate_a003_settings_report("local", "node-1")
+    data = report["results"]["node-1"]["data"]
+
+    assert data["shared_buffers"]["pretty_value"] == "1 MB"
+    assert data["work_mem"]["unit"] == ""
+    assert data["work_mem"]["category"] == "Memory"
+
+
+@pytest.mark.unit
+def test_generate_a007_altered_settings_report(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    def fake_query(query: str) -> dict[str, Any]:
+        assert "pgwatch_settings_is_default" in query
+        return {
+            "status": "success",
+            "data": {
+                "result": [
+                    {
+                        "metric": {
+                            "setting_name": "work_mem",
+                            "setting_value": "1024",
+                            "unit": "",
+                            "category": "Memory",
+                        }
+                    },
+                    {
+                        "metric": {
+                            "setting_name": "autovacuum",
+                            "setting_value": "off",
+                            "unit": "",
+                            "category": "Autovacuum",
+                        }
+                    },
+                ]
+            },
+        }
+
+    monkeypatch.setattr(generator, "query_instant", fake_query)
+
+    payload = generator.generate_a007_altered_settings_report("local", "node-1")
+    data = payload["results"]["node-1"]["data"]
+
+    assert set(data.keys()) == {"work_mem", "autovacuum"}
+    assert data["work_mem"]["pretty_value"] == "1 MB"
+    assert data["autovacuum"]["pretty_value"] == "off"
+
+
+@pytest.mark.unit
+def test_get_all_databases_merges_sources(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    def fake_query(query: str) -> dict[str, Any]:
+        if "wraparound" in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {"metric": {"datname": "appdb"}, "value": [0, "1"]},
+                        {"metric": {"datname": "template0"}, "value": [0, "1"]},
+                    ]
+                },
+            }
+        if "unused_indexes" in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {"metric": {"dbname": "analytics"}, "value": [0, "1"]},
+                        {"metric": {"dbname": "appdb"}, "value": [0, "1"]},
+                    ]
+                },
+            }
+        if "redundant_indexes" in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {"metric": {"dbname": "warehouse"}, "value": [0, "1"]},
+                    ]
+                },
+            }
+        if "pg_btree_bloat_bloat_pct" in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {"metric": {"datname": "inventory"}, "value": [0, "1"]},
+                    ]
+                },
+            }
+        return {"status": "success", "data": {"result": []}}
+
+    monkeypatch.setattr(generator, "query_instant", fake_query)
+
+    databases = generator.get_all_databases("local", "node-1")
+
+    assert databases == ["appdb", "analytics", "warehouse", "inventory"]
+
+
+@pytest.mark.unit
+def test_check_pg_stat_kcache_status(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator, prom_result) -> None:
+    responses = {
+        "pgwatch_pg_stat_kcache_exec_total_time": prom_result(
+            [
+                {
+                    "metric": {"queryid": "1", "tag_user": "postgres"},
+                    "value": [0, "10"],
+                }
+            ]
+        ),
+        "pgwatch_pg_stat_kcache_exec_user_time": prom_result([{"metric": {}, "value": [0, "4"]}]),
+        "pgwatch_pg_stat_kcache_exec_system_time": prom_result([{"metric": {}, "value": [0, "6"]}]),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    status = generator._check_pg_stat_kcache_status("local", "node-1")
+
+    assert status["extension_available"] is True
+    assert status["metrics_count"] == 1
+    assert status["total_exec_time"] == 10.0
+    assert status["total_user_time"] == 4.0
+    assert status["sample_queries"][0]["queryid"] == "1"
+
+
+@pytest.mark.unit
+def test_check_pg_stat_statements_status(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator, prom_result) -> None:
+    response = prom_result(
+        [
+            {
+                "metric": {"queryid": "1", "tag_user": "postgres", "datname": "db1"},
+                "value": [0, "5"],
+            }
+        ]
+    )
+    monkeypatch.setattr(generator, "query_instant", lambda query: response)
+
+    status = generator._check_pg_stat_statements_status("local", "node-1")
+
+    assert status["extension_available"] is True
+    assert status["metrics_count"] == 1
+    assert status["total_calls"] == 5.0
+    assert status["sample_queries"][0]["database"] == "db1"
+
+
+@pytest.mark.unit
+def test_generate_h001_invalid_indexes_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
+
+    responses = {
+        "pgwatch_pg_invalid_indexes": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "tbl",
+                        "index_name": "idx_invalid",
+                        "relation_name": "public.tbl",
+                        "supports_fk": "1",
+                    },
+                    "value": [0, "2048"],
+                }
+            ]
+        )
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_h001_invalid_indexes_report("local", "node-1")
+    db_data = payload["results"]["node-1"]["data"]["maindb"]
+
+    assert db_data["total_count"] == 1
+    assert db_data["total_size_bytes"] == 2048.0
+    entry = db_data["invalid_indexes"][0]
+    assert entry["index_name"] == "idx_invalid"
+    assert entry["index_size_pretty"].endswith("KB")
+    assert entry["supports_fk"] is True
+
+
+@pytest.mark.unit
+def test_generate_h002_unused_indexes_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["app"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_unused": "CREATE INDEX idx_unused ON t(c)"})
+
+    responses = {
+        "pgwatch_db_stats_postmaster_uptime_s": prom_result([{"value": [0, "3600"]}]),
+        "pgwatch_stats_reset_stats_reset_epoch": prom_result([{"value": [0, "1700000000"]}]),
+        "pgwatch_unused_indexes_index_size_bytes": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "tbl",
+                        "index_name": "idx_unused",
+                        "reason": "never scanned",
+                        "idx_is_btree": "true",
+                        "supports_fk": "0",
+                    },
+                    "value": [0, "1024"],
+                }
+            ]
+        ),
+        "pgwatch_unused_indexes_idx_scan": prom_result([{"value": [0, "0"]}]),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_h002_unused_indexes_report("local", "node-1")
+    db_data = payload["results"]["node-1"]["data"]["app"]
+
+    assert db_data["total_count"] == 1
+    unused = db_data["unused_indexes"][0]
+    assert unused["index_definition"].startswith("CREATE INDEX")
+    assert unused["idx_scan"] == 0
+    assert unused["index_size_pretty"].endswith("KB")
+    stats_reset = db_data["stats_reset"]
+    assert stats_reset["stats_reset_epoch"] == 1700000000.0
+    assert stats_reset["postmaster_startup_epoch"] is not None
+
+
+@pytest.mark.unit
+def test_generate_h004_redundant_indexes_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["app"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_dup": "CREATE INDEX idx_dup ON t(c)"})
+
+    responses = {
+        "pgwatch_redundant_indexes_index_size_bytes": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "tbl",
+                        "index_name": "idx_dup",
+                        "relation_name": "public.tbl",
+                        "access_method": "btree",
+                        "reason": "covers columns",
+                    },
+                    "value": [0, "4096"],
+                }
+            ]
+        ),
+        "pgwatch_redundant_indexes_table_size_bytes": prom_result([{"value": [0, "8192"]}]),
+        "pgwatch_redundant_indexes_index_usage": prom_result([{"value": [0, "2"]}]),
+        "pgwatch_redundant_indexes_supports_fk": prom_result([{"value": [0, "1"]}]),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_h004_redundant_indexes_report("local", "node-1")
+    db_data = payload["results"]["node-1"]["data"]["app"]
+
+    assert db_data["total_count"] == 1
+    redundant = db_data["redundant_indexes"][0]
+    assert redundant["index_definition"].startswith("CREATE INDEX")
+    assert redundant["index_usage"] == 2.0
+    assert redundant["index_size_pretty"].endswith("KB")
+    assert redundant["supports_fk"] is True
+
+
+@pytest.mark.unit
+def test_generate_d004_pgstat_settings_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    responses = {
+        "pgwatch_settings_configured": prom_result(
+            [
+                {
+                    "metric": {
+                        "setting_name": "pg_stat_statements.max",
+                        "setting_value": "1000",
+                        "category": "Stats",
+                        "unit": "",
+                        "context": "postmaster",
+                        "vartype": "integer",
+                    }
+                }
+            ]
+        )
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+    monkeypatch.setattr(generator, "_check_pg_stat_kcache_status", lambda *args, **kwargs: {"extension_available": True})
+    monkeypatch.setattr(generator, "_check_pg_stat_statements_status", lambda *args, **kwargs: {"extension_available": False})
+
+    payload = generator.generate_d004_pgstat_settings_report("local", "node-1")
+    data = payload["results"]["node-1"]["data"]
+
+    assert "pg_stat_statements.max" in data["settings"]
+    assert data["pg_stat_kcache_status"]["extension_available"] is True
+
+
+@pytest.mark.unit
+def test_generate_f001_autovacuum_settings_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    responses = {
+        "pgwatch_settings_configured": prom_result(
+            [
+                {
+                    "metric": {
+                        "setting_name": "autovacuum_naptime",
+                        "setting_value": "60",
+                        "category": "Autovacuum",
+                        "unit": "",
+                        "context": "sighup",
+                        "vartype": "integer",
+                    }
+                }
+            ]
+        )
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_f001_autovacuum_settings_report("local", "node-1")
+    data = payload["results"]["node-1"]["data"]
+
+    assert data["autovacuum_naptime"]["setting"] == "60"
+    assert data["autovacuum_naptime"]["pretty_value"] == "1 min"
+
+
+@pytest.mark.unit
+def test_generate_f005_btree_bloat_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])
+
+    responses = {
+        "pgwatch_pg_btree_bloat_extra_size": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "1024"],
+                }
+            ]
+        ),
+        "pgwatch_pg_btree_bloat_extra_pct": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "20"],
+                }
+            ]
+        ),
+        "pgwatch_pg_btree_bloat_bloat_size": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "2048"],
+                }
+            ]
+        ),
+        "pgwatch_pg_btree_bloat_bloat_pct": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "50"],
+                }
+            ]
+        ),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_f005_btree_bloat_report("local", "node-1")
+    db_data = payload["results"]["node-1"]["data"]["db1"]
+    entry = db_data["bloated_indexes"][0]
+
+    assert entry["extra_size"] == 1024.0
+    assert entry["bloat_pct"] == 50.0
+    assert entry["bloat_size_pretty"].endswith("KB")
+
+
+@pytest.mark.unit
+def test_get_pgss_metrics_data_by_db_invokes_all_metrics(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    captured: list[str] = []
+
+    def fake_query_range(query: str, start, end, step: str = "30s") -> list[dict]:
+        captured.append(query)
+        return []
+
+    monkeypatch.setattr(generator, "query_range", fake_query_range)
+    sentinel = [{"result": "ok"}]
+    monkeypatch.setattr(generator, "_process_pgss_data", lambda *args, **kwargs: sentinel)
+
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    end = start + timedelta(hours=1)
+    result = generator._get_pgss_metrics_data_by_db("local", "node-1", "db1", start, end)
+
+    assert result == sentinel
+    # Ensure at least one representative metric was queried with filters
+    assert any("pgwatch_pg_stat_statements_calls" in q for q in captured)
+
+
+@pytest.mark.unit
+def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPatch) -> None:
+    generator = PostgresReportGenerator()
+    called: list[str] = []
+
+    def stub(name: str):
+        def _(*args, **kwargs):
+            called.append(name)
+            return {name: True}
+
+        return _
+
+    builders = [
+        "generate_a002_version_report",
+        "generate_a003_settings_report",
+        "generate_a004_cluster_report",
+        "generate_a007_altered_settings_report",
+        "generate_d004_pgstat_settings_report",
+        "generate_f001_autovacuum_settings_report",
+        "generate_f004_heap_bloat_report",
+        "generate_f005_btree_bloat_report",
+        "generate_g001_memory_settings_report",
+        "generate_h001_invalid_indexes_report",
+        "generate_h002_unused_indexes_report",
+        "generate_h004_redundant_indexes_report",
+        "generate_k001_query_calls_report",
+        "generate_k003_top_queries_report",
+    ]
+
+    for name in builders:
+        monkeypatch.setattr(generator, name, stub(name))
+
+    reports = generator.generate_all_reports("local", "node-1")
+
+    assert set(reports.keys()) == {code.split("_")[1].upper() for code in builders}
+    assert set(called) == set(builders)
+
+
+@pytest.mark.unit
+def test_create_report_uses_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    generator = PostgresReportGenerator()
+    payloads: list[dict] = []
+
+    def fake_make_request(api_url, endpoint, request_data):
+        payloads.append({"endpoint": endpoint, "data": request_data})
+        return {"report_id": 42}
+
+    monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
+
+    report_id = generator.create_report("https://api", "tok", "proj", "123")
+
+    assert report_id == 42
+    assert payloads[0]["endpoint"] == "/rpc/checkup_report_create"
+    assert payloads[0]["data"]["project"] == "proj"
+
+
+@pytest.mark.unit
+def test_upload_report_file_sends_contents(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    generator = PostgresReportGenerator()
+    captured: dict = {}
+
+    def fake_make_request(api_url, endpoint, request_data):
+        captured["endpoint"] = endpoint
+        captured["data"] = request_data
+        return {}
+
+    monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
+
+    report_file = tmp_path / "A002_report.json"
+    report_file.write_text('{"foo": "bar"}', encoding="utf-8")
+
+    generator.upload_report_file("https://api", "tok", 100, str(report_file))
+
+    assert captured["endpoint"] == "/rpc/checkup_report_file_post"
+    assert captured["data"]["check_id"] == "A002"
+    assert captured["data"]["filename"] == report_file.name
+
+
+@pytest.mark.unit
+def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    class DummyGenerator:
+        def __init__(self, *args, **kwargs):
+            self.closed = False
+
+        def test_connection(self) -> bool:
+            return True
+
+        def generate_a002_version_report(self, cluster, node_name):
+            return {"checkId": "A002", "results": {node_name: {"data": {"ok": True}}}}
+
+        def close_postgres_sink(self):
+            self.closed = True
+
+    monkeypatch.setattr(postgres_reports_module, "PostgresReportGenerator", DummyGenerator)
+    monkeypatch.setattr(sys, "argv", ["postgres_reports.py", "--check-id", "A002", "--output", "-", "--no-upload"])
+
+    postgres_reports_module.main()
+
+    captured = capsys.readouterr().out
+    output = json.loads(captured)
+    assert output["checkId"] == "A002"
+    assert "results" in output
+
+
+@pytest.mark.unit
+def test_main_exits_when_connection_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FailingGenerator:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def test_connection(self) -> bool:
+            return False
+
+    monkeypatch.setattr(postgres_reports_module, "PostgresReportGenerator", FailingGenerator)
+    monkeypatch.setattr(sys, "argv", ["postgres_reports.py", "--check-id", "A002"])
+
+    with pytest.raises(SystemExit):
+        postgres_reports_module.main()
+
+
+# ============================================================================
+# Negative test cases - Error handling
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_query_instant_handles_http_404_error(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_instant returns empty dict on HTTP 404 error."""
+    class MockResponse:
+        status_code = 404
+        text = "Not Found"
+
+        def json(self):
+            return {"error": "not found"}
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    result = generator.query_instant("test_query")
+
+    assert result == {}
+
+
+@pytest.mark.unit
+def test_query_instant_handles_http_500_error(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_instant returns empty dict on HTTP 500 error."""
+    class MockResponse:
+        status_code = 500
+        text = "Internal Server Error"
+
+        def json(self):
+            raise ValueError("Invalid JSON")
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    result = generator.query_instant("test_query")
+
+    assert result == {}
+
+
+@pytest.mark.unit
+def test_query_instant_handles_timeout(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_instant returns empty dict on request timeout."""
+    import requests
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        raise requests.Timeout("Connection timed out")
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    result = generator.query_instant("test_query")
+
+    assert result == {}
+
+
+@pytest.mark.unit
+def test_query_instant_handles_connection_error(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_instant returns empty dict on connection error."""
+    import requests
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        raise requests.ConnectionError("Failed to establish connection")
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    result = generator.query_instant("test_query")
+
+    assert result == {}
+
+
+@pytest.mark.unit
+def test_query_instant_handles_malformed_json(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_instant returns empty dict when response has invalid JSON."""
+    class MockResponse:
+        status_code = 200
+
+        def json(self):
+            raise ValueError("Invalid JSON")
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    result = generator.query_instant("test_query")
+
+    assert result == {}
+
+
+@pytest.mark.unit
+def test_query_range_handles_http_error(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_range returns empty list on HTTP error."""
+    class MockResponse:
+        status_code = 503
+        text = "Service Unavailable"
+
+        def json(self):
+            return {"error": "service unavailable"}
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    start = datetime.now()
+    end = start + timedelta(hours=1)
+    result = generator.query_range("test_query", start, end)
+
+    assert result == []
+
+
+@pytest.mark.unit
+def test_query_range_handles_timeout(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_range returns empty list on timeout."""
+    import requests
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        raise requests.Timeout("Connection timed out")
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    start = datetime.now()
+    end = start + timedelta(hours=1)
+    result = generator.query_range("test_query", start, end)
+
+    assert result == []
+
+
+@pytest.mark.unit
+def test_query_range_handles_malformed_response(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_range handles response with missing expected fields."""
+    class MockResponse:
+        status_code = 200
+
+        def json(self):
+            # Missing 'data' or 'result' fields
+            return {"status": "success"}
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    start = datetime.now()
+    end = start + timedelta(hours=1)
+    result = generator.query_range("test_query", start, end)
+
+    assert result == []
+
+
+@pytest.mark.unit
+def test_query_range_handles_failed_status(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
+    """Test that query_range handles Prometheus error status."""
+    class MockResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "status": "error",
+                "errorType": "bad_data",
+                "error": "invalid query"
+            }
+
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    start = datetime.now()
+    end = start + timedelta(hours=1)
+    result = generator.query_range("test_query", start, end)
+
+    assert result == []
+
+
+@pytest.mark.unit
+def test_make_request_raises_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that make_request raises exception on HTTP error."""
+    class MockResponse:
+        status_code = 400
+
+        def raise_for_status(self):
+            import requests
+            raise requests.HTTPError("400 Client Error")
+
+        def json(self):
+            return {}
+
+    def fake_post(url: str, json: dict[str, Any] | None = None):
+        return MockResponse()
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    import requests
+    with pytest.raises(requests.HTTPError):
+        postgres_reports_module.make_request("http://api.test", "/endpoint", {"data": "test"})
+
+
+@pytest.mark.unit
+def test_make_request_raises_on_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that make_request raises exception on connection error."""
+    import requests
+
+    def fake_post(url: str, json: dict[str, Any] | None = None):
+        raise requests.ConnectionError("Connection failed")
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    with pytest.raises(requests.ConnectionError):
+        postgres_reports_module.make_request("http://api.test", "/endpoint", {"data": "test"})
