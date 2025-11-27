@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 7,
+  "id": 9,
   "links": [],
   "panels": [
     {
@@ -278,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sort_by_label(sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}), 'wait_event_type')",
+          "expr": "sort_by_label(sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}), 'wait_event_type')",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -1007,12 +1007,17 @@
         "type": "query"
       },
       {
+        "allowCustomValue": false,
         "current": {
-          "text": "workloaddb",
-          "value": "workloaddb"
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
         },
         "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "includeAll": true,
         "label": "DB name",
+        "multi": true,
         "name": "db_name",
         "options": [],
         "query": {
@@ -1034,5 +1039,5 @@
   "timezone": "browser",
   "title": "04. Wait event analysis (Active Session History)",
   "uid": "a222b233-acef-4bac-a451-1591023e4d4f",
-  "version": 10
+  "version": 11
 }
