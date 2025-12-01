@@ -278,7 +278,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sort_by_label(sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}), 'wait_event_type')",
+          "expr": "sort_by_label(sum by (wait_event_type) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}), 'wait_event_type')",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -584,7 +584,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sort_by_label(sum by (wait_event_type, wait_event) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", wait_event_type=~\"$wait_event_type\"}), 'wait_event_type')",
+          "expr": "sort_by_label(sum by (wait_event_type, wait_event) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\", wait_event_type=~\"$wait_event_type\"}), 'wait_event_type')",
           "hide": false,
           "legendFormat": "{{wait_event_type}} - {{wait_event}}",
           "range": true,
@@ -882,7 +882,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sort_by_label(sum by (wait_event_type, wait_event, query_id) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\", wait_event_type=~\"$wait_event_type\", wait_event=~\"$wait_event\"}), 'wait_event_type', 'query_id')",
+          "expr": "sort_by_label(sum by (wait_event_type, wait_event, query_id) (pgwatch_wait_events_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\", wait_event_type=~\"$wait_event_type\", wait_event=~\"$wait_event\"}), 'wait_event_type', 'query_id')",
           "hide": false,
           "legendFormat": "{{wait_event_type}} - {{wait_event}} - {{query_id}}",
           "range": true,
@@ -1007,12 +1007,16 @@
         "type": "query"
       },
       {
+        "allowCustomValue": false,
         "current": {
-          "text": "workloaddb",
-          "value": "workloaddb"
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
         },
         "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
+        "multi": true,
         "name": "db_name",
         "options": [],
         "query": {
@@ -1034,5 +1038,5 @@
   "timezone": "browser",
   "title": "04. Wait event analysis (Active Session History)",
   "uid": "a222b233-acef-4bac-a451-1591023e4d4f",
-  "version": 10
+  "version": 11
 }
