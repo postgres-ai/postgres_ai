@@ -3250,13 +3250,13 @@
           "text": "default",
           "value": "default"
         },
-        "definition": "label_values(pgwatch_settings_configured,cluster)",
+        "definition": "label_values(pgwatch_db_size_size_b,cluster)",
         "label": "Cluster name",
         "name": "cluster_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_configured,cluster)",
+          "query": "label_values(pgwatch_db_size_size_b,cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -3268,13 +3268,13 @@
           "text": "postgres_ai",
           "value": "postgres_ai"
         },
-        "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
         "name": "node_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -3286,13 +3286,13 @@
           "text": "workloaddb",
           "value": "workloaddb"
         },
-        "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
         "name": "db_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,

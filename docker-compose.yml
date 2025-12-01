@@ -141,7 +141,7 @@ services:
     restart: unless-stopped
   # PostgreSQL Reports Generator - Runs reports after 1 hour
   postgres-reports:
-    image: postgresai/reporter:latest
+    image: postgresai/reporter:1.0.2
     container_name: postgres-reports
     working_dir: /app
     volumes:
@@ -164,16 +164,13 @@ services:
       echo 'Starting PostgreSQL reports generation...' &&
       while true; do
         echo 'Extracting cluster and node name from instances.yml...' &&
-        CLUSTER=$$(python3 -c \"import yaml; data=yaml.safe_load(open('instances.yml')); print(data[0]['custom_tags']['cluster'])\") &&
-        NODE_NAME=$$(python3 -c \"import yaml; data=yaml.safe_load(open('instances.yml')); print(data[0]['custom_tags']['node_name'])\") &&
-        echo \"Using cluster: $$CLUSTER, node: $$NODE_NAME\" &&
         echo 'Generating PostgreSQL reports...' &&
         if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
           API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
-          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --cluster \"$$CLUSTER\" --node-name \"$$NODE_NAME\" --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY --project postgres-ai-monitoring
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY --project postgres-ai-monitoring
         else
           echo 'No API key configured, generating reports without upload...' &&
-          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --cluster \"$$CLUSTER\" --node-name \"$$NODE_NAME\" --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
         fi &&
         echo 'Reports generated. Sleeping for 24 hours...' &&
         sleep 86400
