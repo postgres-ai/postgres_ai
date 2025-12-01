@@ -1594,12 +1594,88 @@ class PostgresReportGenerator:
 
         template_data = {
             "checkId": check_id,
+            "checkTitle": self.get_check_title(check_id),
             "timestamptz": now.isoformat(),
             "nodes": hosts,
             "results": results
         }
 
         return template_data
+
+    def get_check_title(self, check_id: str) -> str:
+        """
+        Get the human-readable title for a check ID.
+        
+        Args:
+            check_id: The check identifier (e.g., "H004")
+            
+        Returns:
+            Human-readable title for the check
+        """
+        # Mapping based on postgres-checkup README
+        # https://gitlab.com/postgres-ai/postgres-checkup
+        check_titles = {
+            "A001": "System information",
+            "A002": "Postgres major version",
+            "A003": "Postgres settings",
+            "A004": "Cluster information",
+            "A005": "Extensions",
+            "A006": "Postgres setting deviations",
+            "A007": "Altered settings",
+            "A008": "Disk usage and file system type",
+            "A010": "Data checksums, wal_log_hints",
+            "A011": "Connection pooling. pgbouncer",
+            "A012": "Anti-crash checks",
+            "A013": "Postgres minor version",
+            "B001": "SLO/SLA, RPO, RTO",
+            "B002": "File system, mount flags",
+            "B003": "Full backups / incremental",
+            "B004": "WAL archiving",
+            "B005": "Restore checks, monitoring, alerting",
+            "C001": "SLO/SLA",
+            "C002": "Sync/async, Streaming / wal transfer; logical decoding",
+            "C003": "SPOFs; standby with traffic",
+            "C004": "Failover",
+            "C005": "Switchover",
+            "C006": "Delayed replica",
+            "C007": "Replication slots. Lags. Standby feedbacks",
+            "D001": "Logging settings",
+            "D002": "Useful Linux tools",
+            "D003": "List of monitoring metrics",
+            "D004": "pg_stat_statements and pg_stat_kcache settings",
+            "D005": "track_io_timing, auto_explain",
+            "D006": "Recommended DBA toolsets",
+            "D007": "Postgres-specific tools for troubleshooting",
+            "E001": "WAL/checkpoint settings, IO",
+            "E002": "Checkpoints, bgwriter, IO",
+            "F001": "Autovacuum: current settings",
+            "F002": "Autovacuum: transaction ID wraparound check",
+            "F003": "Autovacuum: dead tuples",
+            "F004": "Autovacuum: heap bloat (estimated)",
+            "F005": "Autovacuum: index bloat (estimated)",
+            "F006": "Precise heap bloat analysis",
+            "F007": "Precise index bloat analysis",
+            "F008": "Autovacuum: resource usage",
+            "G001": "Memory-related settings",
+            "G002": "Connections and current activity",
+            "G003": "Timeouts, locks, deadlocks",
+            "G004": "Query planner",
+            "G005": "I/O settings",
+            "G006": "Default_statistics_target",
+            "H001": "Invalid indexes",
+            "H002": "Unused indexes",
+            "H003": "Non-indexed foreign keys",
+            "H004": "Redundant indexes",
+            "J001": "Capacity planning",
+            "K001": "Globally aggregated query metrics",
+            "K002": "Workload type",
+            "K003": "Top-50 queries by total_time",
+            "L001": "Table sizes",
+            "L002": "Data types being used",
+            "L003": "Integer out-of-range risks in PKs",
+            "L004": "Tables without PK/UK",
+        }
+        return check_titles.get(check_id, f"Check {check_id}")
 
     def get_setting_unit(self, setting_name: str) -> str:
         """Get the unit for a PostgreSQL setting."""
