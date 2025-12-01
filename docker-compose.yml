@@ -119,6 +119,19 @@ services:
       GF_SECURITY_ADMIN_USER: monitor
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-demo}
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+      # OAuth configuration (disabled by default, enabled via Ansible)
+      GF_AUTH_GENERIC_OAUTH_ENABLED: ${GRAFANA_OAUTH_ENABLED:-false}
+      GF_AUTH_GENERIC_OAUTH_NAME: ${GRAFANA_OAUTH_NAME:-PostgresAI}
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: ${GRAFANA_OAUTH_ALLOW_SIGN_UP:-true}
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: ${GRAFANA_OAUTH_CLIENT_ID:-}
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:-}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: ${GRAFANA_OAUTH_SCOPES:-openid email profile}
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${GRAFANA_OAUTH_AUTH_URL:-}
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: ${GRAFANA_OAUTH_TOKEN_URL:-}
+      GF_AUTH_GENERIC_OAUTH_API_URL: ${GRAFANA_OAUTH_API_URL:-}
+      # Optional: disable login form when OAuth is primary auth
+      GF_AUTH_DISABLE_LOGIN_FORM: ${GRAFANA_DISABLE_LOGIN_FORM:-false}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-}
     ports:
       - "${GRAFANA_BIND_HOST:-}3000:3000"
     volumes:
@@ -191,18 +204,18 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     command:
-      - '--housekeeping_interval=30s'
-      - '--docker_only=true'
-      - '--disable_metrics=percpu,sched,tcp,udp,hugetlb,referenced_memory,cpu_topology,resctrl'
-      - '--store_container_labels=false'
+      - "--housekeeping_interval=30s"
+      - "--docker_only=true"
+      - "--disable_metrics=percpu,sched,tcp,udp,hugetlb,referenced_memory,cpu_topology,resctrl"
+      - "--store_container_labels=false"
 
   # Node Exporter - System metrics
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: node-exporter
     command:
-      - '--path.rootfs=/host'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     volumes:
       - /:/host:ro,rslave
     restart: unless-stopped
