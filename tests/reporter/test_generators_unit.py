@@ -784,6 +784,11 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
         def __init__(self, *args, **kwargs):
             self.closed = False
 
+        def get_all_clusters(self):
+            # Match current reporter.main() behavior which always calls
+            # get_all_clusters() when cluster is not explicitly provided.
+            return ["local"]
+
         def test_connection(self) -> bool:
             return True
 
@@ -799,7 +804,19 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
     postgres_reports_module.main()
 
     captured = capsys.readouterr().out
-    output = json.loads(captured)
+
+    # main() prints progress banners along with the JSON payload.
+    # Extract the JSON object from the captured stdout by finding the
+    # first line that looks like JSON and joining from there.
+    lines = captured.splitlines()
+    start_idx = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith("{"):
+            start_idx = i
+            break
+    json_str = "\n".join(lines[start_idx:])
+
+    output = json.loads(json_str)
     assert output["checkId"] == "A002"
     assert "results" in output
 
