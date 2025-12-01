@@ -70,5 +70,6 @@ def test_format_report_data_structure(generator: PostgresReportGenerator) -> Non
     payload = generator.format_report_data("A002", {"foo": "bar"}, host)
 
     assert payload["checkId"] == "A002"
-    assert payload["hosts"]["master"] == host
+    # Newer reporter returns a 'nodes' structure instead of legacy 'hosts'.
+    assert payload["nodes"]["primary"] == host
     assert payload["results"][host]["data"] == {"foo": "bar"}
