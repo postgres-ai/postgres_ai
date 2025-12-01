@@ -282,7 +282,7 @@ metrics:
       It returns the lock mode and the count of locks for each mode. This metric helps administrators monitor lock contention and performance.
     sqls:
       13: |-
-        WITH q_locks as (
+        with q_locks as ( /* pgwatch_generated */
           select
             *
           from
@@ -389,7 +389,7 @@ metrics:
     sqls:
       11: |-
         with recursive
-            q_root_part as (
+            q_root_part as ( /* pgwatch_generated */
                 select c.oid,
                         c.relkind,
                         n.nspname root_schema,
@@ -524,8 +524,8 @@ metrics:
         ) x
         order by table_size_b desc nulls last limit 300
       16: |-
-        with recursive /* pgwatch_generated */
-            q_root_part as (
+        with recursive
+            q_root_part as ( /* pgwatch_generated */
                 select c.oid,
                         c.relkind,
                         n.nspname root_schema,
@@ -712,24 +712,24 @@ metrics:
       providing insights into potential bottlenecks and resource contention issues.
     sqls:
       11: |-
-        select datname as tag_datname, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
+        select datname as tag_datname, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total /* pgwatch_generated */
         from pg_stat_activity
         where state = 'active'
         group by tag_datname, tag_wait_event_type, tag_wait_event
         union
         select 'server_process' as tag_datname, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
         from pg_stat_activity
-        where state = 'active' and datname IS null 
+        where state = 'active' and datname is null 
         group by tag_datname, tag_wait_event_type, tag_wait_event
       14: |-
-        select datname as tag_datname, query_id::text as tag_query_id, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
+        select datname as tag_datname, query_id::text as tag_query_id, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total /* pgwatch_generated */
         from pg_stat_activity
         where state = 'active'
         group by tag_datname, tag_query_id, tag_wait_event_type, tag_wait_event
         union
         select 'server_process' as tag_datname, null as tag_query_id, coalesce (wait_event, 'CPU*') as tag_wait_event, coalesce(wait_event_type, 'CPU*') as tag_wait_event_type, count(*) as total
         from pg_stat_activity
-        where state = 'active' and datname IS null 
+        where state = 'active' and datname is null 
         group by tag_datname, tag_query_id, tag_wait_event_type, tag_wait_event
     gauges:
       - total
@@ -742,11 +742,11 @@ metrics:
             pg_database.datname as tag_datname,
             tmp2.tag_application_name,
             tmp.tag_state,
-            COALESCE(count,0) as count,
-            COALESCE(max_tx_duration,0) as max_tx_duration
+            coalesce(count,0) as count,
+            coalesce(max_tx_duration,0) as max_tx_duration
         from
           (
-            VALUES ('active'),
+            values ('active'),
                   ('idle'),
                   ('idle in transaction'),
                   ('idle in transaction (aborted)'),
@@ -760,7 +760,7 @@ metrics:
               application_name as tag_application_name,
               state as tag_state,
               count(*) as count,
-              MAX(extract(epoch from now() - xact_start))::float as max_tx_duration
+              max(extract(epoch from now() - xact_start))::float as max_tx_duration
             from pg_stat_activity
             group by datname, tag_application_name, tag_state
           ) as tmp2
@@ -774,8 +774,8 @@ metrics:
   pg_archiver:
     sqls:
       11: |
-        WITH
-          current_wal_file as (
+        with
+          current_wal_file as ( /* pgwatch_generated */
             select case when not pg_is_in_recovery() then pg_walfile_name(pg_current_wal_insert_lsn()) else null end pg_walfile_name
           ),
           current_wal as (
@@ -802,7 +802,7 @@ metrics:
   pg_blocked:
     sqls:
       11: |-
-        select
+        select /* pgwatch_generated */
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
           count(*) as queries,
@@ -820,7 +820,7 @@ metrics:
   pg_database_wraparound:
     sqls:
       11: |
-        select
+        select /* pgwatch_generated */
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           datname as tag_datname,
           age(d.datfrozenxid) as age_datfrozenxid,
@@ -836,10 +836,10 @@ metrics:
   pg_long_running_transactions:
     sqls:
       11: |
-        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns, /* pgwatch_generated */
           current_database() as tag_datname,
-          COUNT(*) as transactions,
-          COALESCE(MAX(extract(epoch from (clock_timestamp() - xact_start)))::int8, 0) as age_in_seconds
+          count(*) as transactions,
+          coalesce(max(extract(epoch from (clock_timestamp() - xact_start)))::int8, 0) as age_in_seconds
         from pg_catalog.pg_stat_activity
         where state is distinct from 'idle' and (now() - xact_start) > '1 minutes'::interval and query not like 'autovacuum:%'
     gauges:
@@ -848,7 +848,7 @@ metrics:
   pg_stat_replication:
     sqls:
       11: |
-        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+        select (extract(epoch from now()) * 1e9)::int8 as epoch_ns, /* pgwatch_generated */
           current_database() as tag_datname, 
           application_name as tag_application_name, 
           (pg_current_wal_lsn() - '0/0') % (2^52)::bigint as current_wal_lsn, 
@@ -869,7 +869,7 @@ metrics:
   pg_stat_statements:
     sqls:
       11: |
-        WITH aggregated_statements as (
+        with aggregated_statements as ( /* pgwatch_generated */
           select
             pg_database.datname,
             pg_stat_statements.queryid,
@@ -915,7 +915,7 @@ metrics:
           temp_bytes_written::int8 as temp_bytes_written
           from aggregated_statements
       17: |
-        with aggregated_statements as (
+        with aggregated_statements as ( /* pgwatch_generated */
           select
             pg_database.datname,
             pg_stat_statements.queryid,
@@ -985,7 +985,7 @@ metrics:
       as tags for easy filtering and querying.
     sqls:
       11: |
-        select 
+        select /* pgwatch_generated */
           current_database() as tag_datname,
           n.nspname as tag_schemaname,
           c.relname as tag_relname,
@@ -1009,7 +1009,7 @@ metrics:
   pg_stat_all_indexes:
     sqls:
       11: |
-        select schemaname as tag_schemaname, 
+        select schemaname as tag_schemaname, /* pgwatch_generated */
           relname as tag_relname, 
           indexrelname as tag_indexrelname, 
           idx_scan, 
@@ -1026,7 +1026,7 @@ metrics:
   pg_stat_all_tables:
     sqls:
       11: |
-        select
+        select /* pgwatch_generated */
           current_database() as tag_datname,
           schemaname as tag_schemaname,
           relname as tag_relname,
@@ -1040,8 +1040,8 @@ metrics:
           n_tup_hot_upd,
           n_live_tup,
           n_dead_tup,
-          GREATEST(last_autovacuum, last_vacuum, '1970-01-01Z') as last_vacuum,
-          GREATEST(last_autoanalyze, last_analyze, '1970-01-01Z') as last_analyze,
+          greatest(last_autovacuum, last_vacuum, '1970-01-01Z') as last_vacuum,
+          greatest(last_autoanalyze, last_analyze, '1970-01-01Z') as last_analyze,
           (vacuum_count + autovacuum_count) as vacuum_count,
           (analyze_count + autoanalyze_count) as analyze_count
         from
@@ -1067,7 +1067,7 @@ metrics:
   pg_stat_wal_receiver:
     sqls:
       11: |
-        select current_database() as tag_datname,
+        select current_database() as tag_datname, /* pgwatch_generated */
         case status when 'stopped' then 0 when 'starting' then 1 when 'streaming' then 2 when 'waiting' then 3 when 'restarting' then 4 when 'stopping' then 5 else -1 end as tag_status,
               (receive_start_lsn- '0/0') % (2^52)::bigint as receive_start_lsn,
               receive_start_tli,
@@ -1127,7 +1127,7 @@ metrics:
   pg_stuck_idle_in_transaction:
     sqls:
       11: |
-        select current_database() as tag_datname, COUNT(*) as queries
+        select current_database() as tag_datname, count(*) as queries /* pgwatch_generated */
         from pg_catalog.pg_stat_activity
         where state = 'idle in transaction' and (now() - query_start) > '10 minutes'::interval
     gauges:
@@ -1136,7 +1136,7 @@ metrics:
   pg_total_relation_size:
     sqls:
       11: |
-        select current_database() as tag_datname,
+        select current_database() as tag_datname, /* pgwatch_generated */
         relnamespace::regnamespace as tag_schemaname,
               relname as tag_relname,
               pg_total_relation_size(oid) bytes
@@ -1150,7 +1150,7 @@ metrics:
   pg_txid:
     sqls:
       11: |
-        select
+        select /* pgwatch_generated */
           current_database() as tag_datname,
           case when pg_is_in_recovery() then 'NaN'::float else txid_current() % (2^52)::bigint end as current,
           case when pg_is_in_recovery() then 'NaN'::float else txid_snapshot_xmin(txid_current_snapshot()) % (2^52)::bigint end as xmin,
@@ -1163,7 +1163,7 @@ metrics:
   pg_xlog_position:
     sqls:
       11: |
-        select current_database() as tag_datname,
+        select current_database() as tag_datname, /* pgwatch_generated */
         case
               when pg_is_in_recovery()
               then (pg_last_wal_replay_lsn() - '0/0') % (2^52)::bigint
@@ -1179,7 +1179,7 @@ metrics:
       This metric helps administrators identify indexes that may need maintenance like VACUUM FULL or index reorganization.
     sqls:
       11: | 
-        select current_database() as tag_datname, nspname as tag_schemaname, tblname as tag_tblname, idxname as tag_idxname, (bs*(relpages)/(1024*1024))::float as real_size_mib,
+        select current_database() as tag_datname, nspname as tag_schemaname, tblname as tag_tblname, idxname as tag_idxname, (bs*(relpages)/(1024*1024))::float as real_size_mib, /* pgwatch_generated */
           (bs*(relpages-est_pages))::float as extra_size,
           100 * (relpages-est_pages)::float / relpages as extra_pct,
           fillfactor,
@@ -1217,7 +1217,7 @@ metrics:
                   select n.nspname, i.tblname, i.idxname, i.reltuples, i.relpages,
                       i.idxoid, i.fillfactor, current_setting('block_size')::numeric as bs,
                       case -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
-                        when version() ~ 'mingw32' OR version() ~ '64-bit|x86_64|ppc64|ia64|amd64' then 8
+                        when version() ~ 'mingw32' or version() ~ '64-bit|x86_64|ppc64|ia64|amd64' then 8
                         else 4
                       end as maxalign,
                       /* per page header, fixed size: 20 for 7.X, 24 for others */
@@ -1235,7 +1235,7 @@ metrics:
                   from (
                       select ct.relname as tblname, ct.relnamespace, ic.idxname, ic.attpos, ic.indkey, ic.indkey[ic.attpos], ic.reltuples, ic.relpages, ic.tbloid, ic.idxoid, ic.fillfactor,
                           coalesce(a1.attnum, a2.attnum) as attnum, coalesce(a1.attname, a2.attname) as attname, coalesce(a1.atttypid, a2.atttypid) as atttypid,
-                          case when a1.attnum IS null
+                          case when a1.attnum is null
                           then ic.idxname
                           else ct.relname
                           end as attrelname
@@ -1294,7 +1294,7 @@ metrics:
       This metric helps administrators identify tables that may need maintenance like VACUUM FULL or table reorganization.
     sqls:
       11: |
-        select current_database() as tag_datname, schemaname as tag_schemaname, tblname as tag_tblname, (bs*tblpages)/(1024*1024)::float as real_size_mib,
+        select current_database() as tag_datname, schemaname as tag_schemaname, tblname as tag_tblname, (bs*tblpages)/(1024*1024)::float as real_size_mib, /* pgwatch_generated */
           (tblpages-est_tblpages)*bs as extra_size,
           case when tblpages > 0 and tblpages - est_tblpages > 0
             then 100 * (tblpages - est_tblpages)/tblpages::float
@@ -1331,13 +1331,13 @@ metrics:
                   array_to_string(tbl.reloptions, ' ')
                   from 'fillfactor=([0-9]+)')::smallint, 100) as fillfactor,
                 current_setting('block_size')::numeric as bs,
-                case when version()~'mingw32' OR version()~'64-bit|x86_64|ppc64|ia64|amd64' then 8 else 4 end as ma,
+                case when version()~'mingw32' or version()~'64-bit|x86_64|ppc64|ia64|amd64' then 8 else 4 end as ma,
                 24 as page_hdr,
-                23 + case when MAX(coalesce(s.null_frac,0)) > 0 then ( 7 + count(s.attname) ) / 8 else 0::int end
+                23 + case when max(coalesce(s.null_frac,0)) > 0 then ( 7 + count(s.attname) ) / 8 else 0::int end
                   + case when bool_or(att.attname = 'oid' and att.attnum < 0) then 4 else 0 end as tpl_hdr_size,
                 sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 0) ) as tpl_data_size,
                 (bool_or(att.atttypid = 'pg_catalog.name'::regtype)
-                  OR sum(case when att.attnum > 0 then 1 else 0 end) <> count(s.attname))::int as is_na
+                  or sum(case when att.attnum > 0 then 1 else 0 end) <> count(s.attname))::int as is_na
               from pg_attribute as att
                 join pg_class as tbl on att.attrelid = tbl.oid
                 join pg_namespace as ns on ns.oid = tbl.relnamespace
@@ -1372,7 +1372,7 @@ metrics:
       It helps administrators understand detailed storage breakdown for each table component.
     sqls:
       11: |-
-        with table_sizes as (
+        with table_sizes as ( /* pgwatch_generated */
           select
             (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
             current_database() as tag_datname,
@@ -1402,7 +1402,7 @@ metrics:
             )
           order by pg_total_relation_size(c.oid) desc
         )
-        select /* pgwatch_generated */
+        select
           epoch_ns,
           tag_datname,
           tag_schema,
@@ -1442,7 +1442,7 @@ metrics:
       This metric helps administrators identify and fix invalid indexes to improve database performance.
     sqls:
       11: |
-        with fk_indexes as (
+        with fk_indexes as ( /* pgwatch_generated */
           select
             schemaname as tag_schema_name,
             (indexrelid::regclass)::text as tag_index_name,
@@ -1507,7 +1507,7 @@ metrics:
       and foreign key constraints. Uses the exact logic from tmp.sql with JSON aggregation and proper thresholds.
     sqls:
       11: |
-        with fk_indexes as (
+        with fk_indexes as ( /* pgwatch_generated */
           select
             n.nspname as schema_name,
             ci.relname as index_name,
@@ -1539,10 +1539,10 @@ metrics:
         ), redundant_indexes as (
           select
             i2.indexrelid as index_id,
-            tnsp.nspname AS schema_name,
-            trel.relname AS table_name,
+            tnsp.nspname as schema_name,
+            trel.relname as table_name,
             pg_relation_size(trel.oid) as table_size_bytes,
-            irel.relname AS index_name,
+            irel.relname as index_name,
             am1.amname as access_method,
             (i1.indexrelid::regclass)::text as reason,
             i1.indexrelid as reason_index_id,
@@ -1553,7 +1553,7 @@ metrics:
             s.idx_scan as index_usage,
             quote_ident(tnsp.nspname) as formated_schema_name,
             coalesce(nullif(quote_ident(tnsp.nspname), 'public') || '.', '') || quote_ident(irel.relname) as formated_index_name,
-            quote_ident(trel.relname) AS formated_table_name,
+            quote_ident(trel.relname) as formated_table_name,
             coalesce(nullif(quote_ident(tnsp.nspname), 'public') || '.', '') || quote_ident(trel.relname) as formated_relation_name,
             i2.opclasses
           from (
@@ -1661,7 +1661,7 @@ metrics:
       This metric helps administrators identify and fix unused indexes to improve database performance.
     sqls:
       11: | 
-        with fk_indexes as (
+        with fk_indexes as ( /* pgwatch_generated */
           select
             n.nspname as schema_name,
             ci.relname as index_name,
@@ -1704,7 +1704,7 @@ metrics:
             join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
             join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
             join pg_namespace n on n.oid = ci.relnamespace
-            join pg_am a ON ci.relam = a.oid
+            join pg_am a on ci.relam = a.oid
             left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             i.indisunique = false
@@ -1741,9 +1741,9 @@ metrics:
         select
           'Never Used Indexes' as tag_reason,
           index_id,
-          schema_name AS tag_schema_name,
-          table_name AS tag_table_name,
-          index_name AS tag_index_name,
+          schema_name as tag_schema_name,
+          table_name as tag_table_name,
+          index_name as tag_index_name,
           idx_scan,
           all_scans,
           index_scan_pct,
@@ -1753,7 +1753,7 @@ metrics:
           table_size_bytes,
           relpages,
           idx_is_btree,
-          opclasses AS tag_opclasses,
+          opclasses as tag_opclasses,
           supports_fk
         from index_ratios
         where
@@ -1770,7 +1770,7 @@ metrics:
       This metric helps administrators identify and fix rarely used indexes to improve database performance.
     sqls:
       11: |
-        with fk_indexes as (
+        with fk_indexes as ( /* pgwatch_generated */
           select
             n.nspname as schema_name,
             ci.relname as index_name,
@@ -1816,7 +1816,7 @@ metrics:
             join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
             join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
             join pg_namespace n on n.oid = ci.relnamespace
-            join pg_am a ON ci.relam = a.oid
+            join pg_am a on ci.relam = a.oid
             left join pg_stat_all_indexes as si on si.indexrelid = i.indexrelid
           where
             i.indisunique = false
@@ -1853,9 +1853,9 @@ metrics:
         select
           tag_reason,
           index_id,
-            schema_name AS tag_schema_name,
-            table_name AS tag_table_name,
-            index_name AS tag_index_name,
+            schema_name as tag_schema_name,
+            table_name as tag_table_name,
+            index_name as tag_index_name,
             idx_scan,
             all_scans,
             index_scan_pct,
@@ -1865,7 +1865,7 @@ metrics:
             table_size_bytes,
             relpages,
             idx_is_btree,
-            opclasses AS tag_opclasses,
+            opclasses as tag_opclasses,
             supports_fk,
             grp
         from (
@@ -1916,7 +1916,7 @@ metrics:
       not per-index or per-table.
     sqls:
       11: |
-        select
+        select /* pgwatch_generated */
           datname as tag_database_name,
           extract(epoch from stats_reset)::int as stats_reset_epoch,
           extract(epoch from now() - stats_reset)::int as seconds_since_reset
@@ -1935,7 +1935,7 @@ metrics:
     sqls:
       11: |
         -- postgresql wal archiving lag monitor
-        with wal_info as (
+        with wal_info as ( /* pgwatch_generated */
             select
                 last_archived_wal,
                 last_archived_time,
@@ -1950,7 +1950,7 @@ metrics:
             from pg_stat_archiver
             where last_archived_wal is not null
         )
-        select 
+        select
             pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint as current_lsn_numeric,
             pg_wal_lsn_diff((log_id_hex || '/' || lpad(to_hex((segment_dec + 1) * wal_segment_size_bytes), 8, '0'))::pg_lsn, '0/0')::bigint as archived_wal_finish_lsn_numeric,
             
@@ -1992,12 +1992,12 @@ metrics:
   pg_vacuum_progress:
     sqls:
       11: |
-        select
-          current_database() AS tag_datname,
-          N.nspname as tag_schema_name,
+        select /* pgwatch_generated */
+          current_database() as tag_datname,
+          n.nspname as tag_schema_name,
           c.relname as tag_table_name,
-          N.nspname || '.' || c.relname as tag_relname,
-          s.relid AS tag_relid,
+          n.nspname || '.' || c.relname as tag_relname,
+          s.relid as tag_relid,
           case when A.query ~ '^autovacuum.*(to prevent wraparound)' then
             'aggressive_autovacuum'
           when A.query ~ '^autovacuum' then
@@ -2012,15 +2012,15 @@ metrics:
             1
           when S.phase ~ 'scanning heap' then 
             2
-          WHEN S.phase ~ 'vacuuming indexes' THEN
+          when s.phase ~ 'vacuuming indexes' then
             3
-          WHEN S.phase ~ 'vacuuming heap' THEN
+          when s.phase ~ 'vacuuming heap' then
             4
-          WHEN S.phase ~ 'cleaning up indexes' THEN
+          when s.phase ~ 'cleaning up indexes' then
             5
-          WHEN S.phase ~ 'truncating heap' THEN
+          when s.phase ~ 'truncating heap' then
             6
-          WHEN S.phase ~ 'final cleanup' THEN
+          when s.phase ~ 'final cleanup' then
             7
           end tag_phase,
           S.heap_blks_total::float,
@@ -2036,12 +2036,12 @@ metrics:
           join pg_class C on (C.oid = S.relid)
           join pg_namespace N on (N.oid = C.relnamespace)
       17: |
-        select
-          current_database() AS tag_datname,
-          N.nspname as tag_schema_name,
+        select /* pgwatch_generated */
+          current_database() as tag_datname,
+          n.nspname as tag_schema_name,
           c.relname as tag_table_name,
-          N.nspname || '.' || c.relname as tag_relname,
-          s.relid AS tag_relid,
+          n.nspname || '.' || c.relname as tag_relname,
+          s.relid as tag_relid,
           case when A.query ~ '^autovacuum.*(to prevent wraparound)' then
             'aggressive_autovacuum'
           when A.query ~ '^autovacuum' then
@@ -2056,15 +2056,15 @@ metrics:
             1
           when S.phase ~ 'scanning heap' then 
             2
-          WHEN S.phase ~ 'vacuuming indexes' THEN
+          when s.phase ~ 'vacuuming indexes' then
             3
-          WHEN S.phase ~ 'vacuuming heap' THEN
+          when s.phase ~ 'vacuuming heap' then
             4
-          WHEN S.phase ~ 'cleaning up indexes' THEN
+          when s.phase ~ 'cleaning up indexes' then
             5
-          WHEN S.phase ~ 'truncating heap' THEN
+          when s.phase ~ 'truncating heap' then
             6
-          WHEN S.phase ~ 'final cleanup' THEN
+          when s.phase ~ 'final cleanup' then
             7
           end tag_phase,
           S.heap_blks_total::float,
@@ -2085,7 +2085,7 @@ metrics:
   pg_index_pilot:
     sqls:
       11: |
-        select
+        select /* pgwatch_generated */
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           datname as tag_datname,
           schemaname as tag_schemaname,
@@ -2107,7 +2107,7 @@ metrics:
   pg_index_pilot_config:
     sqls:
       12: |
-        select
+        select /* pgwatch_generated */
           coalesce(datname, '*') as tag_datname,
           coalesce(schemaname, '*') as tag_schemaname,
           coalesce(relname, '*') as tag_relname,
@@ -2202,7 +2202,7 @@ metrics:
   multixact_size:
     sqls:
       11: |
-        with env as (
+        with env as ( /* pgwatch_generated */
           select
             exists (
               select
