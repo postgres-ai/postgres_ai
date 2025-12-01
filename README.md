@@ -202,6 +202,52 @@ Get a complete monitoring setup with demo data in under 2 minutes.
 ./postgres_ai health
 ```
 
+## 📋 Checkup reports
+
+postgres_ai monitoring generates automated health check reports based on [postgres-checkup](https://gitlab.com/postgres-ai/postgres-checkup). Each report has a unique check ID and title:
+
+### A. General / Infrastructural
+| Check ID | Title |
+|----------|-------|
+| A001 | System information |
+| A002 | Version information |
+| A003 | Postgres settings |
+| A004 | Cluster information |
+| A005 | Extensions |
+| A006 | Postgres setting deviations |
+| A007 | Altered settings |
+| A008 | Disk usage and file system type |
+
+### D. Monitoring / Troubleshooting
+| Check ID | Title |
+|----------|-------|
+| D004 | pg_stat_statements and pg_stat_kcache settings |
+
+### F. Autovacuum, Bloat
+| Check ID | Title |
+|----------|-------|
+| F001 | Autovacuum: current settings |
+| F004 | Autovacuum: heap bloat (estimated) |
+| F005 | Autovacuum: index bloat (estimated) |
+
+### G. Performance / Connections / Memory-related settings
+| Check ID | Title |
+|----------|-------|
+| G001 | Memory-related settings |
+
+### H. Index analysis
+| Check ID | Title |
+|----------|-------|
+| H001 | Invalid indexes |
+| H002 | Unused indexes |
+| H004 | Redundant indexes |
+
+### K. SQL query analysis
+| Check ID | Title |
+|----------|-------|
+| K001 | Globally aggregated query metrics |
+| K003 | Top-50 queries by total_time |
+
 ## 🌐 Access points
 
 After running quickstart:
