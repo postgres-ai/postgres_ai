@@ -6,10 +6,12 @@ This script generates reports for specific PostgreSQL check types (A002, A003, A
 by querying Prometheus metrics using PromQL queries.
 """
 
+__version__ = "1.0.2"
+
 import requests
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
 import argparse
 import sys
@@ -155,34 +157,52 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing version information
         """
-        print("Generating A002 Version Information report...")
-        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
-        # Query PostgreSQL version information
-
+        print(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
+        
+        # Query PostgreSQL version information using last_over_time to get most recent values
+        # Use 3h lookback to handle cases where metrics collection might be intermittent
         version_queries = {
-            'server_version': f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version"}}',
-            'server_version_num': f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version_num"}}',
-            'max_connections': f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="max_connections"}}',
-            'shared_buffers': f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="shared_buffers"}}',
-            'effective_cache_size': f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="effective_cache_size"}}',
+            'server_version': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version"}}[3h])',
+            'server_version_num': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version_num"}}[3h])',
         }
 
         version_data = {}
         for metric_name, query in version_queries.items():
             result = self.query_instant(query)
             if result.get('status') == 'success' and result.get('data', {}).get('result'):
-                latest_value = result['data']['result'][0]['metric'].get('setting_value', None)
-                version_data[metric_name] = latest_value
+                if len(result['data']['result']) > 0:
+                    # Extract setting_value from the metric labels
+                    latest_value = result['data']['result'][0]['metric'].get('setting_value', '')
+                    if latest_value:
+                        version_data[metric_name] = latest_value
+                else:
+                    print(f"Warning: A002 - No data for {metric_name} (cluster={cluster}, node_name={node_name})")
+            else:
+                print(f"Warning: A002 - Query failed for {metric_name}: status={result.get('status')}")
 
         # Format the version data
+        server_version = version_data.get('server_version', 'Unknown')
         version_info = {
-            "version": version_data.get('server_version', 'Unknown'),
+            "version": server_version,
             "server_version_num": version_data.get('server_version_num', 'Unknown'),
-            "server_major_ver": version_data.get('server_version', '').split('.')[0] if version_data.get(
-                'server_version') else 'Unknown',
-            "server_minor_ver": version_data.get('server_version', '').split('.', 1)[1] if version_data.get(
-                'server_version') and '.' in version_data.get('server_version', '') else 'Unknown'
         }
+        
+        # Parse major and minor version if we have a valid version string
+        if server_version and server_version != 'Unknown':
+            # Handle both formats: "14.5" and "14.5 (Ubuntu 14.5-1.pgdg20.04+1)"
+            version_parts = server_version.split()[0].split('.')
+            if len(version_parts) >= 1:
+                version_info["server_major_ver"] = version_parts[0]
+                if len(version_parts) >= 2:
+                    version_info["server_minor_ver"] = '.'.join(version_parts[1:])
+                else:
+                    version_info["server_minor_ver"] = '0'
+            else:
+                version_info["server_major_ver"] = 'Unknown'
+                version_info["server_minor_ver"] = 'Unknown'
+        else:
+            version_info["server_major_ver"] = 'Unknown'
+            version_info["server_minor_ver"] = 'Unknown'
 
         return self.format_report_data("A002", {"version": version_info}, node_name)
 
@@ -199,17 +219,21 @@ class PostgresReportGenerator:
         """
         print("Generating A003 PostgreSQL Settings report...")
 
-        # Query all PostgreSQL settings using the pgwatch_settings_setting metric
+        # Query all PostgreSQL settings using the pgwatch_settings_configured metric with last_over_time
         # This metric has labels for each setting name
-        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        settings_query = f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         result = self.query_instant(settings_query)
 
         settings_data = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
                 # Extract setting name from labels
-                setting_name = item['metric'].get('setting_name', 'unknown')
+                setting_name = item['metric'].get('setting_name', '')
                 setting_value = item['metric'].get('setting_value', '')
+                
+                # Skip if we don't have a setting name
+                if not setting_name:
+                    continue
 
                 # Get additional metadata from labels
                 category = item['metric'].get('category', 'Other')
@@ -225,6 +249,10 @@ class PostgresReportGenerator:
                     "vartype": vartype,
                     "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                 }
+        else:
+            print(f"Warning: A003 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            print(f"Query result status: {result.get('status')}")
+            print(f"Query result data: {result.get('data', {})}")
 
         return self.format_report_data("A003", settings_data, node_name)
 
@@ -243,16 +271,16 @@ class PostgresReportGenerator:
 
         # Query cluster information
         cluster_queries = {
-            'active_connections': f'sum(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}", state="active"}})',
-            'idle_connections': f'sum(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}", state="idle"}})',
-            'total_connections': f'sum(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}"}})',
-            'database_size': f'sum(pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}})',
-            'cache_hit_ratio': f'sum(pgwatch_db_stats_blks_hit{{cluster="{cluster}", node_name="{node_name}"}}) / (sum(pgwatch_db_stats_blks_hit{{cluster="{cluster}", node_name="{node_name}"}}) + sum(pgwatch_db_stats_blks_read{{cluster="{cluster}", node_name="{node_name}"}})) * 100',
+            'active_connections': f'sum(last_over_time(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}", state="active"}}[3h]))',
+            'idle_connections': f'sum(last_over_time(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}", state="idle"}}[3h]))',
+            'total_connections': f'sum(last_over_time(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
+            'database_sizes': f'sum(last_over_time(pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
+            'cache_hit_ratio': f'sum(last_over_time(pgwatch_db_stats_blks_hit{{cluster="{cluster}", node_name="{node_name}"}}[3h])) / clamp_min(sum(last_over_time(pgwatch_db_stats_blks_hit{{cluster="{cluster}", node_name="{node_name}"}}[3h])) + sum(last_over_time(pgwatch_db_stats_blks_read{{cluster="{cluster}", node_name="{node_name}"}}[3h])), 1) * 100',
             'transactions_per_sec': f'sum(rate(pgwatch_db_stats_xact_commit{{cluster="{cluster}", node_name="{node_name}"}}[5m])) + sum(rate(pgwatch_db_stats_xact_rollback{{cluster="{cluster}", node_name="{node_name}"}}[5m]))',
             'checkpoints_per_sec': f'sum(rate(pgwatch_pg_stat_bgwriter_checkpoints_timed{{cluster="{cluster}", node_name="{node_name}"}}[5m])) + sum(rate(pgwatch_pg_stat_bgwriter_checkpoints_req{{cluster="{cluster}", node_name="{node_name}"}}[5m]))',
-            'deadlocks': f'sum(pgwatch_db_stats_deadlocks{{cluster="{cluster}", node_name="{node_name}"}})',
-            'temp_files': f'sum(pgwatch_db_stats_temp_files{{cluster="{cluster}", node_name="{node_name}"}})',
-            'temp_bytes': f'sum(pgwatch_db_stats_temp_bytes{{cluster="{cluster}", node_name="{node_name}"}})',
+            'deadlocks': f'sum(last_over_time(pgwatch_db_stats_deadlocks{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
+            'temp_files': f'sum(last_over_time(pgwatch_db_stats_temp_files{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
+            'temp_bytes': f'sum(last_over_time(pgwatch_db_stats_temp_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
         }
 
         cluster_data = {}
@@ -269,7 +297,7 @@ class PostgresReportGenerator:
                     }
 
         # Get database sizes
-        db_sizes_query = f'pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}'
+        db_sizes_query = f'last_over_time(pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         db_sizes_result = self.query_instant(db_sizes_query)
         database_sizes = {}
 
@@ -298,22 +326,24 @@ class PostgresReportGenerator:
         """
         print("Generating A007 Altered Settings report...")
 
-        # Query settings by source using the pgwatch_settings_setting metric
-        settings_by_source_query = f'pgwatch_settings_is_default{{cluster="{cluster}", node_name="{node_name}"}} < 1'
+        # Query settings by source using the pgwatch_settings_is_default metric with last_over_time
+        # This returns settings where is_default = 0 (i.e., non-default/altered settings)
+        settings_by_source_query = f'last_over_time(pgwatch_settings_is_default{{cluster="{cluster}", node_name="{node_name}"}}[3h]) < 1'
         result = self.query_instant(settings_by_source_query)
 
-        settings_count = {}
-        changes = []
-
+        altered_settings = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
-            # Group settings by source
-            altered_settings = {}
             for item in result['data']['result']:
-                # Extract source from labels
-                setting_name = item['metric'].get('setting_name', 'unknown')
-                value = item['metric'].get('setting_value', 'unknown')
+                # Extract setting information from labels
+                setting_name = item['metric'].get('setting_name', '')
+                value = item['metric'].get('setting_value', '')
                 unit = item['metric'].get('unit', '')
-                category = item['metric'].get('category', 'unknown')
+                category = item['metric'].get('category', 'Other')
+                
+                # Skip if we don't have a setting name
+                if not setting_name:
+                    continue
+                
                 pretty_value = self.format_setting_value(setting_name, value, unit)
                 altered_settings[setting_name] = {
                     "value": value,
@@ -321,8 +351,11 @@ class PostgresReportGenerator:
                     "category": category,
                     "pretty_value": pretty_value
                 }
+        else:
+            print(f"Warning: A007 - No altered settings data returned for cluster={cluster}, node_name={node_name}")
+            print(f"Query result status: {result.get('status')}")
 
-            return self.format_report_data("A007", altered_settings, node_name)
+        return self.format_report_data("A007", altered_settings, node_name)
 
     def generate_h001_invalid_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
@@ -344,7 +377,7 @@ class PostgresReportGenerator:
         invalid_indexes_by_db = {}
         for db_name in databases:
             # Query invalid indexes for each database
-            invalid_indexes_query = f'pgwatch_pg_invalid_indexes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}'
+            invalid_indexes_query = f'last_over_time(pgwatch_pg_invalid_indexes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
             result = self.query_instant(invalid_indexes_query)
 
             invalid_indexes = []
@@ -401,7 +434,7 @@ class PostgresReportGenerator:
         databases = self.get_all_databases(cluster, node_name)
 
         # Query postmaster uptime to get startup time
-        postmaster_uptime_query = f'last_over_time(pgwatch_db_stats_postmaster_uptime_s{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
+        postmaster_uptime_query = f'last_over_time(pgwatch_db_stats_postmaster_uptime_s{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         postmaster_uptime_result = self.query_instant(postmaster_uptime_query)
         
         postmaster_startup_time = None
@@ -417,7 +450,7 @@ class PostgresReportGenerator:
             # Get index definitions from Postgres sink database for this specific database
             index_definitions = self.get_index_definitions_from_sink(db_name)
             # Query stats_reset timestamp for this database
-            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
+            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[3h])'
             stats_reset_result = self.query_instant(stats_reset_query)
             
             stats_reset_epoch = None
@@ -431,7 +464,7 @@ class PostgresReportGenerator:
                     days_since_reset = (datetime.now() - datetime.fromtimestamp(stats_reset_epoch)).days
 
             # Query unused indexes for each database using last_over_time to get most recent value
-            unused_indexes_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
+            unused_indexes_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[3h])'
             unused_result = self.query_instant(unused_indexes_query)
 
             unused_indexes = []
@@ -446,7 +479,7 @@ class PostgresReportGenerator:
                     index_size_bytes = float(item['value'][1]) if item.get('value') else 0
 
                     # Query other related metrics for this index
-                    idx_scan_query = f'last_over_time(pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
+                    idx_scan_query = f'last_over_time(pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[3h])'
                     idx_scan_result = self.query_instant(idx_scan_query)
                     idx_scan = float(idx_scan_result['data']['result'][0]['value'][1]) if idx_scan_result.get('data',
                                                                                                               {}).get(
@@ -514,7 +547,7 @@ class PostgresReportGenerator:
             # Fetch index definitions from the sink for this database (used to aid remediation)
             index_definitions = self.get_index_definitions_from_sink(db_name)
             # Query redundant indexes for each database using last_over_time to get most recent value
-            redundant_indexes_query = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[10h])'
+            redundant_indexes_query = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[3h])'
             result = self.query_instant(redundant_indexes_query)
 
             redundant_indexes = []
@@ -533,18 +566,18 @@ class PostgresReportGenerator:
                     index_size_bytes = float(item['value'][1]) if item.get('value') else 0
 
                     # Query other related metrics for this index
-                    table_size_query = f'last_over_time(pgwatch_redundant_indexes_table_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
+                    table_size_query = f'last_over_time(pgwatch_redundant_indexes_table_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[3h])'
                     table_size_result = self.query_instant(table_size_query)
                     table_size_bytes = float(
                         table_size_result['data']['result'][0]['value'][1]) if table_size_result.get('data', {}).get(
                         'result') else 0
 
-                    index_usage_query = f'last_over_time(pgwatch_redundant_indexes_index_usage{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
+                    index_usage_query = f'last_over_time(pgwatch_redundant_indexes_index_usage{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[3h])'
                     index_usage_result = self.query_instant(index_usage_query)
                     index_usage = float(index_usage_result['data']['result'][0]['value'][1]) if index_usage_result.get(
                         'data', {}).get('result') else 0
 
-                    supports_fk_query = f'last_over_time(pgwatch_redundant_indexes_supports_fk{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[10h])'
+                    supports_fk_query = f'last_over_time(pgwatch_redundant_indexes_supports_fk{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[3h])'
                     supports_fk_result = self.query_instant(supports_fk_query)
                     supports_fk = bool(
                         int(supports_fk_result['data']['result'][0]['value'][1])) if supports_fk_result.get('data',
@@ -611,17 +644,21 @@ class PostgresReportGenerator:
             'track_wal_io_timing'
         ]
 
-        # Query all PostgreSQL settings for pg_stat_statements and related
-        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        # Query all PostgreSQL settings for pg_stat_statements and related using last_over_time
+        settings_query = f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         result = self.query_instant(settings_query)
 
         pgstat_data = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
-                setting_name = item['metric'].get('setting_name', 'unknown')
+                setting_name = item['metric'].get('setting_name', '')
+                
+                # Skip if no setting name
+                if not setting_name:
+                    continue
 
                 # Filter for pg_stat_statements and related settings
-                if any(pgstat_setting in setting_name for pgstat_setting in pgstat_settings):
+                if setting_name in pgstat_settings:
                     setting_value = item['metric'].get('setting_value', '')
                     category = item['metric'].get('category', 'Statistics')
                     unit = item['metric'].get('unit', '')
@@ -636,6 +673,8 @@ class PostgresReportGenerator:
                         "vartype": vartype,
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
+        else:
+            print(f"Warning: D004 - No settings data returned for cluster={cluster}, node_name={node_name}")
 
         # Check if pg_stat_kcache extension is available and working by querying its metrics
         kcache_status = self._check_pg_stat_kcache_status(cluster, node_name)
@@ -661,9 +700,9 @@ class PostgresReportGenerator:
             Dictionary containing pg_stat_kcache status information
         """
         kcache_queries = {
-            'exec_user_time': f'pgwatch_pg_stat_kcache_exec_user_time{{cluster="{cluster}", node_name="{node_name}"}}',
-            'exec_system_time': f'pgwatch_pg_stat_kcache_exec_system_time{{cluster="{cluster}", node_name="{node_name}"}}',
-            'exec_total_time': f'pgwatch_pg_stat_kcache_exec_total_time{{cluster="{cluster}", node_name="{node_name}"}}'
+            'exec_user_time': f'last_over_time(pgwatch_pg_stat_kcache_exec_user_time{{cluster="{cluster}", node_name="{node_name}"}}[3h])',
+            'exec_system_time': f'last_over_time(pgwatch_pg_stat_kcache_exec_system_time{{cluster="{cluster}", node_name="{node_name}"}}[3h])',
+            'exec_total_time': f'last_over_time(pgwatch_pg_stat_kcache_exec_total_time{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         }
 
         kcache_status = {
@@ -716,7 +755,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing pg_stat_statements status information
         """
-        pgss_query = f'pgwatch_pg_stat_statements_calls{{cluster="{cluster}", node_name="{node_name}"}}'
+        pgss_query = f'last_over_time(pgwatch_pg_stat_statements_calls{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         result = self.query_instant(pgss_query)
 
         pgss_status = {
@@ -789,8 +828,8 @@ class PostgresReportGenerator:
             'vacuum_multixact_freeze_table_age'
         ]
 
-        # Query all PostgreSQL settings for autovacuum
-        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        # Query all PostgreSQL settings for autovacuum using last_over_time
+        settings_query = f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         result = self.query_instant(settings_query)
 
         autovacuum_data = {}
@@ -837,10 +876,10 @@ class PostgresReportGenerator:
         for db_name in databases:
             # Query btree bloat using multiple metrics for each database with last_over_time [1d]
             bloat_queries = {
-                'extra_size': f'last_over_time(pgwatch_pg_btree_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'extra_pct': f'last_over_time(pgwatch_pg_btree_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'bloat_size': f'last_over_time(pgwatch_pg_btree_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'bloat_pct': f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
+                'extra_size': f'last_over_time(pgwatch_pg_btree_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'extra_pct': f'last_over_time(pgwatch_pg_btree_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'bloat_size': f'last_over_time(pgwatch_pg_btree_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'bloat_pct': f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
             }
 
             bloated_indexes = {}
@@ -933,14 +972,18 @@ class PostgresReportGenerator:
             'max_stack_depth'
         ]
 
-        # Query all PostgreSQL settings for memory-related settings
-        settings_query = f'pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}'
+        # Query all PostgreSQL settings for memory-related settings using last_over_time
+        settings_query = f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         result = self.query_instant(settings_query)
 
         memory_data = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
-                setting_name = item['metric'].get('setting_name', 'unknown')
+                setting_name = item['metric'].get('setting_name', '')
+                
+                # Skip if no setting name
+                if not setting_name:
+                    continue
 
                 # Filter for memory-related settings
                 if setting_name in memory_settings:
@@ -958,6 +1001,8 @@ class PostgresReportGenerator:
                         "vartype": vartype,
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
+        else:
+            print(f"Warning: G001 - No settings data returned for cluster={cluster}, node_name={node_name}")
 
         # Calculate some memory usage estimates and recommendations
         memory_analysis = self._analyze_memory_settings(memory_data)
@@ -1071,16 +1116,20 @@ class PostgresReportGenerator:
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            print("Warning: F004 - No databases found")
 
         bloated_tables_by_db = {}
         for db_name in databases:
             # Query table bloat using multiple metrics for each database
+            # Try with 10h window first, then fall back to instant query
             bloat_queries = {
-                'real_size': f'last_over_time(pgwatch_pg_table_bloat_real_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'extra_size': f'last_over_time(pgwatch_pg_table_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'extra_pct': f'last_over_time(pgwatch_pg_table_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'bloat_size': f'last_over_time(pgwatch_pg_table_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
-                'bloat_pct': f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[1d])',
+                'real_size': f'last_over_time(pgwatch_pg_table_bloat_real_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'extra_size': f'last_over_time(pgwatch_pg_table_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'extra_pct': f'last_over_time(pgwatch_pg_table_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'bloat_size': f'last_over_time(pgwatch_pg_table_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'bloat_pct': f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
             }
 
             bloated_tables = {}
@@ -1106,6 +1155,9 @@ class PostgresReportGenerator:
 
                         value = float(item['value'][1]) if item.get('value') else 0
                         bloated_tables[table_key][metric_type] = value
+                else:
+                    if metric_type == 'real_size':  # Only log once per database
+                        print(f"Warning: F004 - No bloat data for database {db_name}, metric {metric_type}")
 
             # Convert to list and add pretty formatting
             bloated_tables_list = []
@@ -1148,6 +1200,9 @@ class PostgresReportGenerator:
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            print("Warning: K001 - No databases found")
 
         # Calculate time range
         end_time = datetime.now()
@@ -1155,8 +1210,12 @@ class PostgresReportGenerator:
 
         queries_by_db = {}
         for db_name in databases:
+            print(f"K001: Processing database {db_name}...")
             # Get pg_stat_statements metrics for this database
             query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+            if not query_metrics:
+                print(f"Warning: K001 - No query metrics returned for database {db_name}")
 
             # Sort by calls (descending)
             sorted_metrics = sorted(query_metrics, key=lambda x: x.get('calls', 0), reverse=True)
@@ -1199,6 +1258,9 @@ class PostgresReportGenerator:
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            print("Warning: K003 - No databases found")
 
         # Calculate time range
         end_time = datetime.now()
@@ -1206,8 +1268,12 @@ class PostgresReportGenerator:
 
         queries_by_db = {}
         for db_name in databases:
+            print(f"K003: Processing database {db_name}...")
             # Get pg_stat_statements metrics for this database
             query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+            if not query_metrics:
+                print(f"Warning: K003 - No query metrics returned for database {db_name}")
 
             # Sort by total_time (descending) and limit to top N per database
             sorted_metrics = sorted(query_metrics, key=lambda x: x.get('total_time', 0), reverse=True)[:limit]
@@ -1444,10 +1510,11 @@ class PostgresReportGenerator:
             closest_value = min(values, key=lambda x: abs(float(x[0]) - timestamp.timestamp()))
 
             # Create unique key for this query
+            # Note: 'user' label may not exist in all metric configurations
             key = (
                 metric.get('datname', ''),
                 metric.get('queryid', ''),
-                metric.get('user', ''),
+                metric.get('user', metric.get('tag_user', '')),  # Fallback to tag_user or empty
                 metric.get('instance', '')
             )
 
@@ -1488,32 +1555,48 @@ class PostgresReportGenerator:
         else:
             return f"{value:.2f} {units[unit_index]}"
 
-    def format_report_data(self, check_id: str, data: Dict[str, Any], host: str = "target-database") -> Dict[str, Any]:
+    def format_report_data(self, check_id: str, data: Dict[str, Any], host: str = "target-database", 
+                          all_hosts: Dict[str, List[str]] = None) -> Dict[str, Any]:
         """
         Format data to match template structure.
         
         Args:
             check_id: The check identifier
-            data: The data to format
-            host: Host identifier
+            data: The data to format (can be a dict with node keys if combining multiple nodes)
+            host: Primary host identifier (used if all_hosts not provided)
+            all_hosts: Optional dict with 'primary' and 'standbys' keys for multi-node reports
             
         Returns:
             Dictionary formatted for templates
         """
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
-        template_data = {
-            "checkId": check_id,
-            "timestamptz": now.isoformat(),
-            "hosts": {
-                "master": host,
-                "replicas": []
-            },
-            "results": {
+        # If all_hosts is provided, use it; otherwise use the single host as primary
+        if all_hosts:
+            hosts = all_hosts
+        else:
+            hosts = {
+                "primary": host,
+                "standbys": [],
+            }
+
+        # Handle both single-node and multi-node data structures
+        if isinstance(data, dict) and any(isinstance(v, dict) and 'data' in v for v in data.values()):
+            # Multi-node structure: data is already in {node_name: {"data": ...}} format
+            results = data
+        else:
+            # Single-node structure: wrap data in host key
+            results = {
                 host: {
                     "data": data
                 }
             }
+
+        template_data = {
+            "checkId": check_id,
+            "timestamptz": now.isoformat(),
+            "nodes": hosts,
+            "results": results
         }
 
         return template_data
@@ -1680,36 +1763,171 @@ class PostgresReportGenerator:
         }
         return descriptions.get(metric_name, '')
 
-    def generate_all_reports(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+    def generate_all_reports(self, cluster: str = "local", node_name: str = None, combine_nodes: bool = True) -> Dict[str, Any]:
         """
         Generate all reports.
         
         Args:
             cluster: Cluster name
-            node_name: Node name
+            node_name: Node name (if None and combine_nodes=True, will query all nodes)
+            combine_nodes: If True, combine primary and replica reports into single report
             
         Returns:
             Dictionary containing all reports
         """
         reports = {}
 
-        # Generate each report
-        reports['A002'] = self.generate_a002_version_report(cluster, node_name)
-        reports['A003'] = self.generate_a003_settings_report(cluster, node_name)
-        reports['A004'] = self.generate_a004_cluster_report(cluster, node_name)
-        reports['A007'] = self.generate_a007_altered_settings_report(cluster, node_name)
-        reports['D004'] = self.generate_d004_pgstat_settings_report(cluster, node_name)
-        reports['F001'] = self.generate_f001_autovacuum_settings_report(cluster, node_name)
-        reports['F004'] = self.generate_f004_heap_bloat_report(cluster, node_name)
-        reports['F005'] = self.generate_f005_btree_bloat_report(cluster, node_name)
-        reports['G001'] = self.generate_g001_memory_settings_report(cluster, node_name)
-        reports['H001'] = self.generate_h001_invalid_indexes_report(cluster, node_name)
-        reports['H002'] = self.generate_h002_unused_indexes_report(cluster, node_name)
-        reports['H004'] = self.generate_h004_redundant_indexes_report(cluster, node_name)
-        reports['K001'] = self.generate_k001_query_calls_report(cluster, node_name)
-        reports['K003'] = self.generate_k003_top_queries_report(cluster, node_name)
+        # Determine which nodes to process
+        if combine_nodes and node_name is None:
+            # Get all nodes and combine them
+            all_nodes = self.get_all_nodes(cluster)
+            nodes_to_process = []
+            if all_nodes["primary"]:
+                nodes_to_process.append(all_nodes["primary"])
+            nodes_to_process.extend(all_nodes["standbys"])
+            
+            # If no nodes found, fall back to default
+            if not nodes_to_process:
+                print(f"Warning: No nodes found in cluster '{cluster}', using default 'node-01'")
+                nodes_to_process = ["node-01"]
+                all_nodes = {"primary": "node-01", "standbys": []}
+            else:
+                print(f"Combining reports from nodes: {nodes_to_process}")
+        else:
+            # Use single node (backward compatibility)
+            if node_name is None:
+                node_name = "node-01"
+            nodes_to_process = [node_name]
+            all_nodes = {"primary": node_name, "standbys": []}
+
+        # Generate each report type
+        report_types = [
+            ('A002', self.generate_a002_version_report),
+            ('A003', self.generate_a003_settings_report),
+            ('A004', self.generate_a004_cluster_report),
+            ('A007', self.generate_a007_altered_settings_report),
+            ('D004', self.generate_d004_pgstat_settings_report),
+            ('F001', self.generate_f001_autovacuum_settings_report),
+            ('F004', self.generate_f004_heap_bloat_report),
+            ('F005', self.generate_f005_btree_bloat_report),
+            ('G001', self.generate_g001_memory_settings_report),
+            ('H001', self.generate_h001_invalid_indexes_report),
+            ('H002', self.generate_h002_unused_indexes_report),
+            ('H004', self.generate_h004_redundant_indexes_report),
+            ('K001', self.generate_k001_query_calls_report),
+            ('K003', self.generate_k003_top_queries_report),
+        ]
+
+        for check_id, report_func in report_types:
+            if len(nodes_to_process) == 1:
+                # Single node - generate report normally
+                reports[check_id] = report_func(cluster, nodes_to_process[0])
+            else:
+                # Multiple nodes - combine reports
+                combined_results = {}
+                for node in nodes_to_process:
+                    print(f"Generating {check_id} report for node {node}...")
+                    node_report = report_func(cluster, node)
+                    # Extract the data from the node report
+                    if 'results' in node_report and node in node_report['results']:
+                        combined_results[node] = node_report['results'][node]
+                
+                # Create combined report with all nodes
+                reports[check_id] = self.format_report_data(
+                    check_id, 
+                    combined_results, 
+                    all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
+                    all_nodes
+                )
 
         return reports
+
+    def get_all_clusters(self) -> List[str]:
+        """
+        Get all unique cluster names (projects) from the metrics.
+        
+        Returns:
+            List of cluster names
+        """
+        # Query for all clusters using last_over_time to get recent values
+        clusters_query = 'last_over_time(pgwatch_settings_configured[3h])'
+        result = self.query_instant(clusters_query)
+        
+        cluster_set = set()
+        
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                cluster_name = item['metric'].get('cluster', '')
+                if cluster_name:
+                    cluster_set.add(cluster_name)
+        else:
+            # Debug output
+            print(f"Debug - get_all_clusters query status: {result.get('status')}")
+            print(f"Debug - get_all_clusters result count: {len(result.get('data', {}).get('result', []))}")
+        
+        if cluster_set:
+            print(f"Found {len(cluster_set)} cluster(s): {sorted(list(cluster_set))}")
+        
+        return sorted(list(cluster_set))
+
+    def get_all_nodes(self, cluster: str = "local") -> Dict[str, List[str]]:
+        """
+        Get all nodes (primary and replicas) from the metrics.
+        Uses pgwatch_db_stats_in_recovery_int to determine primary vs standby.
+        
+        Args:
+            cluster: Cluster name
+            
+        Returns:
+            Dictionary with 'primary' and 'standbys' keys containing node names
+        """
+        # Query for all nodes in the cluster using last_over_time
+        nodes_query = f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}"}}[3h])'
+        result = self.query_instant(nodes_query)
+        
+        nodes = {"primary": None, "standbys": []}
+        node_set = set()
+        
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                node_name = item['metric'].get('node_name', '')
+                if node_name and node_name not in node_set:
+                    node_set.add(node_name)
+        
+        # Convert to sorted list
+        node_list = sorted(list(node_set))
+        
+        if node_list:
+            print(f"  Found {len(node_list)} node(s) in cluster '{cluster}': {node_list}")
+        else:
+            print(f"  Warning: No nodes found in cluster '{cluster}'")
+        
+        # Use pgwatch_db_stats_in_recovery_int to determine primary vs standby
+        # in_recovery = 0 means primary, in_recovery = 1 means standby
+        for node_name in node_list:
+            recovery_query = f'last_over_time(pgwatch_db_stats_in_recovery_int{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+            recovery_result = self.query_instant(recovery_query)
+            
+            is_standby = False
+            if recovery_result.get('status') == 'success' and recovery_result.get('data', {}).get('result'):
+                if recovery_result['data']['result']:
+                    in_recovery_value = float(recovery_result['data']['result'][0]['value'][1])
+                    is_standby = (in_recovery_value > 0)
+                    print(f"  Node '{node_name}': in_recovery={int(in_recovery_value)} ({'standby' if is_standby else 'primary'})")
+            
+            if is_standby:
+                nodes["standbys"].append(node_name)
+            else:
+                # First non-standby node becomes primary
+                if nodes["primary"] is None:
+                    nodes["primary"] = node_name
+                else:
+                    # If we have multiple primaries (shouldn't happen), treat as replicas
+                    print(f"  Warning: Multiple primary nodes detected, treating '{node_name}' as replica")
+                    nodes["standbys"].append(node_name)
+        
+        print(f"  Result: primary={nodes['primary']}, replicas={nodes['standbys']}")
+        return nodes
 
     def get_all_databases(self, cluster: str = "local", node_name: str = "node-01") -> List[str]:
         """
@@ -1736,15 +1954,15 @@ class PostgresReportGenerator:
                 databases.append(name)
 
         # 1) Generic per-database metric
-        wrap_q = f'pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}"}}'
+        wrap_q = f'last_over_time(pgwatch_pg_database_wraparound_age_datfrozenxid{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         wrap_res = self.query_instant(wrap_q)
         if wrap_res.get('status') == 'success' and wrap_res.get('data', {}).get('result'):
             for item in wrap_res['data']['result']:
                 add_db(item["metric"].get("datname", ""))
 
         # 2) Custom reports using dbname
-        unused_q = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
-        redun_q = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[10h])'
+        unused_q = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        redun_q = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         for q in (unused_q, redun_q):
             res = self.query_instant(q)
             if res.get('status') == 'success' and res.get('data', {}).get('result'):
@@ -1752,7 +1970,7 @@ class PostgresReportGenerator:
                     add_db(item["metric"].get("dbname", ""))
 
         # 3) Btree bloat family
-        bloat_q = f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}"}}[1d])'
+        bloat_q = f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         bloat_res = self.query_instant(bloat_q)
         if bloat_res.get('status') == 'success' and bloat_res.get('data', {}).get('result'):
             for item in bloat_res['data']['result']:
@@ -1808,6 +2026,8 @@ class PostgresReportGenerator:
         # Get metrics at start and end times
         start_data = []
         end_data = []
+        
+        metrics_found = 0
 
         for metric in all_metrics:
             metric_with_filters = f'{metric}{filter_str}'
@@ -1818,6 +2038,7 @@ class PostgresReportGenerator:
                                                 start_time + timedelta(minutes=1))
                 if start_result:
                     start_data.extend(start_result)
+                    metrics_found += 1
 
                 # Query metrics around end time  
                 end_result = self.query_range(metric_with_filters, end_time - timedelta(minutes=1),
@@ -1828,14 +2049,35 @@ class PostgresReportGenerator:
             except Exception as e:
                 print(f"Warning: Failed to query metric {metric} for database {db_name}: {e}")
                 continue
+        
+        if metrics_found == 0:
+            print(f"Warning: No pg_stat_statements metrics found for database {db_name}")
+            print(f"  Checked time range: {start_time.isoformat()} to {end_time.isoformat()}")
 
         # Process the data to calculate differences
-        return self._process_pgss_data(start_data, end_data, start_time, end_time, METRIC_NAME_MAPPING)
+        result = self._process_pgss_data(start_data, end_data, start_time, end_time, METRIC_NAME_MAPPING)
+        
+        if not result:
+            print(f"Warning: _process_pgss_data returned empty result for database {db_name}")
+            
+        return result
 
-    def create_report(self, api_url, token, project, epoch):
+    def create_report(self, api_url, token, project_name, epoch):
+        """
+        Create a new report in the API.
+        
+        Args:
+            api_url: API URL
+            token: API token
+            project_name: Project name (cluster identifier)
+            epoch: Epoch identifier
+            
+        Returns:
+            Report ID
+        """
         request_data = {
             "access_token": token,
-            "project": project,
+            "project": project_name,
             "epoch": epoch,
         }
 
@@ -1878,14 +2120,17 @@ def make_request(api_url, endpoint, request_data):
 
 def main():
     parser = argparse.ArgumentParser(description='Generate PostgreSQL reports using PromQL')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument('--prometheus-url', default='http://sink-prometheus:9090',
                         help='Prometheus URL (default: http://sink-prometheus:9090)')
     parser.add_argument('--postgres-sink-url', default='postgresql://pgwatch@sink-postgres:5432/measurements',
                         help='Postgres sink connection string (default: postgresql://pgwatch@sink-postgres:5432/measurements)')
-    parser.add_argument('--cluster', default='local',
-                        help='Cluster name (default: local)')
-    parser.add_argument('--node-name', default='node-01',
-                        help='Node name (default: node-01)')
+    parser.add_argument('--cluster', default=None,
+                        help='Cluster name (default: auto-detect all clusters)')
+    parser.add_argument('--node-name', default=None,
+                        help='Node name (default: auto-detect all nodes when combine-nodes is true)')
+    parser.add_argument('--no-combine-nodes', action='store_true', default=False,
+                        help='Disable combining primary and replica reports into single report')
     parser.add_argument('--check-id',
                         choices=['A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002',
                                  'H004', 'K001', 'K003', 'ALL'],
@@ -1894,7 +2139,8 @@ def main():
                         help='Output file (default: stdout)')
     parser.add_argument('--api-url', default='https://postgres.ai/api/general')
     parser.add_argument('--token', default='')
-    parser.add_argument('--project', default='project-name')
+    parser.add_argument('--project-name', default='project-name',
+                        help='Project name for API upload (default: project-name)')
     parser.add_argument('--epoch', default='1')
     parser.add_argument('--no-upload', action='store_true', default=False,
                         help='Do not upload reports to the API')
@@ -1909,61 +2155,106 @@ def main():
         sys.exit(1)
 
     try:
-        if args.check_id == 'ALL' or args.check_id is None:
-            # Generate all reports
-            if not args.no_upload:
-                report_id = generator.create_report(args.api_url, args.token, args.project, args.epoch)
-            reports = generator.generate_all_reports(args.cluster, args.node_name)
-            for report in reports:
-                json.dump(reports[report], open(f"{report}.json", "w"))
-                if not args.no_upload:
-                    generator.upload_report_file(args.api_url, args.token, report_id, f"{report}.json")
-            if args.output == '-':
-                pass
-            else:
-                with open(args.output, 'w') as f:
-                    json.dump(reports, f, indent=2)
-                print(f"All reports written to {args.output}")
+        # Discover all clusters if not specified
+        clusters_to_process = []
+        if args.cluster:
+            clusters_to_process = [args.cluster]
         else:
-            # Generate specific report
-            if args.check_id == 'A002':
-                report = generator.generate_a002_version_report(args.cluster, args.node_name)
-            elif args.check_id == 'A003':
-                report = generator.generate_a003_settings_report(args.cluster, args.node_name)
-            elif args.check_id == 'A004':
-                report = generator.generate_a004_cluster_report(args.cluster, args.node_name)
-            elif args.check_id == 'A007':
-                report = generator.generate_a007_altered_settings_report(args.cluster, args.node_name)
-            elif args.check_id == 'D004':
-                report = generator.generate_d004_pgstat_settings_report(args.cluster, args.node_name)
-            elif args.check_id == 'F001':
-                report = generator.generate_f001_autovacuum_settings_report(args.cluster, args.node_name)
-            elif args.check_id == 'F004':
-                report = generator.generate_f004_heap_bloat_report(args.cluster, args.node_name)
-            elif args.check_id == 'F005':
-                report = generator.generate_f005_btree_bloat_report(args.cluster, args.node_name)
-            elif args.check_id == 'G001':
-                report = generator.generate_g001_memory_settings_report(args.cluster, args.node_name)
-            elif args.check_id == 'G003':
-                report = generator.generate_g003_database_stats_report(args.cluster, args.node_name)
-            elif args.check_id == 'H001':
-                report = generator.generate_h001_invalid_indexes_report(args.cluster, args.node_name)
-            elif args.check_id == 'H002':
-                report = generator.generate_h002_unused_indexes_report(args.cluster, args.node_name)
-            elif args.check_id == 'H004':
-                report = generator.generate_h004_redundant_indexes_report(args.cluster, args.node_name)
-            elif args.check_id == 'K001':
-                report = generator.generate_k001_query_calls_report(args.cluster, args.node_name)
-            elif args.check_id == 'K003':
-                report = generator.generate_k003_top_queries_report(args.cluster, args.node_name)
-
-            if args.output == '-':
-                print(json.dumps(report, indent=2))
+            clusters_to_process = generator.get_all_clusters()
+            if not clusters_to_process:
+                print("Warning: No clusters found, using default 'local'")
+                clusters_to_process = ['local']
             else:
-                with open(args.output, 'w') as f:
-                    json.dump(report, f, indent=2)
+                print(f"Discovered clusters: {clusters_to_process}")
+        
+        # Process each cluster
+        for cluster in clusters_to_process:
+            print(f"\n{'='*60}")
+            print(f"Processing cluster: {cluster}")
+            print(f"{'='*60}\n")
+            
+            # Set default node_name if not provided and not combining nodes
+            combine_nodes = not args.no_combine_nodes
+            if args.node_name is None and not combine_nodes:
+                args.node_name = "node-01"
+                
+            if args.check_id == 'ALL' or args.check_id is None:
+                # Generate all reports for this cluster
                 if not args.no_upload:
-                    generator.upload_report_file(args.api_url, args.token, args.project, args.epoch, args.output)
+                    # Use cluster name as project name if not specified
+                    project_name = args.project_name if args.project_name != 'project-name' else cluster
+                    report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
+                
+                reports = generator.generate_all_reports(cluster, args.node_name, combine_nodes)
+                
+                # Save reports with cluster name prefix
+                for report in reports:
+                    output_filename = f"{cluster}_{report}.json" if len(clusters_to_process) > 1 else f"{report}.json"
+                    with open(output_filename, "w") as f:
+                        json.dump(reports[report], f, indent=2)
+                    print(f"Generated report: {output_filename}")
+                    if not args.no_upload:
+                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                
+                if args.output == '-':
+                    pass
+                elif len(clusters_to_process) == 1:
+                    # Single cluster - use specified output
+                    with open(args.output, 'w') as f:
+                        json.dump(reports, f, indent=2)
+                    print(f"All reports written to {args.output}")
+                else:
+                    # Multiple clusters - create combined output
+                    combined_output = f"{cluster}_all_reports.json"
+                    with open(combined_output, 'w') as f:
+                        json.dump(reports, f, indent=2)
+                    print(f"All reports for cluster {cluster} written to {combined_output}")
+            else:
+                # Generate specific report - use node_name or default
+                if args.node_name is None:
+                    args.node_name = "node-01"
+                    
+                if args.check_id == 'A002':
+                    report = generator.generate_a002_version_report(cluster, args.node_name)
+                elif args.check_id == 'A003':
+                    report = generator.generate_a003_settings_report(cluster, args.node_name)
+                elif args.check_id == 'A004':
+                    report = generator.generate_a004_cluster_report(cluster, args.node_name)
+                elif args.check_id == 'A007':
+                    report = generator.generate_a007_altered_settings_report(cluster, args.node_name)
+                elif args.check_id == 'D004':
+                    report = generator.generate_d004_pgstat_settings_report(cluster, args.node_name)
+                elif args.check_id == 'F001':
+                    report = generator.generate_f001_autovacuum_settings_report(cluster, args.node_name)
+                elif args.check_id == 'F004':
+                    report = generator.generate_f004_heap_bloat_report(cluster, args.node_name)
+                elif args.check_id == 'F005':
+                    report = generator.generate_f005_btree_bloat_report(cluster, args.node_name)
+                elif args.check_id == 'G001':
+                    report = generator.generate_g001_memory_settings_report(cluster, args.node_name)
+                elif args.check_id == 'H001':
+                    report = generator.generate_h001_invalid_indexes_report(cluster, args.node_name)
+                elif args.check_id == 'H002':
+                    report = generator.generate_h002_unused_indexes_report(cluster, args.node_name)
+                elif args.check_id == 'H004':
+                    report = generator.generate_h004_redundant_indexes_report(cluster, args.node_name)
+                elif args.check_id == 'K001':
+                    report = generator.generate_k001_query_calls_report(cluster, args.node_name)
+                elif args.check_id == 'K003':
+                    report = generator.generate_k003_top_queries_report(cluster, args.node_name)
+
+                output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
+                
+                if args.output == '-' and len(clusters_to_process) == 1:
+                    print(json.dumps(report, indent=2))
+                else:
+                    with open(output_filename, 'w') as f:
+                        json.dump(report, f, indent=2)
+                    print(f"Report written to {output_filename}")
+                    if not args.no_upload:
+                        project_name = args.project_name if args.project_name != 'project-name' else cluster
+                        report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
+                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
     except Exception as e:
         print(f"Error generating reports: {e}")
         raise e

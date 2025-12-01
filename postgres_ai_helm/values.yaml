@@ -74,7 +74,7 @@ flask:
 
 reporter:
   enabled: true
-  image: postgresai/reporter:latest
+  image: postgresai/reporter:1.0.2
   imagePullPolicy: IfNotPresent
   schedule: "0 */6 * * *"
   # Legacy: If clusterName/nodeName are set here, they override global settings
