@@ -12,7 +12,6 @@ metrics:
           queryid is not null
           and dbid = (select oid from pg_database where datname = current_database())
         order by total_exec_time desc
-        limit 1000;
     gauges:
       - '*' 
   
@@ -198,5 +197,5 @@ presets:
   full:
     description: "Full metrics for PostgreSQL storage"
     metrics:
-      pgss_queryid_queries: 300
+      pgss_queryid_queries: 30
       index_definitions: 3600
