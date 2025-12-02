@@ -8,7 +8,9 @@ metrics:
           queryid,
           query
         from pg_stat_statements
-        where queryid is not null
+        where
+          queryid is not null
+          and dbid = (select oid from pg_database where datname = current_database())
         order by total_exec_time desc
         limit 1000;
     gauges:
