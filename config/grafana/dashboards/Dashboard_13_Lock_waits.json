@@ -32,7 +32,7 @@
       },
       "id": 10,
       "panels": [],
-      "title": "Lock blocks overview",
+      "title": "Blocking overview",
       "type": "row"
     },
     {
@@ -40,7 +40,7 @@
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
       },
-      "description": "Number of active sessions waiting on heavyweight lock acquisition.",
+      "description": "Number of active lock conflicts (blocker→blocked pairs).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -135,13 +135,13 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "count(pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}) or vector(0)",
-          "legendFormat": "Lock blocks",
+          "expr": "count(pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"}) or vector(0)",
+          "legendFormat": "Lock conflicts",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Lock blocks count",
+      "title": "Lock conflicts",
       "type": "timeseries"
     },
     {
@@ -149,7 +149,7 @@
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
       },
-      "description": "Lock block duration over time, showing how long processes have been blocked by locks.",
+      "description": "How long sessions have been waiting for locks.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -241,7 +241,7 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "avg(pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"})",
+          "expr": "avg(pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"})",
           "legendFormat": "Average wait time",
           "range": true,
           "refId": "A"
@@ -252,13 +252,13 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "max(pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"})",
+          "expr": "max(pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"})",
           "legendFormat": "Max wait time",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Lock block duration",
+      "title": "Wait duration",
       "type": "timeseries"
     },
     {
@@ -266,7 +266,7 @@
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
       },
-      "description": "Lock blocks by lock type, showing which types of locks are causing the most contention.",
+      "description": "Distribution of blocking events by lock type.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -350,13 +350,13 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "count by (blocked_locktype) (pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"})",
+          "expr": "count by (blocked_locktype) (pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"})",
           "legendFormat": "{{blocked_locktype}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Lock blocks by lock type",
+      "title": "By lock type",
       "type": "timeseries"
     },
     {
@@ -364,7 +364,7 @@
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
       },
-      "description": "Blocker transaction duration over time, showing how long blocking transactions have been running.",
+      "description": "How long blocking transactions have been running.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -456,8 +456,8 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "avg(pgwatch_lock_waits_blocker_tx_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"})",
-          "legendFormat": "Average blocker tx duration",
+          "expr": "avg(pgwatch_lock_waits_blocker_tx_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"})",
+          "legendFormat": "Avg blocker age",
           "range": true,
           "refId": "A"
         },
@@ -467,13 +467,13 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "max(pgwatch_lock_waits_blocker_tx_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"})",
-          "legendFormat": "Max blocker tx duration",
+          "expr": "max(pgwatch_lock_waits_blocker_tx_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"})",
+          "legendFormat": "Max blocker age",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Blocker transaction duration",
+      "title": "Blocker age",
       "type": "timeseries"
     },
     {
@@ -481,7 +481,7 @@
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
       },
-      "description": "Lock blocks by table, showing which tables have the most lock contention.",
+      "description": "Which tables have the most lock contention.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -565,13 +565,13 @@
             "uid": "P7A0D6631BB10B34F"
           },
           "editorMode": "code",
-          "expr": "count by (blocked_table) (pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\", blocked_table!=\"\"})",
+          "expr": "count by (blocked_table) (pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\", blocked_table!=\"\"})",
           "legendFormat": "{{blocked_table}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Lock blocks by table",
+      "title": "By table",
       "type": "timeseries"
     },
     {
@@ -584,7 +584,7 @@
       },
       "id": 11,
       "panels": [],
-      "title": "Lock blocks details",
+      "title": "Blocking tree",
       "type": "row"
     },
     {
@@ -592,7 +592,7 @@
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
       },
-      "description": "Detailed lock block information showing blocked and blocking processes with their users, applications, lock types, tables, query IDs, and block durations.",
+      "description": "Current blocking relationships with process details.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -953,7 +953,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$db_name\"}",
+          "expr": "pgwatch_lock_waits_blocked_ms{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=~\"$db_name\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -961,7 +961,7 @@
           "refId": "A"
         }
       ],
-      "title": "Lock blocks details",
+      "title": "Blocking tree",
       "transformations": [
         {
           "id": "organize",
@@ -980,22 +980,22 @@
             },
             "indexByName": {
               "Time": 0,
-              "datname": 1,
-              "blocked_pid": 2,
-              "blocked_user": 3,
-              "blocked_appname": 4,
-              "blocked_locktype": 5,
-              "blocked_mode": 6,
-              "blocked_table": 7,
-              "blocked_query_id": 8,
-              "Value": 9,
-              "blocker_pid": 10,
-              "blocker_user": 11,
-              "blocker_appname": 12,
-              "blocker_locktype": 13,
-              "blocker_mode": 14,
-              "blocker_table": 15,
-              "blocker_query_id": 16
+              "blocked_pid": 1,
+              "blocker_pid": 2,
+              "Value": 3,
+              "blocked_user": 4,
+              "blocker_user": 5,
+              "blocked_appname": 6,
+              "blocker_appname": 7,
+              "blocked_locktype": 8,
+              "blocker_locktype": 9,
+              "blocked_mode": 10,
+              "blocker_mode": 11,
+              "blocked_table": 12,
+              "blocker_table": 13,
+              "blocked_query_id": 14,
+              "blocker_query_id": 15,
+              "datname": 16
             },
             "renameByName": {}
           }
@@ -1075,7 +1075,8 @@
         },
         "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
+        "allValue": ".*",
         "multi": false,
         "name": "db_name",
         "options": [],
@@ -1106,8 +1107,8 @@
     ]
   },
   "timezone": "",
-  "title": "13. Lock blocks details",
-  "uid": "lock-waits-details",
+  "title": "13. Lock contention",
+  "uid": "lock-contention",
   "version": 1,
   "weekStart": ""
 }
