@@ -1015,6 +1015,7 @@
           ]
         },
         "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "includeAll": true,
         "label": "DB name",
         "multi": true,
         "name": "db_name",
