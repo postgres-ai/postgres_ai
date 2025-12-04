@@ -127,7 +127,6 @@ metrics:
           blk_read_time,
           blk_write_time,
           extract(epoch from (now() - pg_postmaster_start_time()))::int8 as postmaster_uptime_s,
-          extract(epoch from (now() - pg_backup_start_time()))::int8 as backup_duration_s,
           case when pg_is_in_recovery() then 1 else 0 end as in_recovery_int,
           system_identifier::text as tag_sys_id,
           (select count(*) from pg_index i
@@ -2286,11 +2285,42 @@ metrics:
               join pg_namespace n on n.oid = p.pronamespace
               where p.proname = 'pg_ls_multixactdir' and n.nspname = 'rds_tools'
             ) as has_rds_fn,
+            exists (
+              select
+              from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where p.proname = 'aurora_stat_file' and n.nspname = 'pg_catalog'
+            ) as has_aurora_fn,
             exists (select from pg_proc where proname = 'pg_ls_dir')    as has_pg_ls_dir_func,
             exists (select from pg_proc where proname = 'pg_stat_file') as has_pg_stat_file_func
         ),
         can_local as (
           select (has_pg_ls_dir_func and has_pg_stat_file_func) as ok from env
+        ),
+        -- Use query_to_xml to safely execute Aurora-specific multixact query.
+        -- Aurora uses aurora_stat_file() function instead of rds_tools.pg_ls_multixactdir().
+        aurora_probe_xml as (
+          select query_to_xml($q$
+            with files as (
+              select filename, allocated_bytes, used_bytes
+              from aurora_stat_file()
+              where filename like 'pg_multixact/%'
+            ),
+            members as (
+              select sum(used_bytes)::bigint as sz from files where filename like 'pg_multixact/members%'
+            ),
+            offsets as (
+              select sum(used_bytes)::bigint as sz from files where filename like 'pg_multixact/offsets%'
+            ),
+            has_rows as (
+              select exists(select 1 from files) as any_rows
+            )
+            select
+              case when (select any_rows from has_rows) then coalesce((select sz from members), 0) end as members_bytes,
+              case when (select any_rows from has_rows) then coalesce((select sz from offsets), 0) end as offsets_bytes,
+              case when (select any_rows from has_rows) then 0 else 1 end as status_code
+          $q$, true, true, '') as x
+          where (select has_aurora_fn from env)
         ),
         -- Use query_to_xml to safely execute RDS-specific multixact directory listing query.
         -- The XML wrapper allows the query to fail gracefully if rds_tools.pg_ls_multixactdir()
@@ -2315,7 +2345,7 @@ metrics:
               case when (select any_rows from has_rows) then coalesce((select sz from offsets), 0) end as offsets_bytes,
               case when (select any_rows from has_rows) then 0 else 1 end as status_code
           $q$, true, true, '') as x
-          where (select has_rds_fn from env)
+          where (select has_rds_fn from env) and not (select has_aurora_fn from env)
         ),
         -- Use query_to_xml to safely execute standard Postgres multixact directory listing query.
         -- The XML wrapper allows the query to fail gracefully if pg_stat_file() or pg_ls_dir()
@@ -2345,9 +2375,11 @@ metrics:
               case when (select has_any from flags) then coalesce((select sz from offsets), 0) end as offsets_bytes,
               case when (select has_any from flags) then 0 else 1 end as status_code
           $q$, true, true, '') as x
-          where not (select has_rds_fn from env) and (select ok from can_local)
+          where not (select has_rds_fn from env) and not (select has_aurora_fn from env) and (select ok from can_local)
         ),
         picked as (
+          select * from aurora_probe_xml
+          union all
           select * from rds_probe_xml
           union all
           select * from local_probe_xml
