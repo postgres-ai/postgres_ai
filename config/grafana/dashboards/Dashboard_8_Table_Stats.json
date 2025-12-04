@@ -414,7 +414,7 @@
               "root_selector": "",
               "source": "url",
               "type": "csv",
-              "url": "http://flask-pgss-api:5000/table_info/csv",
+              "url": "http://flask-pgss-api:8000/table_info/csv",
               "url_options": {
                 "data": "",
                 "method": "GET",

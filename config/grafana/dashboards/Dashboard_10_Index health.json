@@ -166,7 +166,7 @@
               "root_selector": "",
               "source": "url",
               "type": "csv",
-              "url": "http://flask-pgss-api:5000/btree_bloat/csv",
+              "url": "http://flask-pgss-api:8000/btree_bloat/csv",
               "url_options": {
                 "data": "",
                 "method": "GET",
