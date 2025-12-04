@@ -274,7 +274,7 @@ class PostgresReportGenerator:
             'active_connections': f'sum(last_over_time(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}", state="active"}}[3h]))',
             'idle_connections': f'sum(last_over_time(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}", state="idle"}}[3h]))',
             'total_connections': f'sum(last_over_time(pgwatch_pg_stat_activity_count{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
-            'database_sizes': f'sum(last_over_time(pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
+            'database_sizes': f'sum(last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h]))',
             'cache_hit_ratio': f'sum(last_over_time(pgwatch_db_stats_blks_hit{{cluster="{cluster}", node_name="{node_name}"}}[3h])) / clamp_min(sum(last_over_time(pgwatch_db_stats_blks_hit{{cluster="{cluster}", node_name="{node_name}"}}[3h])) + sum(last_over_time(pgwatch_db_stats_blks_read{{cluster="{cluster}", node_name="{node_name}"}}[3h])), 1) * 100',
             'transactions_per_sec': f'sum(rate(pgwatch_db_stats_xact_commit{{cluster="{cluster}", node_name="{node_name}"}}[5m])) + sum(rate(pgwatch_db_stats_xact_rollback{{cluster="{cluster}", node_name="{node_name}"}}[5m]))',
             'checkpoints_per_sec': f'sum(rate(pgwatch_pg_stat_bgwriter_checkpoints_timed{{cluster="{cluster}", node_name="{node_name}"}}[5m])) + sum(rate(pgwatch_pg_stat_bgwriter_checkpoints_req{{cluster="{cluster}", node_name="{node_name}"}}[5m]))',
@@ -297,7 +297,7 @@ class PostgresReportGenerator:
                     }
 
         # Get database sizes
-        db_sizes_query = f'last_over_time(pgwatch_pg_database_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         db_sizes_result = self.query_instant(db_sizes_query)
         database_sizes = {}
 
@@ -374,6 +374,17 @@ class PostgresReportGenerator:
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
 
+        # Get database sizes
+        db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        db_sizes_result = self.query_instant(db_sizes_query)
+        database_sizes = {}
+
+        if db_sizes_result.get('status') == 'success' and db_sizes_result.get('data', {}).get('result'):
+            for result in db_sizes_result['data']['result']:
+                db_name = result['metric'].get('datname', 'unknown')
+                size_bytes = float(result['value'][1])
+                database_sizes[db_name] = size_bytes
+
         invalid_indexes_by_db = {}
         for db_name in databases:
             # Query invalid indexes for each database
@@ -408,11 +419,14 @@ class PostgresReportGenerator:
                     invalid_indexes.append(invalid_index)
                     total_size += index_size_bytes
 
+            db_size_bytes = database_sizes.get(db_name, 0)
             invalid_indexes_by_db[db_name] = {
                 "invalid_indexes": invalid_indexes,
                 "total_count": len(invalid_indexes),
                 "total_size_bytes": total_size,
-                "total_size_pretty": self.format_bytes(total_size)
+                "total_size_pretty": self.format_bytes(total_size),
+                "database_size_bytes": db_size_bytes,
+                "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
         return self.format_report_data("H001", invalid_indexes_by_db, node_name)
@@ -432,6 +446,17 @@ class PostgresReportGenerator:
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
+
+        # Get database sizes
+        db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        db_sizes_result = self.query_instant(db_sizes_query)
+        database_sizes = {}
+
+        if db_sizes_result.get('status') == 'success' and db_sizes_result.get('data', {}).get('result'):
+            for result in db_sizes_result['data']['result']:
+                db_name = result['metric'].get('datname', 'unknown')
+                size_bytes = float(result['value'][1])
+                database_sizes[db_name] = size_bytes
 
         # Query postmaster uptime to get startup time
         postmaster_uptime_query = f'last_over_time(pgwatch_db_stats_postmaster_uptime_s{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
@@ -509,11 +534,14 @@ class PostgresReportGenerator:
             
             total_unused_size = sum(idx['index_size_bytes'] for idx in unused_indexes)
 
+            db_size_bytes = database_sizes.get(db_name, 0)
             unused_indexes_by_db[db_name] = {
                 "unused_indexes": unused_indexes,
                 "total_count": len(unused_indexes),
                 "total_size_bytes": total_unused_size,
                 "total_size_pretty": self.format_bytes(total_unused_size),
+                "database_size_bytes": db_size_bytes,
+                "database_size_pretty": self.format_bytes(db_size_bytes),
                 "stats_reset": {
                     "stats_reset_epoch": stats_reset_epoch,
                     "stats_reset_time": stats_reset_time,
@@ -541,6 +569,17 @@ class PostgresReportGenerator:
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
+
+        # Get database sizes
+        db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        db_sizes_result = self.query_instant(db_sizes_query)
+        database_sizes = {}
+
+        if db_sizes_result.get('status') == 'success' and db_sizes_result.get('data', {}).get('result'):
+            for result in db_sizes_result['data']['result']:
+                db_name = result['metric'].get('datname', 'unknown')
+                size_bytes = float(result['value'][1])
+                database_sizes[db_name] = size_bytes
 
         redundant_indexes_by_db = {}
         for db_name in databases:
@@ -606,11 +645,14 @@ class PostgresReportGenerator:
             # Sort by index size descending
             redundant_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
 
+            db_size_bytes = database_sizes.get(db_name, 0)
             redundant_indexes_by_db[db_name] = {
                 "redundant_indexes": redundant_indexes,
                 "total_count": len(redundant_indexes),
                 "total_size_bytes": total_size,
-                "total_size_pretty": self.format_bytes(total_size)
+                "total_size_pretty": self.format_bytes(total_size),
+                "database_size_bytes": db_size_bytes,
+                "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
         return self.format_report_data("H004", redundant_indexes_by_db, node_name)
@@ -872,6 +914,17 @@ class PostgresReportGenerator:
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
 
+        # Get database sizes
+        db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        db_sizes_result = self.query_instant(db_sizes_query)
+        database_sizes = {}
+
+        if db_sizes_result.get('status') == 'success' and db_sizes_result.get('data', {}).get('result'):
+            for result in db_sizes_result['data']['result']:
+                db_name = result['metric'].get('datname', 'unknown')
+                size_bytes = float(result['value'][1])
+                database_sizes[db_name] = size_bytes
+
         bloated_indexes_by_db = {}
         for db_name in databases:
             # Query btree bloat using multiple metrics for each database with last_over_time [1d]
@@ -922,11 +975,14 @@ class PostgresReportGenerator:
             # Sort by bloat percentage descending
             bloated_indexes_list.sort(key=lambda x: x['bloat_pct'], reverse=True)
 
+            db_size_bytes = database_sizes.get(db_name, 0)
             bloated_indexes_by_db[db_name] = {
                 "bloated_indexes": bloated_indexes_list,
                 "total_count": len(bloated_indexes_list),
                 "total_bloat_size_bytes": total_bloat_size,
-                "total_bloat_size_pretty": self.format_bytes(total_bloat_size)
+                "total_bloat_size_pretty": self.format_bytes(total_bloat_size),
+                "database_size_bytes": db_size_bytes,
+                "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
         return self.format_report_data("F005", bloated_indexes_by_db, node_name)
@@ -1120,6 +1176,17 @@ class PostgresReportGenerator:
         if not databases:
             print("Warning: F004 - No databases found")
 
+        # Get database sizes
+        db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        db_sizes_result = self.query_instant(db_sizes_query)
+        database_sizes = {}
+
+        if db_sizes_result.get('status') == 'success' and db_sizes_result.get('data', {}).get('result'):
+            for result in db_sizes_result['data']['result']:
+                db_name = result['metric'].get('datname', 'unknown')
+                size_bytes = float(result['value'][1])
+                database_sizes[db_name] = size_bytes
+
         bloated_tables_by_db = {}
         for db_name in databases:
             # Query table bloat using multiple metrics for each database
@@ -1174,11 +1241,14 @@ class PostgresReportGenerator:
             # Sort by bloat percentage descending
             bloated_tables_list.sort(key=lambda x: x['bloat_pct'], reverse=True)
 
+            db_size_bytes = database_sizes.get(db_name, 0)
             bloated_tables_by_db[db_name] = {
                 "bloated_tables": bloated_tables_list,
                 "total_count": len(bloated_tables_list),
                 "total_bloat_size_bytes": total_bloat_size,
-                "total_bloat_size_pretty": self.format_bytes(total_bloat_size)
+                "total_bloat_size_pretty": self.format_bytes(total_bloat_size),
+                "database_size_bytes": db_size_bytes,
+                "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
         return self.format_report_data("F004", bloated_tables_by_db, node_name)

@@ -165,7 +165,7 @@ def test_generate_a004_cluster_report(
     generator: PostgresReportGenerator,
 ) -> None:
     def fake_query(query: str) -> dict[str, Any]:
-        if "pgwatch_pg_database_size_bytes" in query and "sum(" not in query:
+        if "pgwatch_db_size_size_b" in query and "sum(" not in query:
             return {
                 "status": "success",
                 "data": {
