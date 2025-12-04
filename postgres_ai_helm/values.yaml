@@ -76,7 +76,7 @@ reporter:
   enabled: true
   image: postgresai/reporter:1.0.2
   imagePullPolicy: IfNotPresent
-  schedule: "0 */6 * * *"
+  schedule: "0 0 * * *"
   # Legacy: If clusterName/nodeName are set here, they override global settings
   # for backward compatibility. For multiple clusters, leave empty and set
   # clusterName/nodeName per database in monitoredDatabases.
