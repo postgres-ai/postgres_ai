@@ -1348,8 +1348,8 @@ metrics:
               ) as rows_data_stats
           ) as rows_hdr_pdg_stats
         ) as relation_stats
-        order by real_size_mib desc
-        limit 5000
+        order by is_na = 0 desc, bloat_pct desc
+        limit 1000
     gauges:
       - real_size_mib
       - extra_size
@@ -1426,8 +1426,8 @@ metrics:
         ) as s3
         -- where not is_na
         --   and tblpages*((pst).free_percent + (pst).dead_tuple_percent)::float4/100 >= 1
-        order by real_size_mib desc
-        limit 5000
+        order by is_na = 0 desc, bloat_pct desc
+        limit 1000
     gauges:
       - real_size_mib
       - extra_size
@@ -1493,6 +1493,7 @@ metrics:
           (toast_main_size_b + toast_fsm_size_b + toast_vm_size_b + toast_indexes_size_b) as total_toast_size_b
         from table_sizes
         where total_relation_size_b > 0
+        limit 1000;
     gauges:
       - table_main_size_b
       - table_fsm_size_b  
@@ -1569,7 +1570,8 @@ metrics:
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
           num_data.*
-        from num_data;
+        from num_data
+        limit 1000;
     gauges:
       - '*'
     statement_timeout_seconds: 15
@@ -1723,7 +1725,8 @@ metrics:
             supports_fk
           order by index_size_bytes desc
         )
-        select * from redundant_indexes_grouped;
+        select * from redundant_indexes_grouped
+        limit 1000;
     gauges:
       - '*'
     statement_timeout_seconds: 15
@@ -1832,7 +1835,8 @@ metrics:
         where
           idx_scan = 0
           and idx_is_btree
-        order by index_size_bytes desc;
+        order by index_size_bytes desc
+        limit 1000;
     gauges:
       - '*'
     statement_timeout_seconds: 15
@@ -1976,7 +1980,8 @@ metrics:
               and not idx_is_btree
               and index_size_bytes > 100000000
         ) t
-        order by grp, index_size_bytes desc;
+        order by grp, index_size_bytes desc
+        limit 1000;
     gauges:
       - '*'
     statement_timeout_seconds: 15
