@@ -506,7 +506,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "calls/s"
         },
         "overrides": [
           {
@@ -567,7 +568,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by calls (pg_stat_statements)",
+      "title": "Top $top_n statements by calls per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -686,7 +687,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by execution time (pg_stat_statements)",
+      "title": "Top $top_n statements by execution time per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -926,7 +927,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by planning time (pg_stat_statements)",
+      "title": "Top $top_n statements by planning time per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1106,7 +1107,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "rows/s"
         },
         "overrides": [
           {
@@ -1167,7 +1169,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by rows (pg_stat_statements)",
+      "title": "Top $top_n statements by rows per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1406,7 +1408,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by shared_blks_hit (in bytes) (pg_stat_statements)",
+      "title": "Top $top_n statements by shared_blks_hit per second (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1646,7 +1648,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by shared_blks_read (in bytes) (pg_stat_statements)",
+      "title": "Top $top_n statements by shared_blks_read per second (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -1886,7 +1888,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by shared_blks_written (in bytes) (pg_stat_statements)",
+      "title": "Top $top_n statements by shared_blks_written per second (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -2126,7 +2128,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by shared_blks_written (in bytes) (pg_stat_statements)",
+      "title": "Top $top_n statements by shared_blks_dirtied per second (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -2366,7 +2368,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by WAL bytes (pg_stat_statements)",
+      "title": "Top $top_n statements by WAL bytes per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -2604,7 +2606,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by WAL fpi (in bytes) (pg_stat_statements)",
+      "title": "Top $top_n statements by WAL fpi per second (in bytes) (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -2841,7 +2843,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by temp bytes read (pg_stat_statements)",
+      "title": "Top $top_n statements by temp bytes read per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
@@ -3079,7 +3081,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n statements by temp bytes written (pg_stat_statements)",
+      "title": "Top $top_n statements by temp bytes written per second (pg_stat_statements)",
       "type": "timeseries"
     },
     {
