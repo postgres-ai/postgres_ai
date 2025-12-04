@@ -814,6 +814,7 @@ class PostgresReportGenerator:
             'autovacuum_naptime',
             'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_cost_limit',
+            'autovacuum_vacuum_insert_scale_factor',
             'autovacuum_vacuum_scale_factor',
             'autovacuum_vacuum_threshold',
             'autovacuum_work_mem',
@@ -1794,7 +1795,8 @@ class PostgresReportGenerator:
                     return f"{val // 1024} MB"
                 else:
                     return f"{val} kB"
-            elif setting_name in ['autovacuum_analyze_scale_factor', 'autovacuum_vacuum_scale_factor']:
+            elif setting_name in ['autovacuum_analyze_scale_factor', 'autovacuum_vacuum_scale_factor',
+                                  'autovacuum_vacuum_insert_scale_factor']:
                 return f"{float(value) * 100:.1f}%"
             elif setting_name in ['autovacuum', 'track_activities', 'track_counts', 'track_functions',
                                   'track_io_timing', 'track_wal_io_timing', 'pg_stat_statements.track_utility',
