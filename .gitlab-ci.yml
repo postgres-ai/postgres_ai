@@ -46,6 +46,7 @@ cli:e2e:dind:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
   before_script:
     - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
@@ -117,6 +118,7 @@ cli:node:e2e:dind:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true
@@ -139,6 +141,7 @@ cli:node:full:dind:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true

@@ -2,13 +2,62 @@ import * as https from "https";
 import { URL } from "url";
 import { maskSecret, normalizeBaseUrl } from "./util";
 
+export interface IssueActionItem {
+  id: string;
+  issue_id: string;
+  title: string;
+  description: string | null;
+  severity: number;
+  is_done: boolean;
+  done_by: number | null;
+  done_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Issue {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  status: number;
+  url_main: string | null;
+  urls_extra: string[] | null;
+  data: unknown | null;
+  author_id: number;
+  org_id: number;
+  project_id: number | null;
+  is_ai_generated: boolean;
+  assigned_to: number[] | null;
+  labels: string[] | null;
+  is_edited: boolean;
+  author_display_name: string;
+  comment_count: number;
+  action_items: IssueActionItem[];
+}
+
+export interface IssueComment {
+  id: string;
+  issue_id: string;
+  author_id: number;
+  parent_comment_id: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  data: unknown | null;
+}
+
+export type IssueListItem = Pick<Issue, "id" | "title" | "status" | "created_at">;
+
+export type IssueDetail = Pick<Issue, "id" | "title" | "description" | "status" | "created_at" | "author_display_name">;
 export interface FetchIssuesParams {
   apiKey: string;
   apiBaseUrl: string;
   debug?: boolean;
 }
 
-export async function fetchIssues(params: FetchIssuesParams): Promise<unknown> {
+export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListItem[]> {
   const { apiKey, apiBaseUrl, debug } = params;
   if (!apiKey) {
     throw new Error("API key is required");
@@ -16,6 +65,7 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<unknown> {
 
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/issues`);
+  url.searchParams.set("select", "id,title,status,created_at");
 
   const headers: Record<string, string> = {
     "access-token": apiKey,
@@ -54,10 +104,10 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<unknown> {
           }
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
-              const parsed = JSON.parse(data);
+              const parsed = JSON.parse(data) as IssueListItem[];
               resolve(parsed);
             } catch {
-              resolve(data);
+              reject(new Error(`Failed to parse issues response: ${data}`));
             }
           } else {
             let errMsg = `Failed to fetch issues: HTTP ${res.statusCode}`;
@@ -88,7 +138,7 @@ export interface FetchIssueCommentsParams {
   debug?: boolean;
 }
 
-export async function fetchIssueComments(params: FetchIssueCommentsParams): Promise<unknown> {
+export async function fetchIssueComments(params: FetchIssueCommentsParams): Promise<IssueComment[]> {
   const { apiKey, apiBaseUrl, issueId, debug } = params;
   if (!apiKey) {
     throw new Error("API key is required");
@@ -137,10 +187,10 @@ export async function fetchIssueComments(params: FetchIssueCommentsParams): Prom
           }
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
-              const parsed = JSON.parse(data);
+              const parsed = JSON.parse(data) as IssueComment[];
               resolve(parsed);
             } catch {
-              resolve(data);
+              reject(new Error(`Failed to parse issue comments response: ${data}`));
             }
           } else {
             let errMsg = `Failed to fetch issue comments: HTTP ${res.statusCode}`;
@@ -170,7 +220,7 @@ export interface FetchIssueParams {
   debug?: boolean;
 }
 
-export async function fetchIssue(params: FetchIssueParams): Promise<unknown> {
+export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail | null> {
   const { apiKey, apiBaseUrl, issueId, debug } = params;
   if (!apiKey) {
     throw new Error("API key is required");
@@ -181,6 +231,7 @@ export async function fetchIssue(params: FetchIssueParams): Promise<unknown> {
 
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/issues`);
+  url.searchParams.set("select", "id,title,description,status,created_at,author_display_name");
   url.searchParams.set("id", `eq.${issueId}`);
   url.searchParams.set("limit", "1");
 
@@ -223,12 +274,12 @@ export async function fetchIssue(params: FetchIssueParams): Promise<unknown> {
             try {
               const parsed = JSON.parse(data);
               if (Array.isArray(parsed)) {
-                resolve(parsed[0] ?? null);
+                resolve((parsed[0] as IssueDetail) ?? null);
               } else {
-                resolve(parsed);
+                resolve(parsed as IssueDetail);
               }
             } catch {
-              resolve(data);
+              reject(new Error(`Failed to parse issue response: ${data}`));
             }
           } else {
             let errMsg = `Failed to fetch issue: HTTP ${res.statusCode}`;
@@ -260,7 +311,7 @@ export interface CreateIssueCommentParams {
   debug?: boolean;
 }
 
-export async function createIssueComment(params: CreateIssueCommentParams): Promise<unknown> {
+export async function createIssueComment(params: CreateIssueCommentParams): Promise<IssueComment> {
   const { apiKey, apiBaseUrl, issueId, content, parentCommentId, debug } = params;
   if (!apiKey) {
     throw new Error("API key is required");
@@ -324,10 +375,10 @@ export async function createIssueComment(params: CreateIssueCommentParams): Prom
           }
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
-              const parsed = JSON.parse(data);
+              const parsed = JSON.parse(data) as IssueComment;
               resolve(parsed);
             } catch {
-              resolve(data);
+              reject(new Error(`Failed to parse create comment response: ${data}`));
             }
           } else {
             let errMsg = `Failed to create issue comment: HTTP ${res.statusCode}`;
