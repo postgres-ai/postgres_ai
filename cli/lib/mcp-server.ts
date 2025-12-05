@@ -109,16 +109,8 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
 
     try {
       if (toolName === "list_issues") {
-        const result = await fetchIssues({ apiKey, apiBaseUrl, debug });
-        const trimmed = Array.isArray(result)
-          ? (result as any[]).map((r) => ({
-              id: (r as any).id,
-              title: (r as any).title,
-              status: (r as any).status,
-              created_at: (r as any).created_at,
-            }))
-          : result;
-        return { content: [{ type: "text", text: JSON.stringify(trimmed, null, 2) }] };
+        const issues = await fetchIssues({ apiKey, apiBaseUrl, debug });
+        return { content: [{ type: "text", text: JSON.stringify(issues, null, 2) }] };
       }
 
       if (toolName === "view_issue") {
