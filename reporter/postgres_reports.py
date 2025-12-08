@@ -21,8 +21,12 @@ import psycopg2.extras
 
 
 class PostgresReportGenerator:
+    # Default databases to always exclude
+    DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
+    
     def __init__(self, prometheus_url: str = "http://sink-prometheus:9090", 
-                 postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements"):
+                 postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements",
+                 excluded_databases: Optional[List[str]] = None):
         """
         Initialize the PostgreSQL report generator.
         
@@ -30,11 +34,16 @@ class PostgresReportGenerator:
             prometheus_url: URL of the Prometheus instance (default: http://sink-prometheus:9090)
             postgres_sink_url: Connection string for the Postgres sink database 
                               (default: postgresql://pgwatch@sink-postgres:5432/measurements)
+            excluded_databases: Additional databases to exclude from reports
         """
         self.prometheus_url = prometheus_url
         self.base_url = f"{prometheus_url}/api/v1"
         self.postgres_sink_url = postgres_sink_url
         self.pg_conn = None
+        # Combine default exclusions with user-provided exclusions
+        self.excluded_databases = self.DEFAULT_EXCLUDED_DATABASES.copy()
+        if excluded_databases:
+            self.excluded_databases.update(excluded_databases)
 
     def test_connection(self) -> bool:
         """Test connection to Prometheus."""
@@ -2097,7 +2106,7 @@ class PostgresReportGenerator:
 
         # Helper to add a name safely
         def add_db(name: str) -> None:
-            if name and name not in ('template0', 'template1') and name not in database_set:
+            if name and name not in self.excluded_databases and name not in database_set:
                 database_set.add(name)
                 databases.append(name)
 
@@ -2292,10 +2301,18 @@ def main():
     parser.add_argument('--epoch', default='1')
     parser.add_argument('--no-upload', action='store_true', default=False,
                         help='Do not upload reports to the API')
+    parser.add_argument('--exclude-databases', type=str, default=None,
+                        help='Comma-separated list of additional databases to exclude from reports '
+                             f'(default exclusions: {", ".join(sorted(PostgresReportGenerator.DEFAULT_EXCLUDED_DATABASES))})')
 
     args = parser.parse_args()
+    
+    # Parse excluded databases
+    excluded_databases = None
+    if args.exclude_databases:
+        excluded_databases = [db.strip() for db in args.exclude_databases.split(',')]
 
-    generator = PostgresReportGenerator(args.prometheus_url, args.postgres_sink_url)
+    generator = PostgresReportGenerator(args.prometheus_url, args.postgres_sink_url, excluded_databases)
 
     # Test connection
     if not generator.test_connection():
