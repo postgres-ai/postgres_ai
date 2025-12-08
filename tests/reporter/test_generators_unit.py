@@ -781,6 +781,8 @@ def test_upload_report_file_sends_contents(tmp_path, monkeypatch: pytest.MonkeyP
 @pytest.mark.unit
 def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     class DummyGenerator:
+        DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
+
         def __init__(self, *args, **kwargs):
             self.closed = False
 
@@ -824,6 +826,8 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
 @pytest.mark.unit
 def test_main_exits_when_connection_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailingGenerator:
+        DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
+
         def __init__(self, *args, **kwargs):
             pass
 
