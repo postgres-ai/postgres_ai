@@ -1348,6 +1348,7 @@ metrics:
               ) as rows_data_stats
           ) as rows_hdr_pdg_stats
         ) as relation_stats
+        where (bs*(relpages)/(1024*1024))::float > 1
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
@@ -1424,8 +1425,7 @@ metrics:
             ) as s
           ) as s2
         ) as s3
-        -- where not is_na
-        --   and tblpages*((pst).free_percent + (pst).dead_tuple_percent)::float4/100 >= 1
+        where (bs*tblpages)/(1024*1024)::float > 1
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:

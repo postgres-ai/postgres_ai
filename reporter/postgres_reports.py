@@ -2,11 +2,11 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003)
+This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003, K004)
 by querying Prometheus metrics using PromQL queries.
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 import requests
 import json
@@ -107,6 +107,7 @@ class PostgresReportGenerator:
                             data->>'index_definition' as index_definition,
                             dbname
                         from public.index_definitions
+                        where dbname = %s
                         order by data->>'indexrelname', time desc
                     """
                     cursor.execute(query, (db_name,))
@@ -170,9 +171,10 @@ class PostgresReportGenerator:
         
         # Query PostgreSQL version information using last_over_time to get most recent values
         # Use 3h lookback to handle cases where metrics collection might be intermittent
+        # The settings metric exports setting_name and setting_value as labels
         version_queries = {
-            'server_version': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version"}}[3h])',
-            'server_version_num': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version_num"}}[3h])',
+            'server_version': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", tag_setting_name="server_version"}}[3h])',
+            'server_version_num': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", tag_setting_name="server_version_num"}}[3h])',
         }
 
         version_data = {}
@@ -180,8 +182,8 @@ class PostgresReportGenerator:
             result = self.query_instant(query)
             if result.get('status') == 'success' and result.get('data', {}).get('result'):
                 if len(result['data']['result']) > 0:
-                    # Extract setting_value from the metric labels
-                    latest_value = result['data']['result'][0]['metric'].get('setting_value', '')
+                    # Extract tag_setting_value from the metric labels
+                    latest_value = result['data']['result'][0]['metric'].get('tag_setting_value', '')
                     if latest_value:
                         version_data[metric_name] = latest_value
                 else:
@@ -190,14 +192,17 @@ class PostgresReportGenerator:
                 print(f"Warning: A002 - Query failed for {metric_name}: status={result.get('status')}")
 
         # Format the version data
-        server_version = version_data.get('server_version', 'Unknown')
-        version_info = {
-            "version": server_version,
-            "server_version_num": version_data.get('server_version_num', 'Unknown'),
-        }
+        server_version = version_data.get('server_version')
+        version_info = {}
+        
+        if server_version:
+            version_info["version"] = server_version
+            
+        if 'server_version_num' in version_data:
+            version_info["server_version_num"] = version_data['server_version_num']
         
         # Parse major and minor version if we have a valid version string
-        if server_version and server_version != 'Unknown':
+        if server_version:
             # Handle both formats: "14.5" and "14.5 (Ubuntu 14.5-1.pgdg20.04+1)"
             version_parts = server_version.split()[0].split('.')
             if len(version_parts) >= 1:
@@ -206,12 +211,6 @@ class PostgresReportGenerator:
                     version_info["server_minor_ver"] = '.'.join(version_parts[1:])
                 else:
                     version_info["server_minor_ver"] = '0'
-            else:
-                version_info["server_major_ver"] = 'Unknown'
-                version_info["server_minor_ver"] = 'Unknown'
-        else:
-            version_info["server_major_ver"] = 'Unknown'
-            version_info["server_minor_ver"] = 'Unknown'
 
         return self.format_report_data("A002", {"version": version_info}, node_name)
 
@@ -237,18 +236,18 @@ class PostgresReportGenerator:
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
                 # Extract setting name from labels
-                setting_name = item['metric'].get('setting_name', '')
-                setting_value = item['metric'].get('setting_value', '')
+                setting_name = item['metric'].get('tag_setting_name', '')
+                setting_value = item['metric'].get('tag_setting_value', '')
                 
                 # Skip if we don't have a setting name
                 if not setting_name:
                     continue
 
                 # Get additional metadata from labels
-                category = item['metric'].get('category', 'Other')
-                unit = item['metric'].get('unit', '')
-                context = item['metric'].get('context', '')
-                vartype = item['metric'].get('vartype', '')
+                category = item['metric'].get('tag_category', 'Other')
+                unit = item['metric'].get('tag_unit', '')
+                context = item['metric'].get('tag_context', '')
+                vartype = item['metric'].get('tag_vartype', '')
 
                 settings_data[setting_name] = {
                     "setting": setting_value,
@@ -344,10 +343,10 @@ class PostgresReportGenerator:
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
                 # Extract setting information from labels
-                setting_name = item['metric'].get('setting_name', '')
-                value = item['metric'].get('setting_value', '')
-                unit = item['metric'].get('unit', '')
-                category = item['metric'].get('category', 'Other')
+                setting_name = item['metric'].get('tag_setting_name', '')
+                value = item['metric'].get('tag_setting_value', '')
+                unit = item['metric'].get('tag_unit', '')
+                category = item['metric'].get('tag_category', 'Other')
                 
                 # Skip if we don't have a setting name
                 if not setting_name:
@@ -702,7 +701,7 @@ class PostgresReportGenerator:
         pgstat_data = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
-                setting_name = item['metric'].get('setting_name', '')
+                setting_name = item['metric'].get('tag_setting_name', '')
                 
                 # Skip if no setting name
                 if not setting_name:
@@ -710,11 +709,11 @@ class PostgresReportGenerator:
 
                 # Filter for pg_stat_statements and related settings
                 if setting_name in pgstat_settings:
-                    setting_value = item['metric'].get('setting_value', '')
-                    category = item['metric'].get('category', 'Statistics')
-                    unit = item['metric'].get('unit', '')
-                    context = item['metric'].get('context', '')
-                    vartype = item['metric'].get('vartype', '')
+                    setting_value = item['metric'].get('tag_setting_value', '')
+                    category = item['metric'].get('tag_category', 'Statistics')
+                    unit = item['metric'].get('tag_unit', '')
+                    context = item['metric'].get('tag_context', '')
+                    vartype = item['metric'].get('tag_vartype', '')
 
                     pgstat_data[setting_name] = {
                         "setting": setting_value,
@@ -887,15 +886,15 @@ class PostgresReportGenerator:
         autovacuum_data = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
-                setting_name = item['metric'].get('setting_name', 'unknown')
+                setting_name = item['metric'].get('tag_setting_name', 'unknown')
 
                 # Filter for autovacuum and vacuum settings
                 if setting_name in autovacuum_settings:
-                    setting_value = item['metric'].get('setting_value', '')
-                    category = item['metric'].get('category', 'Autovacuum')
-                    unit = item['metric'].get('unit', '')
-                    context = item['metric'].get('context', '')
-                    vartype = item['metric'].get('vartype', '')
+                    setting_value = item['metric'].get('tag_setting_value', '')
+                    category = item['metric'].get('tag_category', 'Autovacuum')
+                    unit = item['metric'].get('tag_unit', '')
+                    context = item['metric'].get('tag_context', '')
+                    vartype = item['metric'].get('tag_vartype', '')
 
                     autovacuum_data[setting_name] = {
                         "setting": setting_value,
@@ -937,12 +936,13 @@ class PostgresReportGenerator:
 
         bloated_indexes_by_db = {}
         for db_name in databases:
-            # Query btree bloat using multiple metrics for each database with last_over_time [1d]
+            # Query btree bloat using multiple metrics for each database
             bloat_queries = {
                 'extra_size': f'last_over_time(pgwatch_pg_btree_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_pct': f'last_over_time(pgwatch_pg_btree_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_size': f'last_over_time(pgwatch_pg_btree_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_pct': f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'fillfactor': f'last_over_time(pgwatch_pg_btree_bloat_fillfactor{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
             }
 
             bloated_indexes = {}
@@ -966,16 +966,43 @@ class PostgresReportGenerator:
                                 "extra_pct": 0,
                                 "bloat_size": 0,
                                 "bloat_pct": 0,
+                                "fillfactor": None,
                             }
 
                         value = float(item['value'][1]) if item.get('value') else 0
                         bloated_indexes[index_key][metric_type] = value
+            
+            # Query index_size from pg_class (relation_size_bytes for indexes)
+            # relkind="105" is ASCII code for 'i' (index)
+            index_size_query = f'last_over_time(pgwatch_pg_class_relation_size_bytes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", relkind="105"}}[3h])'
+            index_size_result = self.query_instant(index_size_query)
+            index_sizes = {}
+            if index_size_result.get('status') == 'success' and index_size_result.get('data', {}).get('result'):
+                for item in index_size_result['data']['result']:
+                    schema_name = item['metric'].get('schemaname', 'unknown')
+                    index_name = item['metric'].get('relname', 'unknown')
+                    # For indexes, we need to map back to the table - we'll store by index name and match later
+                    index_size_bytes = float(item['value'][1]) if item.get('value') else 0
+                    # Store with schema.index_name as key to match with bloated_indexes
+                    index_sizes[f"{schema_name}.{index_name}"] = index_size_bytes
+            
+            # Add index_size to bloated_indexes
+            for index_key in bloated_indexes.keys():
+                schema_name = bloated_indexes[index_key]['schema_name']
+                index_name = bloated_indexes[index_key]['index_name']
+                size_key = f"{schema_name}.{index_name}"
+                bloated_indexes[index_key]['index_size'] = index_sizes.get(size_key, 0)
 
             # Convert to list and add pretty formatting
             bloated_indexes_list = []
             total_bloat_size = 0
 
             for index_data in bloated_indexes.values():
+                # index_size already in bytes from pg_class
+                index_size_bytes = index_data['index_size']
+                
+                # Add formatted fields
+                index_data['index_size_pretty'] = self.format_bytes(index_size_bytes)
                 index_data['extra_size_pretty'] = self.format_bytes(index_data['extra_size'])
                 index_data['bloat_size_pretty'] = self.format_bytes(index_data['bloat_size'])
 
@@ -1045,7 +1072,7 @@ class PostgresReportGenerator:
         memory_data = {}
         if result.get('status') == 'success' and result.get('data', {}).get('result'):
             for item in result['data']['result']:
-                setting_name = item['metric'].get('setting_name', '')
+                setting_name = item['metric'].get('tag_setting_name', '')
                 
                 # Skip if no setting name
                 if not setting_name:
@@ -1053,11 +1080,11 @@ class PostgresReportGenerator:
 
                 # Filter for memory-related settings
                 if setting_name in memory_settings:
-                    setting_value = item['metric'].get('setting_value', '')
-                    category = item['metric'].get('category', 'Memory')
-                    unit = item['metric'].get('unit', '')
-                    context = item['metric'].get('context', '')
-                    vartype = item['metric'].get('vartype', '')
+                    setting_value = item['metric'].get('tag_setting_value', '')
+                    category = item['metric'].get('tag_category', 'Memory')
+                    unit = item['metric'].get('tag_unit', '')
+                    context = item['metric'].get('tag_context', '')
+                    vartype = item['metric'].get('tag_vartype', '')
 
                     memory_data[setting_name] = {
                         "setting": setting_value,
@@ -1200,13 +1227,12 @@ class PostgresReportGenerator:
         bloated_tables_by_db = {}
         for db_name in databases:
             # Query table bloat using multiple metrics for each database
-            # Try with 10h window first, then fall back to instant query
             bloat_queries = {
-                'real_size': f'last_over_time(pgwatch_pg_table_bloat_real_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_size': f'last_over_time(pgwatch_pg_table_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_pct': f'last_over_time(pgwatch_pg_table_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_size': f'last_over_time(pgwatch_pg_table_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_pct': f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'fillfactor': f'last_over_time(pgwatch_pg_table_bloat_fillfactor{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
             }
 
             bloated_tables = {}
@@ -1223,27 +1249,69 @@ class PostgresReportGenerator:
                             bloated_tables[table_key] = {
                                 "schema_name": schema_name,
                                 "table_name": table_name,
-                                "real_size": 0,
                                 "extra_size": 0,
                                 "extra_pct": 0,
                                 "bloat_size": 0,
                                 "bloat_pct": 0,
+                                "fillfactor": None,
                             }
 
                         value = float(item['value'][1]) if item.get('value') else 0
                         bloated_tables[table_key][metric_type] = value
                 else:
-                    if metric_type == 'real_size':  # Only log once per database
+                    if metric_type == 'extra_size':  # Only log once per database
                         print(f"Warning: F004 - No bloat data for database {db_name}, metric {metric_type}")
+            
+            # Query real_size from pg_class (total_relation_size_bytes for tables)
+            # relkind="114" is ASCII code for 'r' (regular table)
+            real_size_query = f'last_over_time(pgwatch_pg_class_total_relation_size_bytes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", relkind="114"}}[3h])'
+            real_size_result = self.query_instant(real_size_query)
+            table_real_sizes = {}
+            if real_size_result.get('status') == 'success' and real_size_result.get('data', {}).get('result'):
+                for item in real_size_result['data']['result']:
+                    schema_name = item['metric'].get('schemaname', 'unknown')
+                    table_name = item['metric'].get('relname', 'unknown')
+                    table_key = f"{schema_name}.{table_name}"
+                    real_size_bytes = float(item['value'][1]) if item.get('value') else 0
+                    table_real_sizes[table_key] = real_size_bytes
+            
+            # Add real_size to bloated_tables
+            for table_key in bloated_tables.keys():
+                bloated_tables[table_key]['real_size'] = table_real_sizes.get(table_key, 0)
+
+            # Query last_vacuum from pg_stat_all_tables
+            last_vacuum_query = f'last_over_time(pgwatch_pg_stat_all_tables_last_vacuum{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
+            last_vacuum_result = self.query_instant(last_vacuum_query)
+            last_vacuum_data = {}
+            if last_vacuum_result.get('status') == 'success' and last_vacuum_result.get('data', {}).get('result'):
+                for item in last_vacuum_result['data']['result']:
+                    schema_name = item['metric'].get('schemaname', 'unknown')
+                    table_name = item['metric'].get('relname', 'unknown')
+                    table_key = f"{schema_name}.{table_name}"
+                    # Value is epoch timestamp
+                    timestamp = float(item['value'][1]) if item.get('value') else 0
+                    if timestamp > 0:
+                        from datetime import datetime
+                        last_vacuum_data[table_key] = datetime.fromtimestamp(timestamp).isoformat()
 
             # Convert to list and add pretty formatting
             bloated_tables_list = []
             total_bloat_size = 0
 
-            for table_data in bloated_tables.values():
-                table_data['real_size_pretty'] = self.format_bytes(table_data['real_size'])
+            for table_key, table_data in bloated_tables.items():
+                # real_size already in bytes from pg_total_relation_size
+                real_size_bytes = table_data['real_size']
+                
+                # Calculate live_data_size
+                live_data_size = max(0, real_size_bytes - table_data['bloat_size'])
+                
+                # Add formatted fields
+                table_data['real_size_pretty'] = self.format_bytes(real_size_bytes)
                 table_data['extra_size_pretty'] = self.format_bytes(table_data['extra_size'])
                 table_data['bloat_size_pretty'] = self.format_bytes(table_data['bloat_size'])
+                table_data['live_data_size'] = live_data_size
+                table_data['live_data_size_pretty'] = self.format_bytes(live_data_size)
+                table_data['last_vacuum'] = last_vacuum_data.get(table_key)
 
                 bloated_tables_list.append(table_data)
                 total_bloat_size += table_data['bloat_size']
@@ -1378,6 +1446,115 @@ class PostgresReportGenerator:
             }
 
         return self.format_report_data("K003", queries_by_db, node_name)
+
+    def generate_k004_hourly_cumulative_metrics_report(
+        self,
+        cluster: str = "local",
+        node_name: str = "node-01",
+        time_range_minutes: int = 60,
+    ) -> Dict[str, Any]:
+        """
+        Generate K004 cumulative metrics snapshot for the last time window.
+
+        This report is intended to be executed hourly (by the scheduler) and
+        returns cumulative values for the last hour window:
+        - "ash" style activity based on pgwatch_wait_events_total (avg active sessions, session-seconds),
+          including breakdown by queryid showing wait_event_type occurrences per query.
+        - pgss style workload metrics based on pgwatch_pg_stat_statements_* (increase over the window),
+          aggregated across all queryid values.
+        """
+        print("Generating K004 cumulative metrics snapshot report...")
+
+        if time_range_minutes < 1:
+            time_range_minutes = 1
+
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(minutes=time_range_minutes)
+        window = f"{time_range_minutes}m"
+
+        # -----------------------------
+        # pgss: cumulative over window
+        # -----------------------------
+        pgss_metrics = [
+            ("calls", "pgwatch_pg_stat_statements_calls", 1.0),
+            ("total_time_ms", "pgwatch_pg_stat_statements_exec_time_total", 1.0),
+            ("rows", "pgwatch_pg_stat_statements_rows", 1.0),
+            # bytes → 8 KiB blocks for "shared_blks_*" style outputs (matches _process_pgss_data convention)
+            ("shared_blks_hit", "pgwatch_pg_stat_statements_shared_bytes_hit_total", 1.0 / 8192.0),
+            ("shared_blks_read", "pgwatch_pg_stat_statements_shared_bytes_read_total", 1.0 / 8192.0),
+            ("shared_blks_dirtied", "pgwatch_pg_stat_statements_shared_bytes_dirtied_total", 1.0 / 8192.0),
+            ("shared_blks_written", "pgwatch_pg_stat_statements_shared_bytes_written_total", 1.0 / 8192.0),
+        ]
+
+        pgss_totals: Dict[str, float] = {}
+        for out_name, prom_metric, scale in pgss_metrics:
+            query = f'sum(increase({prom_metric}{{cluster="{cluster}", node_name="{node_name}"}}[{window}]))'
+            res = self.query_instant(query)
+            val = 0.0
+            if res.get("status") == "success" and res.get("data", {}).get("result"):
+                try:
+                    val = float(res["data"]["result"][0]["value"][1])
+                except (KeyError, IndexError, TypeError, ValueError):
+                    val = 0.0
+            pgss_totals[out_name] = val * scale
+
+        # --------------------------------------
+        # ash: cumulative over window (AAS, s)
+        # --------------------------------------
+        ash_query = f'sum(avg_over_time(pgwatch_wait_events_total{{cluster="{cluster}", node_name="{node_name}"}}[{window}]))'
+        ash_res = self.query_instant(ash_query)
+        ash_avg_active_sessions = 0.0
+        if ash_res.get("status") == "success" and ash_res.get("data", {}).get("result"):
+            try:
+                ash_avg_active_sessions = float(ash_res["data"]["result"][0]["value"][1])
+            except (KeyError, IndexError, TypeError, ValueError):
+                ash_avg_active_sessions = 0.0
+
+        ash_session_seconds = ash_avg_active_sessions * float(time_range_minutes) * 60.0
+
+        # Wait events grouped by queryid: {queryid: {wait_event_type: count}}
+        ash_by_queryid: Dict[str, Dict[str, float]] = {}
+        ash_by_queryid_query = (
+            f'sum by (query_id, wait_event_type) (avg_over_time(pgwatch_wait_events_total{{cluster="{cluster}", node_name="{node_name}"}}[{window}]))'
+        )
+        ash_by_queryid_res = self.query_instant(ash_by_queryid_query)
+        if ash_by_queryid_res.get("status") == "success" and ash_by_queryid_res.get("data", {}).get("result"):
+            for item in ash_by_queryid_res["data"]["result"]:
+                query_id = item.get("metric", {}).get("query_id", "")
+                wait_event_type = item.get("metric", {}).get("wait_event_type", "unknown")
+                if not query_id:  # Skip entries without query_id (server processes)
+                    continue
+                try:
+                    count = float(item.get("value", [None, 0.0])[1])
+                    if query_id not in ash_by_queryid:
+                        ash_by_queryid[query_id] = {}
+                    ash_by_queryid[query_id][wait_event_type] = count
+                except (TypeError, ValueError, IndexError):
+                    continue
+
+        return self.format_report_data(
+            "K004",
+            {
+                "summary": {
+                    "time_range_minutes": time_range_minutes,
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "window": window,
+                    "notes": [
+                        "This report is intended to run hourly and summarize cumulative values over the last window.",
+                        "pgss values are derived using sum(increase(metric[window])) aggregated across all queryid values.",
+                        "ash values are derived from pgwatch_wait_events_total using avg_over_time(...[window]) and represent average active sessions.",
+                    ],
+                },
+                "pgss": {"totals": pgss_totals},
+                "ash": {
+                    "avg_active_sessions": ash_avg_active_sessions,
+                    "session_seconds": ash_session_seconds,
+                    "wait_events_by_queryid": ash_by_queryid,
+                },
+            },
+            node_name,
+        )
 
     def _get_pgss_metrics_data(self, cluster: str, node_name: str, start_time: datetime, end_time: datetime) -> List[
         Dict[str, Any]]:
@@ -1616,11 +1793,11 @@ class PostgresReportGenerator:
         return metrics_dict
 
     def format_bytes(self, bytes_value: float) -> str:
-        """Format bytes value for human readable display."""
+        """Format bytes value for human readable display using binary units."""
         if bytes_value == 0:
             return "0 B"
 
-        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
         unit_index = 0
         value = float(bytes_value)
 
@@ -1750,6 +1927,7 @@ class PostgresReportGenerator:
             "K001": "Globally aggregated query metrics",
             "K002": "Workload type",
             "K003": "Top-50 queries by total_time",
+            "K004": "Hourly cumulative metrics (ash and pgss)",
             "L001": "Table sizes",
             "L002": "Data types being used",
             "L003": "Integer out-of-range risks in PKs",
@@ -1973,6 +2151,7 @@ class PostgresReportGenerator:
             ('H004', self.generate_h004_redundant_indexes_report),
             ('K001', self.generate_k001_query_calls_report),
             ('K003', self.generate_k003_top_queries_report),
+            ('K004', self.generate_k004_hourly_cumulative_metrics_report),
         ]
 
         for check_id, report_func in report_types:
@@ -2290,7 +2469,7 @@ def main():
                         help='Disable combining primary and replica reports into single report')
     parser.add_argument('--check-id',
                         choices=['A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002',
-                                 'H004', 'K001', 'K003', 'ALL'],
+                                 'H004', 'K001', 'K003', 'K004', 'ALL'],
                         help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                         help='Output file (default: stdout)')
@@ -2407,6 +2586,8 @@ def main():
                     report = generator.generate_k001_query_calls_report(cluster, args.node_name)
                 elif args.check_id == 'K003':
                     report = generator.generate_k003_top_queries_report(cluster, args.node_name)
+                elif args.check_id == 'K004':
+                    report = generator.generate_k004_hourly_cumulative_metrics_report(cluster, args.node_name)
 
                 output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
                 
