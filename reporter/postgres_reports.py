@@ -155,6 +155,62 @@ class PostgresReportGenerator:
             print(f"Query error: {e}")
             return {}
 
+    def _get_postgres_version_info(self, cluster: str, node_name: str) -> Dict[str, str]:
+        """
+        Fetch and parse Postgres version information from pgwatch settings metrics.
+
+        Notes:
+        - This helper is intentionally defensive: it validates the returned setting_name label
+          (tests may stub query responses broadly by metric name substring).
+        - Uses a single query with a regex on setting_name to reduce roundtrips.
+        """
+        query = (
+            f'last_over_time(pgwatch_settings_configured{{'
+            f'cluster="{cluster}", node_name="{node_name}", '
+            f'setting_name=~"server_version|server_version_num"}}[3h])'
+        )
+
+        result = self.query_instant(query)
+        version_str = None
+        version_num = None
+
+        if result.get("status") == "success":
+            if result.get("data", {}).get("result"):
+                for item in result["data"]["result"]:
+                    metric = item.get("metric", {}) or {}
+                    setting_name = metric.get("setting_name", "")
+                    setting_value = metric.get("setting_value", "")
+                    if setting_name == "server_version" and setting_value:
+                        version_str = setting_value
+                    elif setting_name == "server_version_num" and setting_value:
+                        version_num = setting_value
+            else:
+                print(f"Warning: No version data found (cluster={cluster}, node_name={node_name})")
+        else:
+            print(f"Warning: Version query failed (cluster={cluster}, node_name={node_name}): status={result.get('status')}")
+
+        server_version = version_str or "Unknown"
+        version_info: Dict[str, str] = {
+            "version": server_version,
+            "server_version_num": version_num or "Unknown",
+            "server_major_ver": "Unknown",
+            "server_minor_ver": "Unknown",
+        }
+
+        if server_version != "Unknown":
+            # Handle both formats:
+            # - "15.3"
+            # - "15.3 (Ubuntu 15.3-1.pgdg20.04+1)"
+            version_parts = server_version.split()[0].split(".")
+            if len(version_parts) >= 1 and version_parts[0]:
+                version_info["server_major_ver"] = version_parts[0]
+                if len(version_parts) >= 2:
+                    version_info["server_minor_ver"] = ".".join(version_parts[1:])
+                else:
+                    version_info["server_minor_ver"] = "0"
+
+        return version_info
+
     def generate_a002_version_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
         Generate A002 Version Information report.
@@ -167,52 +223,7 @@ class PostgresReportGenerator:
             Dictionary containing version information
         """
         print(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
-        
-        # Query PostgreSQL version information using last_over_time to get most recent values
-        # Use 3h lookback to handle cases where metrics collection might be intermittent
-        version_queries = {
-            'server_version': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version"}}[3h])',
-            'server_version_num': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version_num"}}[3h])',
-        }
-
-        version_data = {}
-        for metric_name, query in version_queries.items():
-            result = self.query_instant(query)
-            if result.get('status') == 'success' and result.get('data', {}).get('result'):
-                if len(result['data']['result']) > 0:
-                    # Extract setting_value from the metric labels
-                    latest_value = result['data']['result'][0]['metric'].get('setting_value', '')
-                    if latest_value:
-                        version_data[metric_name] = latest_value
-                else:
-                    print(f"Warning: A002 - No data for {metric_name} (cluster={cluster}, node_name={node_name})")
-            else:
-                print(f"Warning: A002 - Query failed for {metric_name}: status={result.get('status')}")
-
-        # Format the version data
-        server_version = version_data.get('server_version', 'Unknown')
-        version_info = {
-            "version": server_version,
-            "server_version_num": version_data.get('server_version_num', 'Unknown'),
-        }
-        
-        # Parse major and minor version if we have a valid version string
-        if server_version and server_version != 'Unknown':
-            # Handle both formats: "14.5" and "14.5 (Ubuntu 14.5-1.pgdg20.04+1)"
-            version_parts = server_version.split()[0].split('.')
-            if len(version_parts) >= 1:
-                version_info["server_major_ver"] = version_parts[0]
-                if len(version_parts) >= 2:
-                    version_info["server_minor_ver"] = '.'.join(version_parts[1:])
-                else:
-                    version_info["server_minor_ver"] = '0'
-            else:
-                version_info["server_major_ver"] = 'Unknown'
-                version_info["server_minor_ver"] = 'Unknown'
-        else:
-            version_info["server_major_ver"] = 'Unknown'
-            version_info["server_minor_ver"] = 'Unknown'
-
+        version_info = self._get_postgres_version_info(cluster, node_name)
         return self.format_report_data("A002", {"version": version_info}, node_name)
 
     def generate_a003_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
@@ -263,7 +274,7 @@ class PostgresReportGenerator:
             print(f"Query result status: {result.get('status')}")
             print(f"Query result data: {result.get('data', {})}")
 
-        return self.format_report_data("A003", settings_data, node_name)
+        return self.format_report_data("A003", settings_data, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
     def generate_a004_cluster_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
@@ -316,10 +327,15 @@ class PostgresReportGenerator:
                 size_bytes = float(result['value'][1])
                 database_sizes[db_name] = size_bytes
 
-        return self.format_report_data("A004", {
-            "general_info": cluster_data,
-            "database_sizes": database_sizes
-        }, node_name)
+        return self.format_report_data(
+            "A004",
+            {
+                "general_info": cluster_data,
+                "database_sizes": database_sizes,
+            },
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_a007_altered_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
@@ -364,7 +380,7 @@ class PostgresReportGenerator:
             print(f"Warning: A007 - No altered settings data returned for cluster={cluster}, node_name={node_name}")
             print(f"Query result status: {result.get('status')}")
 
-        return self.format_report_data("A007", altered_settings, node_name)
+        return self.format_report_data("A007", altered_settings, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
     def generate_h001_invalid_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
@@ -438,7 +454,12 @@ class PostgresReportGenerator:
                 "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
-        return self.format_report_data("H001", invalid_indexes_by_db, node_name)
+        return self.format_report_data(
+            "H001",
+            invalid_indexes_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_h002_unused_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
@@ -560,7 +581,12 @@ class PostgresReportGenerator:
                 }
             }
 
-        return self.format_report_data("H002", unused_indexes_by_db, node_name)
+        return self.format_report_data(
+            "H002",
+            unused_indexes_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_h004_redundant_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
@@ -664,7 +690,12 @@ class PostgresReportGenerator:
                 "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
-        return self.format_report_data("H004", redundant_indexes_by_db, node_name)
+        return self.format_report_data(
+            "H004",
+            redundant_indexes_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_d004_pgstat_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
@@ -733,11 +764,16 @@ class PostgresReportGenerator:
         # Check if pg_stat_statements is available and working by querying its metrics  
         pgss_status = self._check_pg_stat_statements_status(cluster, node_name)
 
-        return self.format_report_data("D004", {
-            "settings": pgstat_data,
-            "pg_stat_statements_status": pgss_status,
-            "pg_stat_kcache_status": kcache_status
-        }, node_name)
+        return self.format_report_data(
+            "D004",
+            {
+                "settings": pgstat_data,
+                "pg_stat_statements_status": pgss_status,
+                "pg_stat_kcache_status": kcache_status,
+            },
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def _check_pg_stat_kcache_status(self, cluster: str, node_name: str) -> Dict[str, Any]:
         """
@@ -906,7 +942,7 @@ class PostgresReportGenerator:
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
 
-        return self.format_report_data("F001", autovacuum_data, node_name)
+        return self.format_report_data("F001", autovacuum_data, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
     def generate_f005_btree_bloat_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
         """
@@ -995,7 +1031,12 @@ class PostgresReportGenerator:
                 "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
-        return self.format_report_data("F005", bloated_indexes_by_db, node_name)
+        return self.format_report_data(
+            "F005",
+            bloated_indexes_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_g001_memory_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
@@ -1073,10 +1114,15 @@ class PostgresReportGenerator:
         # Calculate some memory usage estimates and recommendations
         memory_analysis = self._analyze_memory_settings(memory_data)
 
-        return self.format_report_data("G001", {
-            "settings": memory_data,
-            "analysis": memory_analysis
-        }, node_name)
+        return self.format_report_data(
+            "G001",
+            {
+                "settings": memory_data,
+                "analysis": memory_analysis,
+            },
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def _analyze_memory_settings(self, memory_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1261,7 +1307,12 @@ class PostgresReportGenerator:
                 "database_size_pretty": self.format_bytes(db_size_bytes)
             }
 
-        return self.format_report_data("F004", bloated_tables_by_db, node_name)
+        return self.format_report_data(
+            "F004",
+            bloated_tables_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_k001_query_calls_report(self, cluster: str = "local", node_name: str = "node-01",
                                          time_range_minutes: int = 60) -> Dict[str, Any]:
@@ -1318,7 +1369,12 @@ class PostgresReportGenerator:
                 }
             }
 
-        return self.format_report_data("K001", queries_by_db, node_name)
+        return self.format_report_data(
+            "K001",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def generate_k003_top_queries_report(self, cluster: str = "local", node_name: str = "node-01",
                                          time_range_minutes: int = 60, limit: int = 50) -> Dict[str, Any]:
@@ -1377,7 +1433,12 @@ class PostgresReportGenerator:
                 }
             }
 
-        return self.format_report_data("K003", queries_by_db, node_name)
+        return self.format_report_data(
+            "K003",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
 
     def _get_pgss_metrics_data(self, cluster: str, node_name: str, start_time: datetime, end_time: datetime) -> List[
         Dict[str, Any]]:
@@ -1636,7 +1697,8 @@ class PostgresReportGenerator:
             return f"{value:.2f} {units[unit_index]}"
 
     def format_report_data(self, check_id: str, data: Dict[str, Any], host: str = "target-database", 
-                          all_hosts: Dict[str, List[str]] = None) -> Dict[str, Any]:
+                          all_hosts: Dict[str, List[str]] = None,
+                          postgres_version: Dict[str, str] = None) -> Dict[str, Any]:
         """
         Format data to match template structure.
         
@@ -1645,6 +1707,7 @@ class PostgresReportGenerator:
             data: The data to format (can be a dict with node keys if combining multiple nodes)
             host: Primary host identifier (used if all_hosts not provided)
             all_hosts: Optional dict with 'primary' and 'standbys' keys for multi-node reports
+            postgres_version: Optional Postgres version info to include at report level
             
         Returns:
             Dictionary formatted for templates
@@ -1663,14 +1726,16 @@ class PostgresReportGenerator:
         # Handle both single-node and multi-node data structures
         if isinstance(data, dict) and any(isinstance(v, dict) and 'data' in v for v in data.values()):
             # Multi-node structure: data is already in {node_name: {"data": ...}} format
+            # postgres_version should already be embedded per-node; warn if passed here
+            if postgres_version:
+                print(f"Warning: postgres_version parameter ignored for multi-node data in {check_id}")
             results = data
         else:
             # Single-node structure: wrap data in host key
-            results = {
-                host: {
-                    "data": data
-                }
-            }
+            node_result = {"data": data}
+            if postgres_version:
+                node_result["postgres_version"] = postgres_version
+            results = {host: node_result}
 
         template_data = {
             "checkId": check_id,
