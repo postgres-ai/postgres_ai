@@ -74,7 +74,7 @@ flask:
 
 reporter:
   enabled: true
-  image: postgresai/reporter:1.0.2
+  image: postgresai/reporter:1.0.3
   imagePullPolicy: IfNotPresent
   schedule: "0 0 * * *"
   # Legacy: If clusterName/nodeName are set here, they override global settings
@@ -82,7 +82,6 @@ reporter:
   # clusterName/nodeName per database in monitoredDatabases.
   clusterName: ""
   nodeName: ""
-  project: postgres-ai-monitoring
   apiUrl: https://postgres.ai/api/general
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
