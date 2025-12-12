@@ -158,62 +158,6 @@ class PostgresReportGenerator:
 
     def _get_postgres_version_info(self, cluster: str, node_name: str) -> Dict[str, str]:
         """
-        Fetch and parse Postgres version information from pgwatch settings metrics.
-
-        Notes:
-        - This helper is intentionally defensive: it validates the returned setting_name label
-          (tests may stub query responses broadly by metric name substring).
-        - Uses a single query with a regex on setting_name to reduce roundtrips.
-        """
-        query = (
-            f'last_over_time(pgwatch_settings_configured{{'
-            f'cluster="{cluster}", node_name="{node_name}", '
-            f'setting_name=~"server_version|server_version_num"}}[3h])'
-        )
-
-        result = self.query_instant(query)
-        version_str = None
-        version_num = None
-
-        if result.get("status") == "success":
-            if result.get("data", {}).get("result"):
-                for item in result["data"]["result"]:
-                    metric = item.get("metric", {}) or {}
-                    setting_name = metric.get("setting_name", "")
-                    setting_value = metric.get("setting_value", "")
-                    if setting_name == "server_version" and setting_value:
-                        version_str = setting_value
-                    elif setting_name == "server_version_num" and setting_value:
-                        version_num = setting_value
-            else:
-                print(f"Warning: No version data found (cluster={cluster}, node_name={node_name})")
-        else:
-            print(f"Warning: Version query failed (cluster={cluster}, node_name={node_name}): status={result.get('status')}")
-
-        server_version = version_str or "Unknown"
-        version_info: Dict[str, str] = {
-            "version": server_version,
-            "server_version_num": version_num or "Unknown",
-            "server_major_ver": "Unknown",
-            "server_minor_ver": "Unknown",
-        }
-
-        if server_version != "Unknown":
-            # Handle both formats:
-            # - "15.3"
-            # - "15.3 (Ubuntu 15.3-1.pgdg20.04+1)"
-            version_parts = server_version.split()[0].split(".")
-            if len(version_parts) >= 1 and version_parts[0]:
-                version_info["server_major_ver"] = version_parts[0]
-                if len(version_parts) >= 2:
-                    version_info["server_minor_ver"] = ".".join(version_parts[1:])
-                else:
-                    version_info["server_minor_ver"] = "0"
-
-        return version_info
-
-    def generate_a002_version_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
-        """
         Generate A002 Version Information report.
         
         Args:
@@ -224,7 +168,52 @@ class PostgresReportGenerator:
             Dictionary containing version information
         """
         print(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
-        version_info = self._get_postgres_version_info(cluster, node_name)
+        
+        # Query PostgreSQL version information using last_over_time to get most recent values
+        # Use 3h lookback to handle cases where metrics collection might be intermittent
+        version_queries = {
+            'server_version': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version"}}[3h])',
+            'server_version_num': f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", setting_name="server_version_num"}}[3h])',
+        }
+
+        version_data = {}
+        for metric_name, query in version_queries.items():
+            result = self.query_instant(query)
+            if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                if len(result['data']['result']) > 0:
+                    # Extract setting_value from the metric labels
+                    latest_value = result['data']['result'][0]['metric'].get('setting_value', '')
+                    if latest_value:
+                        version_data[metric_name] = latest_value
+                else:
+                    print(f"Warning: A002 - No data for {metric_name} (cluster={cluster}, node_name={node_name})")
+            else:
+                print(f"Warning: A002 - Query failed for {metric_name}: status={result.get('status')}")
+
+        # Format the version data
+        server_version = version_data.get('server_version', 'Unknown')
+        version_info = {
+            "version": server_version,
+            "server_version_num": version_data.get('server_version_num', 'Unknown'),
+        }
+        
+        # Parse major and minor version if we have a valid version string
+        if server_version and server_version != 'Unknown':
+            # Handle both formats: "14.5" and "14.5 (Ubuntu 14.5-1.pgdg20.04+1)"
+            version_parts = server_version.split()[0].split('.')
+            if len(version_parts) >= 1:
+                version_info["server_major_ver"] = version_parts[0]
+                if len(version_parts) >= 2:
+                    version_info["server_minor_ver"] = ".".join(version_parts[1:])
+                else:
+                    version_info["server_minor_ver"] = '0'
+            else:
+                version_info["server_major_ver"] = 'Unknown'
+                version_info["server_minor_ver"] = 'Unknown'
+        else:
+            version_info["server_major_ver"] = 'Unknown'
+            version_info["server_minor_ver"] = 'Unknown'
+
         return self.format_report_data("A002", {"version": version_info}, node_name)
 
     def generate_a003_settings_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
@@ -1514,109 +1503,171 @@ class PostgresReportGenerator:
         self,
         cluster: str = "local",
         node_name: str = "node-01",
-        time_range_minutes: int = 60,
+        time_range_hours: int = 24,
+        topn_limit: int = 100,
     ) -> Dict[str, Any]:
         """
-        Generate K004 cumulative metrics snapshot for the last time window.
+        Generate K004 hourly snapshots report.
 
-        This report is intended to be executed hourly (by the scheduler) and
-        returns cumulative values for the last hour window:
-        - "ash" style activity based on pgwatch_wait_events_total (avg active sessions, session-seconds),
-          including breakdown by queryid showing wait_event_type occurrences per query.
-        - pgss style workload metrics based on pgwatch_pg_stat_statements_* (increase over the window),
-          aggregated across all queryid values.
+        This report is intended to be executed hourly and provides:
+        - N+1 hourly snapshots of pgss data with TopN vectors (limited to topn_limit entries):
+          * topN by total exec time
+          * topN by total plan time  
+          * topN by temp bytes written
+          * topN by WAL generation
+          * topN by calls
+          * topN by shared blks read
+        - N hourly snapshots of TopN wait_event_type:wait_event--queryid pairs
+        - N hourly pgss mean time (exec+plan)
         """
-        print("Generating K004 cumulative metrics snapshot report...")
+        print(f"Generating K004 hourly snapshots report for {time_range_hours} hours...")
 
-        if time_range_minutes < 1:
-            time_range_minutes = 1
+        if time_range_hours < 1:
+            time_range_hours = 1
 
-        end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(minutes=time_range_minutes)
-        window = f"{time_range_minutes}m"
+        # Align to hour boundaries
+        end_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        start_time = end_time - timedelta(hours=time_range_hours)
+        start_eval = end_time - timedelta(hours=time_range_hours - 1)
 
-        # -----------------------------
-        # pgss: cumulative over window
-        # -----------------------------
-        pgss_metrics = [
-            ("calls", "pgwatch_pg_stat_statements_calls", 1.0),
-            ("total_time_ms", "pgwatch_pg_stat_statements_exec_time_total", 1.0),
-            ("rows", "pgwatch_pg_stat_statements_rows", 1.0),
-            # bytes → 8 KiB blocks for "shared_blks_*" style outputs (matches _process_pgss_data convention)
-            ("shared_blks_hit", "pgwatch_pg_stat_statements_shared_bytes_hit_total", 1.0 / 8192.0),
-            ("shared_blks_read", "pgwatch_pg_stat_statements_shared_bytes_read_total", 1.0 / 8192.0),
-            ("shared_blks_dirtied", "pgwatch_pg_stat_statements_shared_bytes_dirtied_total", 1.0 / 8192.0),
-            ("shared_blks_written", "pgwatch_pg_stat_statements_shared_bytes_written_total", 1.0 / 8192.0),
+        # Build hour bucket timestamps
+        bucket_ends: List[datetime] = []
+        for i in range(time_range_hours):
+            bucket_ends.append(start_eval + timedelta(hours=i))
+
+        def _to_epoch(dt: datetime) -> int:
+            return int(dt.timestamp())
+
+        # -------------------------
+        # pgss hourly snapshots
+        # -------------------------
+        pgss_metrics_config = [
+            ("exec_time", "pgwatch_pg_stat_statements_exec_time_total"),
+            ("plan_time", "pgwatch_pg_stat_statements_plan_time_total"),
+            ("temp_bytes_written", "pgwatch_pg_stat_statements_temp_bytes_written"),
+            ("wal_bytes", "pgwatch_pg_stat_statements_wal_bytes"),
+            ("calls", "pgwatch_pg_stat_statements_calls"),
+            ("shared_blks_read", "pgwatch_pg_stat_statements_shared_bytes_read_total"),
         ]
 
-        pgss_totals: Dict[str, float] = {}
-        for out_name, prom_metric, scale in pgss_metrics:
-            query = f'sum(increase({prom_metric}{{cluster="{cluster}", node_name="{node_name}"}}[{window}]))'
+        pgss_snapshots = []
+        for bucket_end in bucket_ends:
+            bucket_start = bucket_end - timedelta(hours=1)
+            snapshot = {
+                "hour_start": bucket_start.isoformat(),
+                "hour_end": bucket_end.isoformat(),
+                "topn_vectors": {},
+                "mean_time_ms": 0.0,
+            }
+
+            # For each metric, get top N queryids
+            for metric_name, prom_metric in pgss_metrics_config:
+                query = f'topk({topn_limit}, sum by (queryid) (increase({prom_metric}{{cluster="{cluster}", node_name="{node_name}"}}[1h]) @ {_to_epoch(bucket_end)}))'
+                res = self.query_instant(query)
+                
+                topn_list = []
+                if res.get("status") == "success" and res.get("data", {}).get("result"):
+                    for item in res["data"]["result"]:
+                        queryid = item.get("metric", {}).get("queryid", "")
+                        try:
+                            value = float(item.get("value", [None, 0.0])[1])
+                            # Convert bytes to blocks for shared_blks_read
+                            if metric_name == "shared_blks_read":
+                                value = value / 8192.0
+                            topn_list.append({"queryid": queryid, "value": value})
+                        except (TypeError, ValueError, IndexError):
+                            continue
+                
+                snapshot["topn_vectors"][f"topn_by_{metric_name}"] = topn_list
+
+            # Calculate mean time (exec + plan) for this hour
+            exec_query = f'sum(increase(pgwatch_pg_stat_statements_exec_time_total{{cluster="{cluster}", node_name="{node_name}"}}[1h]) @ {_to_epoch(bucket_end)})'
+            plan_query = f'sum(increase(pgwatch_pg_stat_statements_plan_time_total{{cluster="{cluster}", node_name="{node_name}"}}[1h]) @ {_to_epoch(bucket_end)})'
+            calls_query = f'sum(increase(pgwatch_pg_stat_statements_calls{{cluster="{cluster}", node_name="{node_name}"}}[1h]) @ {_to_epoch(bucket_end)})'
+            
+            total_exec = 0.0
+            total_plan = 0.0
+            total_calls = 0.0
+            
+            for q, var in [(exec_query, "exec"), (plan_query, "plan"), (calls_query, "calls")]:
+                res = self.query_instant(q)
+                if res.get("status") == "success" and res.get("data", {}).get("result"):
+                    try:
+                        val = float(res["data"]["result"][0]["value"][1])
+                        if var == "exec":
+                            total_exec = val
+                        elif var == "plan":
+                            total_plan = val
+                        else:
+                            total_calls = val
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        pass
+            
+            if total_calls > 0:
+                snapshot["mean_time_ms"] = (total_exec + total_plan) / total_calls
+            
+            pgss_snapshots.append(snapshot)
+
+        # -------------------------
+        # Wait events hourly snapshots
+        # -------------------------
+        wait_snapshots = []
+        for bucket_end in bucket_ends:
+            bucket_start = bucket_end - timedelta(hours=1)
+            snapshot = {
+                "hour_start": bucket_start.isoformat(),
+                "hour_end": bucket_end.isoformat(),
+                "topn_wait_events": [],
+            }
+
+            # Get top wait_event_type:wait_event--queryid pairs
+            # Note: wait_events metric uses 'query_id' label (Postgres 14+)
+            query = f'topk({topn_limit}, sum by (query_id, wait_event_type, wait_event) (avg_over_time(pgwatch_wait_events_total{{cluster="{cluster}", node_name="{node_name}", query_id!=""}}[1h]) @ {_to_epoch(bucket_end)}))'
             res = self.query_instant(query)
-            val = 0.0
+            
             if res.get("status") == "success" and res.get("data", {}).get("result"):
-                try:
-                    val = float(res["data"]["result"][0]["value"][1])
-                except (KeyError, IndexError, TypeError, ValueError):
-                    val = 0.0
-            pgss_totals[out_name] = val * scale
-
-        # --------------------------------------
-        # ash: cumulative over window (AAS, s)
-        # --------------------------------------
-        ash_query = f'sum(avg_over_time(pgwatch_wait_events_total{{cluster="{cluster}", node_name="{node_name}"}}[{window}]))'
-        ash_res = self.query_instant(ash_query)
-        ash_avg_active_sessions = 0.0
-        if ash_res.get("status") == "success" and ash_res.get("data", {}).get("result"):
-            try:
-                ash_avg_active_sessions = float(ash_res["data"]["result"][0]["value"][1])
-            except (KeyError, IndexError, TypeError, ValueError):
-                ash_avg_active_sessions = 0.0
-
-        ash_session_seconds = ash_avg_active_sessions * float(time_range_minutes) * 60.0
-
-        # Wait events grouped by queryid: {queryid: {wait_event_type: count}}
-        ash_by_queryid: Dict[str, Dict[str, float]] = {}
-        ash_by_queryid_query = (
-            f'sum by (query_id, wait_event_type) (avg_over_time(pgwatch_wait_events_total{{cluster="{cluster}", node_name="{node_name}"}}[{window}]))'
-        )
-        ash_by_queryid_res = self.query_instant(ash_by_queryid_query)
-        if ash_by_queryid_res.get("status") == "success" and ash_by_queryid_res.get("data", {}).get("result"):
-            for item in ash_by_queryid_res["data"]["result"]:
-                query_id = item.get("metric", {}).get("query_id", "")
-                wait_event_type = item.get("metric", {}).get("wait_event_type", "unknown")
-                if not query_id:  # Skip entries without query_id (server processes)
-                    continue
-                try:
-                    count = float(item.get("value", [None, 0.0])[1])
-                    if query_id not in ash_by_queryid:
-                        ash_by_queryid[query_id] = {}
-                    ash_by_queryid[query_id][wait_event_type] = count
-                except (TypeError, ValueError, IndexError):
-                    continue
+                for item in res["data"]["result"]:
+                    metric = item.get("metric", {})
+                    query_id = metric.get("query_id", "")
+                    wait_event_type = metric.get("wait_event_type", "")
+                    wait_event = metric.get("wait_event", "")
+                    
+                    if not query_id:  # Skip server processes
+                        continue
+                    
+                    try:
+                        count = float(item.get("value", [None, 0.0])[1])
+                        snapshot["topn_wait_events"].append({
+                            "queryid": query_id,
+                            "wait_event_type": wait_event_type,
+                            "wait_event": wait_event,
+                            "count": count,
+                        })
+                    except (TypeError, ValueError, IndexError):
+                        continue
+            
+            wait_snapshots.append(snapshot)
 
         return self.format_report_data(
             "K004",
             {
                 "summary": {
-                    "time_range_minutes": time_range_minutes,
+                    "time_range_hours": time_range_hours,
                     "start_time": start_time.isoformat(),
                     "end_time": end_time.isoformat(),
-                    "window": window,
+                    "topn_limit": topn_limit,
                     "notes": [
-                        "This report is intended to run hourly and summarize cumulative values over the last window.",
-                        "pgss values are derived using sum(increase(metric[window])) aggregated across all queryid values.",
-                        "ash values are derived from pgwatch_wait_events_total using avg_over_time(...[window]) and represent average active sessions.",
+                        f"This report provides {time_range_hours} hourly snapshots of pgss and wait events data.",
+                        "pgss snapshots include TopN queries by multiple metrics (exec_time, plan_time, temp_bytes, wal_bytes, calls, shared_blks_read).",
+                        "Wait events snapshots show TopN wait_event_type:wait_event--queryid combinations.",
+                        "Mean time represents average (exec_time + plan_time) per call for each hour.",
                     ],
                 },
-                "pgss": {"totals": pgss_totals},
-                "ash": {
-                    "avg_active_sessions": ash_avg_active_sessions,
-                    "session_seconds": ash_session_seconds,
-                    "wait_events_by_queryid": ash_by_queryid,
-                },
+                "pgss_hourly_snapshots": pgss_snapshots,
+                "wait_events_hourly_snapshots": wait_snapshots,
             },
             node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
         )
 
     def _get_pgss_metrics_data(self, cluster: str, node_name: str, start_time: datetime, end_time: datetime) -> List[
@@ -1994,7 +2045,7 @@ class PostgresReportGenerator:
             "K001": "Globally aggregated query metrics",
             "K002": "Workload type",
             "K003": "Top-50 queries by total_time",
-            "K004": "Hourly cumulative metrics (ash and pgss)",
+            "K004": "Hourly snapshots with TopN queries and wait events",
             "L001": "Table sizes",
             "L002": "Data types being used",
             "L003": "Integer out-of-range risks in PKs",
