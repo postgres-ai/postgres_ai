@@ -133,20 +133,27 @@ def test_generate_a002_version_report(
     }
 
     def fake_query(query: str) -> dict[str, Any]:
-        for key, val in values.items():
-            if f'setting_name="{key}"' in query:
-                return {
-                    "status": "success",
-                    "data": {
-                        "result": [
-                            {
-                                "metric": {
-                                    "setting_value": val,
-                                }
+        # A002 uses a helper that queries both settings via a single regex selector.
+        if 'setting_name=~"server_version|server_version_num"' in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {
+                            "metric": {
+                                "setting_name": "server_version",
+                                "setting_value": values["server_version"],
                             }
-                        ]
-                    },
-                }
+                        },
+                        {
+                            "metric": {
+                                "setting_name": "server_version_num",
+                                "setting_value": values["server_version_num"],
+                            }
+                        },
+                    ]
+                },
+            }
         return {"status": "success", "data": {"result": []}}
 
     monkeypatch.setattr(generator, "query_instant", fake_query)
@@ -309,6 +316,18 @@ def test_generate_a003_settings_report(monkeypatch: pytest.MonkeyPatch, generato
 @pytest.mark.unit
 def test_generate_a007_altered_settings_report(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator) -> None:
     def fake_query(query: str) -> dict[str, Any]:
+        # Handle version info query from _get_postgres_version_info
+        if 'setting_name=~"server_version|server_version_num"' in query:
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {"metric": {"setting_name": "server_version", "setting_value": "15.0"}},
+                        {"metric": {"setting_name": "server_version_num", "setting_value": "150000"}},
+                    ]
+                },
+            }
+        # Handle altered settings query
         assert "pgwatch_settings_is_default" in query
         return {
             "status": "success",
@@ -340,6 +359,7 @@ def test_generate_a007_altered_settings_report(monkeypatch: pytest.MonkeyPatch, 
     data = payload["results"]["node-1"]["data"]
 
     assert set(data.keys()) == {"work_mem", "autovacuum"}
+    assert "postgres_version" in payload["results"]["node-1"]  # postgres_version is at node level
     assert data["work_mem"]["pretty_value"] == "1 MB"
     assert data["autovacuum"]["pretty_value"] == "off"
 
