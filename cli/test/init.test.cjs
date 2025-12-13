@@ -36,7 +36,9 @@ test("buildInitPlan includes create user when role does not exist", async () => 
   });
 
   assert.equal(plan.database, "mydb");
-  assert.ok(plan.steps.some((s) => s.name === "create monitoring user"));
+  const roleStep = plan.steps.find((s) => s.name === "01.role");
+  assert.ok(roleStep);
+  assert.match(roleStep.sql, /create\s+user/i);
   assert.ok(!plan.steps.some((s) => s.optional));
 });
 
@@ -48,7 +50,7 @@ test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", asyn
     includeOptionalPermissions: false,
     roleExists: false,
   });
-  const step = plan.steps.find((s) => s.name === "create monitoring user");
+  const step = plan.steps.find((s) => s.name === "01.role");
   assert.ok(step);
   assert.match(step.sql, /password 'pa''ss'/);
   assert.equal(step.params, undefined);
@@ -63,7 +65,9 @@ test("buildInitPlan includes alter user when role exists", async () => {
     roleExists: true,
   });
 
-  assert.ok(plan.steps.some((s) => s.name === "update monitoring user password"));
+  const roleStep = plan.steps.find((s) => s.name === "01.role");
+  assert.ok(roleStep);
+  assert.match(roleStep.sql, /alter\s+user/i);
   assert.ok(plan.steps.some((s) => s.optional));
 });
 
@@ -95,9 +99,9 @@ test("print-sql redaction regex matches password literal with embedded quotes", 
     includeOptionalPermissions: false,
     roleExists: false,
   });
-  const step = plan.steps.find((s) => s.name === "create monitoring user");
+  const step = plan.steps.find((s) => s.name === "01.role");
   assert.ok(step);
-  const redacted = step.sql.replace(/password\\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+  const redacted = step.sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
   assert.match(redacted, /password '<redacted>'/i);
 });
 
