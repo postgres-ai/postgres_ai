@@ -183,7 +183,7 @@ cli:npm:publish:
   after_script:
     - rm -f ~/.npmrc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v?\\d+\\.\\d+(\\.\\d+)?-(dev|beta)\\.\\d+$/'
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+(\.\d+)?-(dev|beta)\.\d+$/'
     # GitLab "Run pipeline" UI ("web" pipelines) often doesn't populate tag vars consistently.
     # Keep this job available manually so the pipeline is never empty; the script validates the ref name.
     - if: '$CI_PIPELINE_SOURCE == "web"'

@@ -42,6 +42,18 @@ test("buildInitPlan includes create user when role does not exist", async () => 
   assert.ok(!plan.steps.some((s) => s.optional));
 });
 
+test("buildInitPlan includes role step when roleExists is omitted", async () => {
+  const plan = await init.buildInitPlan({
+    database: "mydb",
+    monitoringUser: "postgres_ai_mon",
+    monitoringPassword: "pw",
+    includeOptionalPermissions: false,
+  });
+  const roleStep = plan.steps.find((s) => s.name === "01.role");
+  assert.ok(roleStep);
+  assert.match(roleStep.sql, /do\s+\$\$/i);
+});
+
 test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",

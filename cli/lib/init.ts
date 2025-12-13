@@ -340,6 +340,7 @@ export async function buildInitPlan(params: {
   const qRole = quoteIdent(monitoringUser);
   const qDb = quoteIdent(database);
   const qPw = quoteLiteral(params.monitoringPassword);
+  const qRoleNameLit = quoteLiteral(monitoringUser);
 
   const steps: InitStep[] = [];
 
@@ -348,20 +349,25 @@ export async function buildInitPlan(params: {
     DB_IDENT: qDb,
   };
 
-  // Role creation/update is done in one template file; caller decides statement.
+  // Role creation/update is done in one template file.
+  // If roleExists is unknown, use a single DO block to create-or-alter safely.
+  let roleStmt: string | null = null;
   if (params.roleExists === false) {
-    const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), {
-      ...vars,
-      ROLE_STMT: `create user ${qRole} with password ${qPw};`,
-    });
-    steps.push({ name: "01.role", sql: roleSql });
+    roleStmt = `create user ${qRole} with password ${qPw};`;
   } else if (params.roleExists === true) {
-    const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), {
-      ...vars,
-      ROLE_STMT: `alter user ${qRole} with password ${qPw};`,
-    });
-    steps.push({ name: "01.role", sql: roleSql });
+    roleStmt = `alter user ${qRole} with password ${qPw};`;
+  } else {
+    roleStmt = `do $$ begin
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = ${qRoleNameLit}) then
+    create user ${qRole} with password ${qPw};
+  else
+    alter user ${qRole} with password ${qPw};
+  end if;
+end $$;`;
   }
+
+  const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), { ...vars, ROLE_STMT: roleStmt });
+  steps.push({ name: "01.role", sql: roleSql });
 
   steps.push({
     name: "02.permissions",
