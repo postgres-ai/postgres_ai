@@ -121,10 +121,12 @@ cli:node:tests:
     - corepack enable || true
     - apt-get update
     - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
-    - node -v && npm -v
-    - npm --prefix cli ci
+    # initdb refuses to run as root; run CLI tests as an unprivileged user
+    - useradd -m -s /bin/bash pgtest || true
+    - chown -R pgtest:pgtest "$CI_PROJECT_DIR"
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && node -v && npm -v && npm --prefix cli ci"
   script:
-    - npm --prefix cli test
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && npm --prefix cli test"
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
