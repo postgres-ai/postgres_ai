@@ -157,7 +157,6 @@ cli:npm:publish:
 
       cd cli
 
-      PKG_VERSION="$(node -p "require('./package.json').version")"
       TAG_VERSION="$RAW_TAG"
       TAG_VERSION="${TAG_VERSION#v}"
 
@@ -173,15 +172,12 @@ cli:npm:publish:
         exit 1
       fi
 
-      if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-        echo "Version mismatch: cli/package.json=$PKG_VERSION but tag=$TAG_VERSION"
-        exit 1
-      fi
-
       # Configure npm auth without committing credentials
       printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
 
       npm ci --no-audit --no-fund
+      # Make the git tag the source of truth without committing version bumps.
+      npm version --no-git-tag-version "$TAG_VERSION"
       npm run build
       npm publish --tag "$DIST_TAG" --access public
   after_script:
