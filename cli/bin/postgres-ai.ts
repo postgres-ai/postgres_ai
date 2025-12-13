@@ -129,8 +129,9 @@ program
   .option("--monitoring-user <name>", "Monitoring role name to create/update", "postgres_ai_mon")
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
-  .option("--print-sql", "Print SQL steps before applying (passwords redacted by default)", false)
+  .option("--print-sql", "Print SQL plan before applying (does not exit; use --dry-run to exit)", false)
   .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
+  .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
   .option("--dry-run", "Print SQL steps and exit without applying changes", false)
   .addHelpText(
     "after",
@@ -146,6 +147,8 @@ program
       "",
       "Monitoring password:",
       "  --password <password>         or  PGAI_MON_PASSWORD=...  (otherwise auto-generated)",
+      "  If auto-generated, it is printed only on TTY by default.",
+      "  To print it in non-interactive mode: --print-password",
       "",
       "Inspect SQL without applying changes:",
       "  postgresai init <conn> --dry-run",
@@ -163,6 +166,7 @@ program
     skipOptionalPermissions?: boolean;
     printSql?: boolean;
     showSecrets?: boolean;
+    printPassword?: boolean;
     dryRun?: boolean;
   }) => {
     let adminConn;
@@ -220,8 +224,25 @@ program
         });
         monPassword = resolved.password;
         if (resolved.generated) {
-          console.log(`Generated password for monitoring user ${opts.monitoringUser}: ${monPassword}`);
-          console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+          const canPrint = process.stdout.isTTY || !!opts.printPassword;
+          if (canPrint) {
+            console.log(`Generated password for monitoring user ${opts.monitoringUser}: ${monPassword}`);
+            console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+          } else {
+            console.error(
+              [
+                `✗ Monitoring password was auto-generated for ${opts.monitoringUser} but not printed in non-interactive mode.`,
+                "",
+                "Provide it explicitly:",
+                "  --password <password>   or   PGAI_MON_PASSWORD=...",
+                "",
+                "Or (NOT recommended) print the generated password:",
+                "  --print-password",
+              ].join("\n")
+            );
+            process.exitCode = 1;
+            return;
+          }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

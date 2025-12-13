@@ -191,6 +191,29 @@ test(
 );
 
 test(
+  "integration: init requires explicit monitoring password in non-interactive mode (unless --print-password)",
+  { skip: !havePostgresBinaries() },
+  async (t) => {
+    const pg = await withTempPostgres(t);
+
+    // spawnSync captures stdout/stderr (non-TTY). We should not print a generated password unless explicitly requested.
+    {
+      const r = await runCliInit([pg.adminUri, "--skip-optional-permissions"]);
+      assert.notEqual(r.status, 0);
+      assert.match(r.stderr, /not printed in non-interactive mode/i);
+      assert.match(r.stderr, /--print-password/);
+    }
+
+    // With explicit opt-in, it should succeed (and will print the generated password).
+    {
+      const r = await runCliInit([pg.adminUri, "--print-password", "--skip-optional-permissions"]);
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+      assert.match(r.stdout, /Generated password for monitoring user/i);
+    }
+  }
+);
+
+test(
   "integration: init fixes slightly-off permissions idempotently",
   { skip: !havePostgresBinaries() },
   async (t) => {
