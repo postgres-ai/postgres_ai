@@ -95,7 +95,8 @@ async function withTempPostgres(t) {
   const { Client } = require("pg");
 
   const connectLocal = async (database = "postgres") => {
-    const c = new Client({ host: socketDir, user: "postgres", database });
+    // IMPORTANT: must match the port Postgres is started with; otherwise pg defaults to 5432 and the socket path won't exist.
+    const c = new Client({ host: socketDir, port, user: "postgres", database });
     await c.connect();
     return c;
   };
