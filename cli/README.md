@@ -67,6 +67,20 @@ Optional permissions (RDS/self-managed extras from the root `README.md`) are ena
 npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
 ```
 
+### Print SQL / dry run
+
+To see what SQL would be executed (passwords redacted by default):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --print-sql
+```
+
+To print SQL and exit without applying anything:
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --dry-run
+```
+
 ## Quick start
 
 ### Authentication

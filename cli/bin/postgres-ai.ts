@@ -129,6 +129,9 @@ program
   .option("--monitoring-user <name>", "Monitoring role name to create/update", "postgres_ai_mon")
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
+  .option("--print-sql", "Print SQL steps before applying (passwords redacted by default)", false)
+  .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
+  .option("--dry-run", "Print SQL steps and exit without applying changes", false)
   .action(async (conn: string | undefined, opts: {
     dbUrl?: string;
     host?: string;
@@ -139,6 +142,9 @@ program
     monitoringUser: string;
     password?: string;
     skipOptionalPermissions?: boolean;
+    printSql?: boolean;
+    showSecrets?: boolean;
+    dryRun?: boolean;
   }) => {
     let adminConn;
     try {
@@ -164,6 +170,8 @@ program
     console.log(`Connecting to: ${adminConn.display}`);
     console.log(`Monitoring user: ${opts.monitoringUser}`);
     console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+
+    const shouldPrintSql = !!opts.printSql || !!opts.dryRun;
 
     // Use native pg client instead of requiring psql to be installed
     const { Client } = require("pg");
@@ -209,6 +217,30 @@ program
         includeOptionalPermissions,
         roleExists,
       });
+
+      if (shouldPrintSql) {
+        const redact = !opts.showSecrets;
+        const redactPasswords = (sql: string): string => {
+          if (!redact) return sql;
+          // Replace PASSWORD '<literal>' (handles doubled quotes inside).
+          return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+        };
+
+        console.log("\n--- SQL plan ---");
+        for (const step of plan.steps) {
+          console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+          console.log(redactPasswords(step.sql));
+        }
+        console.log("\n--- end SQL plan ---\n");
+        if (redact) {
+          console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
+        }
+      }
+
+      if (opts.dryRun) {
+        console.log("✓ dry-run completed (no changes were applied)");
+        return;
+      }
 
       const { applied, skippedOptional } = await applyInitPlan({ client, plan });
 
