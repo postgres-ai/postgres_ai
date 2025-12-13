@@ -203,32 +203,69 @@ export function resolveAdminConnection(opts: {
 }
 
 export async function promptHidden(prompt: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-  });
-
-  // Mask input by overriding internal write method.
-  const anyRl = rl as any;
-  const out = process.stdout as NodeJS.WriteStream;
-  anyRl._writeToOutput = (str: string) => {
-    // Keep newlines and carriage returns; mask everything else.
-    if (str === "\n" || str === "\r\n") {
-      out.write(str);
-    } else {
-      out.write("*");
-    }
-  };
-
-  try {
-    const answer = await new Promise<string>((resolve) => rl.question(prompt, resolve));
-    // Ensure we end the masked line cleanly.
-    process.stdout.write("\n");
-    return answer;
-  } finally {
-    rl.close();
+  // Implement our own hidden input reader so:
+  // - prompt text is visible
+  // - only user input is masked
+  // - we don't rely on non-public readline internals
+  if (!process.stdin.isTTY) {
+    throw new Error("Cannot prompt for password in non-interactive mode");
   }
+
+  const stdin = process.stdin;
+  const stdout = process.stdout as NodeJS.WriteStream;
+
+  stdout.write(prompt);
+
+  return await new Promise<string>((resolve, reject) => {
+    let value = "";
+
+    const cleanup = () => {
+      try {
+        stdin.setRawMode(false);
+      } catch {
+        // ignore
+      }
+      stdin.removeListener("keypress", onKeypress);
+    };
+
+    const onKeypress = (str: string, key: any) => {
+      if (key?.ctrl && key?.name === "c") {
+        stdout.write("\n");
+        cleanup();
+        reject(new Error("Cancelled"));
+        return;
+      }
+
+      if (key?.name === "return" || key?.name === "enter") {
+        stdout.write("\n");
+        cleanup();
+        resolve(value);
+        return;
+      }
+
+      if (key?.name === "backspace") {
+        if (value.length > 0) {
+          value = value.slice(0, -1);
+          // Erase one mask char.
+          stdout.write("\b \b");
+        }
+        return;
+      }
+
+      // Ignore other control keys.
+      if (key?.ctrl || key?.meta) return;
+
+      if (typeof str === "string" && str.length > 0) {
+        value += str;
+        stdout.write("*");
+      }
+    };
+
+    readline.emitKeypressEvents(stdin);
+    stdin.setRawMode(true);
+    stdin.on("keypress", onKeypress);
+    stdin.resume();
+  });
 }
 
 export async function resolveMonitoringPassword(opts: {
