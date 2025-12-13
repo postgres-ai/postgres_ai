@@ -66,4 +66,11 @@ test("resolveAdminConnection accepts positional conninfo", () => {
   assert.equal(r.clientConfig.user, "alice");
 });
 
+test("resolveAdminConnection rejects invalid psql-like port", () => {
+  assert.throws(
+    () => init.resolveAdminConnection({ host: "localhost", port: "abc", username: "u", dbname: "d" }),
+    /Invalid port value/
+  );
+});
+
 

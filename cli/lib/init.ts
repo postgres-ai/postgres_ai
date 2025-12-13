@@ -195,7 +195,13 @@ export function resolveAdminConnection(opts: {
 
   const cfg: PgClientConfig = {};
   if (opts.host) cfg.host = opts.host;
-  if (opts.port !== undefined && opts.port !== "") cfg.port = Number(opts.port);
+  if (opts.port !== undefined && opts.port !== "") {
+    const p = Number(opts.port);
+    if (!Number.isFinite(p) || !Number.isInteger(p) || p <= 0 || p > 65535) {
+      throw new Error(`Invalid port value: ${String(opts.port)}`);
+    }
+    cfg.port = p;
+  }
   if (opts.username) cfg.user = opts.username;
   if (opts.dbname) cfg.database = opts.dbname;
   if (opts.adminPassword) cfg.password = opts.adminPassword;
