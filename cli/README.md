@@ -96,7 +96,7 @@ postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 
 ##### Quickstart options
 - `--demo` - Demo mode with sample database (testing only, cannot use with --api-key)
-- `--api-key <key>` - Postgres AI API key for automated report uploads
+- `--api-key <key>` - PostgresAI API key for automated report uploads
 - `--db-url <url>` - PostgreSQL connection URL to monitor (format: `postgresql://user:pass@host:port/db`)
 - `-y, --yes` - Accept all defaults and skip interactive prompts
 
@@ -205,12 +205,12 @@ API key resolution order:
 
 Base URL resolution order:
 - API base URL (`apiBaseUrl`):
-  1. Command line option (`--api-base-url`)
+  1. Command-line option (`--api-base-url`)
   2. Environment variable (`PGAI_API_BASE_URL`)
   3. User config file `baseUrl` (`~/.config/postgresai/config.json`)
   4. Default: `https://postgres.ai/api/general/`
 - UI base URL (`uiBaseUrl`):
-  1. Command line option (`--ui-base-url`)
+  1. Command-line option (`--ui-base-url`)
   2. Environment variable (`PGAI_UI_BASE_URL`)
   3. Default: `https://console.postgres.ai`
 
@@ -264,5 +264,5 @@ Notes:
 
 ## Learn more
 
-- Documentation: https://postgres.ai/docs
-- Issues: https://gitlab.com/postgres-ai/postgres_ai/-/issues
+- Documentation: `https://postgres.ai/docs`
+- Issues: `https://gitlab.com/postgres-ai/postgres_ai/-/issues`

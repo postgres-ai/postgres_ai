@@ -17,7 +17,7 @@ On first boot, EC2 instance clones the specified version of this repository and 
 
 ## Quick start
 
-See [QUICKSTART.md](QUICKSTART.md) for step-by-step guide.
+See [QUICKSTART.md](QUICKSTART.md) for a step-by-step guide.
 
 ### Validation
 

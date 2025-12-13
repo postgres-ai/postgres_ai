@@ -1,8 +1,8 @@
-# Homebrew Installation for PostgresAI CLI
+# Homebrew installation for PostgresAI CLI
 
 This document describes how to set up and distribute the PostgresAI CLI via Homebrew.
 
-## For Users
+## For users
 
 ### Installation
 
@@ -33,9 +33,9 @@ brew uninstall postgresai
 brew untap postgres-ai/tap
 ```
 
-## For Maintainers
+## For maintainers
 
-### Creating the Homebrew Tap Repository
+### Creating the Homebrew tap repository
 
 1. Create a new GitLab repository named `homebrew-tap` at:
    `https://gitlab.com/postgres-ai/homebrew-tap`
@@ -53,7 +53,7 @@ brew untap postgres-ai/tap
    # Update the sha256 field in the formula
    ```
 
-### Updating the Formula
+### Updating the formula
 
 After publishing a new version to npm:
 
@@ -66,7 +66,7 @@ After publishing a new version to npm:
    ```
 4. Commit and push to the homebrew-tap repository
 
-### Testing Locally
+### Testing locally
 
 Before pushing to the tap:
 

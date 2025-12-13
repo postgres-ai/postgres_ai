@@ -57,13 +57,13 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 **Infrastructure:**
 - **Linux machine** with Docker installed (separate from your database server)
 - **Docker access** - the user running `postgres_ai` must have Docker permissions
-- **Access (network and pg_hba)** to the Postgres database(s) you want to monitor
+- **Access (network and `pg_hba.conf`)** to the Postgres database(s) you want to monitor
 
 **Database:**
-- Supports Postgres versions 14-18
-- **pg_stat_statements extension must be created** for the DB used for connection
+- Supports Postgres 14-18
+- **pg_stat_statements extension must be created** for the database used for the connection
 
-## ⚠️ Security Notice
+## ⚠️ Security notice
 
 **WARNING: Security is your responsibility!**
 
@@ -143,10 +143,10 @@ curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgr
   && chmod +x postgres_ai
 ```
 
-Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
+Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit `https://console.postgres.ai` (`Your org name → Manage → Access tokens`):
 
 ```bash
-# Production setup with your Access token
+# Production setup with your access token
 ./postgres_ai quickstart --api-key=your_access_token
 ```
 **Note:** You can also add your database instance in the same command:
@@ -268,10 +268,10 @@ Technical URLs (for advanced users):
 ### Node.js CLI (early preview)
 
 ```bash
-# run without install
+# Run without installing
 node ./cli/bin/postgres-ai.js --help
 
-# local dev: install aliases into PATH
+# Local development: install aliases into PATH
 npm --prefix cli install --no-audit --no-fund
 npm link ./cli
 postgres-ai --help
@@ -305,9 +305,9 @@ Install dev dependencies (includes `pytest`, `pytest-postgresql`, `psycopg`, etc
 python3 -m pip install -r reporter/requirements-dev.txt
 ```
 
-### Running Tests
+### Running tests
 
-#### Unit Tests Only (Fast, No External Services Required)
+#### Unit tests only (fast, no external services required)
 
 Run only unit tests with mocked Prometheus interactions:
 ```bash
@@ -320,7 +320,7 @@ pytest tests/reporter/test_generators_unit.py -v
 pytest tests/reporter/test_formatters.py -v
 ```
 
-#### All Tests: Unit + Integration (Requires PostgreSQL)
+#### All tests: unit + integration (requires PostgreSQL)
 
 Run the complete test suite (both unit and integration tests):
 ```bash
@@ -333,7 +333,7 @@ Integration tests create a temporary PostgreSQL instance automatically and requi
 - `pytest tests/reporter` → **Unit tests only** (integration tests skipped)
 - `pytest tests/reporter --run-integration` → **Both unit and integration tests**
 
-### Test Coverage
+### Test coverage
 
 Generate coverage report:
 ```bash

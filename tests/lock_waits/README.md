@@ -1,4 +1,4 @@
-# Lock Waits Metric Testing
+# Lock waits metric testing
 
 This directory contains tests and scripts to verify that the `lock_waits` metric is working correctly.
 
@@ -12,9 +12,9 @@ The `lock_waits` metric collects detailed information about lock waits in Postgr
 - Query IDs (PostgreSQL 14+)
 - Wait durations and blocker transaction durations
 
-## Test Components
+## Test components
 
-### 1. Python Test Script (`test_lock_waits_metric.py`)
+### 1. Python test script (`test_lock_waits_metric.py`)
 
 Automated test that:
 - Creates lock contention scenarios in the target database
@@ -22,7 +22,7 @@ Automated test that:
 - Verifies the metric is collected in Prometheus/VictoriaMetrics
 - Validates the metric structure and labels
 
-### 2. SQL Script (`create_lock_contention.sql`)
+### 2. SQL script (`create_lock_contention.sql`)
 
 Manual SQL script to create lock contention for testing. Can be run in multiple psql sessions.
 
@@ -42,7 +42,7 @@ Manual SQL script to create lock contention for testing. Can be run in multiple 
    - Check `config/pgwatch-prometheus/metrics.yml` includes `lock_waits`
    - Verify pgwatch is collecting metrics from the target database
 
-## Running the Automated Test
+## Running the automated test
 
 ### Basic Usage
 
@@ -116,7 +116,7 @@ pgwatch_lock_waits_blocker_tx_ms{datname="target_database"}
 
 ## Expected Results
 
-### Successful Test Output
+### Successful test output
 
 ```
 Setting up test environment...
@@ -144,7 +144,7 @@ Validating metric structure...
 
 ## Troubleshooting
 
-### No Records Found
+### No records found
 
 - **Check pgwatch is running**: `docker ps | grep pgwatch-prometheus`
 - **Check pgwatch logs**: `docker logs pgwatch-prometheus`
@@ -154,7 +154,7 @@ Validating metric structure...
 - **Check database name**: Ensure `--test-dbname` matches the monitored database
 - **Verify metrics exist**: `curl "http://localhost:59090/api/v1/label/__name__/values" | grep lock_waits`
 
-### Invalid Data Structure
+### Invalid data structure
 
 - **Check PostgreSQL version**: Metric requires PostgreSQL 14+ for query_id support
 - **Verify metric SQL**: Check the SQL query in `metrics.yml` is correct
@@ -189,9 +189,9 @@ test_lock_waits:
     - main
 ```
 
-## Additional Test Scenarios
+## Additional test scenarios
 
-### Test Different Lock Types
+### Test different lock types
 
 Modify the test to create different types of locks:
 
@@ -203,7 +203,7 @@ LOCK TABLE lock_test_table IN EXCLUSIVE MODE;
 SELECT pg_advisory_lock(12345);
 ```
 
-### Test Multiple Concurrent Waits
+### Test multiple concurrent waits
 
 Create multiple waiting transactions to test the LIMIT clause:
 
