@@ -208,11 +208,11 @@ Base URL resolution order:
   1. Command-line option (`--api-base-url`)
   2. Environment variable (`PGAI_API_BASE_URL`)
   3. User config file `baseUrl` (`~/.config/postgresai/config.json`)
-  4. Default: `https://postgres.ai/api/general/`
+  4. Default: https://postgres.ai/api/general/
 - UI base URL (`uiBaseUrl`):
   1. Command-line option (`--ui-base-url`)
   2. Environment variable (`PGAI_UI_BASE_URL`)
-  3. Default: `https://console.postgres.ai`
+  3. Default: https://console.postgres.ai
 
 Normalization:
 - A single trailing `/` is removed to ensure consistent path joining.
@@ -220,8 +220,8 @@ Normalization:
 ### Environment variables
 
 - `PGAI_API_KEY` - API key for PostgresAI services
-- `PGAI_API_BASE_URL` - API endpoint for backend RPC (default: `https://postgres.ai/api/general/`)
-- `PGAI_UI_BASE_URL` - UI endpoint for browser routes (default: `https://console.postgres.ai`)
+- `PGAI_API_BASE_URL` - API endpoint for backend RPC (default: https://postgres.ai/api/general/)
+- `PGAI_UI_BASE_URL` - UI endpoint for browser routes (default: https://console.postgres.ai)
 
 ### CLI options
 
@@ -255,7 +255,7 @@ pgai auth --debug \
 ```
 
 Notes:
-- If `PGAI_UI_BASE_URL` is not set, the default is `https://console.postgres.ai`.
+- If `PGAI_UI_BASE_URL` is not set, the default is https://console.postgres.ai.
 
 ## Requirements
 
@@ -264,5 +264,5 @@ Notes:
 
 ## Learn more
 
-- Documentation: `https://postgres.ai/docs`
-- Issues: `https://gitlab.com/postgres-ai/postgres_ai/-/issues`
+- Documentation: https://postgres.ai/docs
+- Issues: https://gitlab.com/postgres-ai/postgres_ai/-/issues

@@ -143,7 +143,7 @@ curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgr
   && chmod +x postgres_ai
 ```
 
-Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit `https://console.postgres.ai` (`Your org name → Manage → Access tokens`):
+Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
 
 ```bash
 # Production setup with your access token
