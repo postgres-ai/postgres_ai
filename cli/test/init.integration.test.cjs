@@ -6,6 +6,10 @@ const path = require("node:path");
 const net = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
 
+function sqlLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
 function findOnPath(cmd) {
   const which = spawnSync("sh", ["-lc", `command -v ${cmd}`], { encoding: "utf8" });
   if (which.status === 0) return String(which.stdout || "").trim();
@@ -92,6 +96,22 @@ async function withTempPostgres(t) {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  // Register cleanup immediately so failures below don't leave a running postgres and hang CI.
+  t.after(async () => {
+    postgresProc.kill("SIGTERM");
+    try {
+      await waitFor(
+        async () => {
+          if (postgresProc.exitCode === null) throw new Error("still running");
+        },
+        { timeoutMs: 5000, intervalMs: 100 }
+      );
+    } catch {
+      postgresProc.kill("SIGKILL");
+    }
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
   const { Client } = require("pg");
 
   const connectLocal = async (database = "postgres") => {
@@ -109,25 +129,10 @@ async function withTempPostgres(t) {
   const postgresPassword = "postgrespw";
   {
     const c = await connectLocal();
-    await c.query("alter user postgres password $1", [postgresPassword]);
+    await c.query(`alter user postgres password ${sqlLiteral(postgresPassword)};`);
     await c.query("create database testdb");
     await c.end();
   }
-
-  t.after(async () => {
-    postgresProc.kill("SIGTERM");
-    try {
-      await waitFor(
-        async () => {
-          if (postgresProc.exitCode === null) throw new Error("still running");
-        },
-        { timeoutMs: 5000, intervalMs: 100 }
-      );
-    } catch {
-      postgresProc.kill("SIGKILL");
-    }
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
-  });
 
   const adminUri = `postgresql://postgres:${postgresPassword}@127.0.0.1:${port}/testdb`;
   return { port, socketDir, adminUri, postgresPassword };
@@ -249,10 +254,11 @@ test("integration: init reports nicely when lacking permissions", { skip: !haveP
   {
     const c = new Client({ connectionString: pg.adminUri });
     await c.connect();
-    await c.query(
-      "do $$ begin if not exists (select 1 from pg_roles where rolname='limited') then create role limited login password $1; end if; end $$;",
-      [limitedPw]
-    );
+    await c.query(`do $$ begin
+      if not exists (select 1 from pg_roles where rolname='limited') then
+        execute 'create role limited login password ${sqlLiteral(limitedPw)}';
+      end if;
+    end $$;`);
     await c.query("grant connect on database testdb to limited");
     await c.end();
   }
