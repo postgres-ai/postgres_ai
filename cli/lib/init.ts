@@ -36,6 +36,12 @@ function quoteIdent(ident: string): string {
   return `"${ident.replace(/"/g, "\"\"")}"`;
 }
 
+function quoteLiteral(value: string): string {
+  // Single-quote and escape embedded quotes by doubling.
+  // This is used where Postgres grammar requires a literal (e.g., CREATE/ALTER ROLE PASSWORD).
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 export function maskConnectionString(dbUrl: string): string {
   // Hide password if present (postgresql://user:pass@host/db).
   try {
@@ -308,6 +314,7 @@ export async function buildInitPlan(params: {
 
   const qRole = quoteIdent(monitoringUser);
   const qDb = quoteIdent(database);
+  const qPw = quoteLiteral(params.monitoringPassword);
 
   const steps: InitStep[] = [];
 
@@ -315,14 +322,12 @@ export async function buildInitPlan(params: {
   if (params.roleExists === false) {
     steps.push({
       name: "create monitoring user",
-      sql: `create user ${qRole} with password $1;`,
-      params: [params.monitoringPassword],
+      sql: `create user ${qRole} with password ${qPw};`,
     });
   } else if (params.roleExists === true) {
     steps.push({
       name: "update monitoring user password",
-      sql: `alter user ${qRole} with password $1;`,
-      params: [params.monitoringPassword],
+      sql: `alter user ${qRole} with password ${qPw};`,
     });
   } else {
     // Unknown: caller will rebuild after probing role existence.
