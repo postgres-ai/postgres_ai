@@ -1,5 +1,6 @@
 stages:
   - test
+  - publish
 
 reporter:tests:
   stage: test
@@ -126,6 +127,48 @@ cli:node:tests:
     - npm --prefix cli test
   rules:
     - if: '$CI_COMMIT_BRANCH'
+
+cli:npm:publish:
+  stage: publish
+  image: node:20-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    - node -v && npm -v
+  script:
+    - |
+      set -euo pipefail
+      : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
+
+      # Tags should look like: cli-v0.14.0-beta.1
+      case "${CI_COMMIT_TAG:-}" in
+        cli-v*) ;;
+        *) echo "Not a CLI publish tag, skipping"; exit 1 ;;
+      esac
+
+      cd cli
+
+      PKG_VERSION="$(node -p "require('./package.json').version")"
+      TAG_VERSION="${CI_COMMIT_TAG#cli-v}"
+
+      if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+        echo "Version mismatch: cli/package.json=$PKG_VERSION but tag=$TAG_VERSION"
+        exit 1
+      fi
+
+      # Configure npm auth without committing credentials
+      printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
+
+      npm ci --no-audit --no-fund
+      npm run build
+      npm publish --tag beta --access public
+  after_script:
+    - rm -f ~/.npmrc
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^cli-v\\d+\\.\\d+\\.\\d+-beta\\.\\d+$/'
 
 cli:node:e2e:dind:
   stage: test
