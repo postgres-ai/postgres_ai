@@ -109,6 +109,24 @@ cli:node:smoke:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+cli:node:tests:
+  stage: test
+  image: node:20-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    - apt-get update
+    - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
+    - node -v && npm -v
+    - npm --prefix cli ci
+  script:
+    - npm --prefix cli test
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
 cli:node:e2e:dind:
   stage: test
   image: node:20-alpine

@@ -25,7 +25,8 @@
     "build": "tsc",
     "prepare": "npm run build",
     "start": "node ./dist/bin/postgres-ai.js --help",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "npm run build && node --test test/*.test.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",

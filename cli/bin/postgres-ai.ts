@@ -15,6 +15,7 @@ import { URL } from "url";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
+import { applyInitPlan, buildInitPlan, resolveAdminConnection, resolveMonitoringPassword } from "../lib/init";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -115,6 +116,118 @@ program
     "--ui-base-url <url>",
     "UI base URL for browser routes (overrides PGAI_UI_BASE_URL)"
   );
+
+program
+  .command("init [conn]")
+  .description("Create a monitoring user and grant all required permissions (idempotent)")
+  .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
+  .option("-h, --host <host>", "PostgreSQL host (psql-like)")
+  .option("-p, --port <port>", "PostgreSQL port (psql-like)")
+  .option("-U, --username <username>", "PostgreSQL user (psql-like)")
+  .option("-d, --dbname <dbname>", "PostgreSQL database name (psql-like)")
+  .option("--admin-password <password>", "Admin connection password (otherwise uses PGPASSWORD if set)")
+  .option("--monitoring-user <name>", "Monitoring role name to create/update", "postgres_ai_mon")
+  .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
+  .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
+  .action(async (conn: string | undefined, opts: {
+    dbUrl?: string;
+    host?: string;
+    port?: string;
+    username?: string;
+    dbname?: string;
+    adminPassword?: string;
+    monitoringUser: string;
+    password?: string;
+    skipOptionalPermissions?: boolean;
+  }) => {
+    let adminConn;
+    try {
+      adminConn = resolveAdminConnection({
+        conn,
+        dbUrlFlag: opts.dbUrl,
+        host: opts.host,
+        port: opts.port,
+        username: opts.username,
+        dbname: opts.dbname,
+        adminPassword: opts.adminPassword,
+        envPassword: process.env.PGPASSWORD,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`✗ ${msg}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    let monPassword: string;
+    try {
+      monPassword = await resolveMonitoringPassword({
+        passwordFlag: opts.password,
+        passwordEnv: process.env.PGAI_MON_PASSWORD,
+        monitoringUser: opts.monitoringUser,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`✗ ${msg}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+    console.log(`Connecting to: ${adminConn.display}`);
+    console.log(`Monitoring user: ${opts.monitoringUser}`);
+    console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+
+    try {
+      // Use native pg client instead of requiring psql to be installed
+      const { Client } = require("pg");
+      const client = new Client(adminConn.clientConfig);
+      await client.connect();
+
+      const roleRes = await client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [
+        opts.monitoringUser,
+      ]);
+      const roleExists = roleRes.rowCount > 0;
+
+      const dbRes = await client.query("select current_database() as db");
+      const database = dbRes.rows?.[0]?.db;
+      if (typeof database !== "string" || !database) {
+        throw new Error("Failed to resolve current database name");
+      }
+
+      const plan = await buildInitPlan({
+        database,
+        monitoringUser: opts.monitoringUser,
+        monitoringPassword: monPassword,
+        includeOptionalPermissions,
+        roleExists,
+      });
+
+      const { applied, skippedOptional } = await applyInitPlan({ client, plan });
+      await client.end();
+
+      console.log("✓ init completed");
+      if (skippedOptional.length > 0) {
+        console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+        for (const s of skippedOptional) console.log(`- ${s}`);
+      }
+      // Keep output compact but still useful
+      if (process.stdout.isTTY) {
+        console.log(`Applied ${applied.length} steps`);
+      }
+    } catch (error) {
+      const errAny = error as any;
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`✗ init failed: ${message}`);
+      if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+        if (errAny.code === "42501") {
+          console.error("Hint: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges).");
+        }
+      }
+      process.exitCode = 1;
+    }
+  });
 
 /**
  * Stub function for not implemented commands

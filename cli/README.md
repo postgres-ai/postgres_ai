@@ -34,6 +34,39 @@ postgresai --help
 pgai --help  # short alias
 ```
 
+## init (create monitoring user in Postgres)
+
+This command creates (or updates) the `postgres_ai_mon` user and grants the permissions described in the root `README.md` (it is idempotent).
+
+Run without installing (positional connection string):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname
+```
+
+It also accepts libpq “conninfo” syntax:
+
+```bash
+npx postgresai init "dbname=dbname host=host user=admin"
+```
+
+And psql-like options:
+
+```bash
+npx postgresai init -h host -p 5432 -U admin -d dbname
+```
+
+Password input options (in priority order):
+- `--password <password>`
+- `PGAI_MON_PASSWORD` environment variable
+- interactive prompt (TTY only)
+
+Optional permissions (RDS/self-managed extras from the root `README.md`) are enabled by default. To skip them:
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
+```
+
 ## Quick start
 
 ### Authentication

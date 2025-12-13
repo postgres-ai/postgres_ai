@@ -1,0 +1,241 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const net = require("node:net");
+const { spawn, spawnSync } = require("node:child_process");
+
+function havePostgresBinaries() {
+  const r = spawnSync("initdb", ["--version"], { stdio: "ignore" });
+  return r.status === 0;
+}
+
+async function getFreePort() {
+  return await new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      srv.close((err) => {
+        if (err) return reject(err);
+        resolve(addr.port);
+      });
+    });
+    srv.on("error", reject);
+  });
+}
+
+async function waitFor(fn, { timeoutMs = 10000, intervalMs = 100 } = {}) {
+  const start = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (Date.now() - start > timeoutMs) throw e;
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+}
+
+async function withTempPostgres(t) {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "postgresai-init-"));
+  const dataDir = path.join(tmpRoot, "data");
+  const socketDir = path.join(tmpRoot, "sock");
+  fs.mkdirSync(socketDir, { recursive: true });
+
+  const init = spawnSync("initdb", ["-D", dataDir, "-U", "postgres", "-A", "trust"], {
+    encoding: "utf8",
+  });
+  assert.equal(init.status, 0, init.stderr || init.stdout);
+
+  // Configure: local socket trust, TCP scram.
+  const hbaPath = path.join(dataDir, "pg_hba.conf");
+  fs.appendFileSync(
+    hbaPath,
+    "\n# Added by postgresai init integration tests\nlocal all all trust\nhost all all 127.0.0.1/32 scram-sha-256\nhost all all ::1/128 scram-sha-256\n",
+    "utf8"
+  );
+
+  const port = await getFreePort();
+
+  const postgresProc = spawn(
+    "postgres",
+    ["-D", dataDir, "-k", socketDir, "-h", "127.0.0.1", "-p", String(port)],
+    { stdio: ["ignore", "pipe", "pipe"] }
+  );
+
+  const { Client } = require("pg");
+
+  const connectLocal = async (database = "postgres") => {
+    const c = new Client({ host: socketDir, user: "postgres", database });
+    await c.connect();
+    return c;
+  };
+
+  await waitFor(async () => {
+    const c = await connectLocal();
+    await c.end();
+  });
+
+  const postgresPassword = "postgrespw";
+  {
+    const c = await connectLocal();
+    await c.query("alter user postgres password $1", [postgresPassword]);
+    await c.query("create database testdb");
+    await c.end();
+  }
+
+  t.after(async () => {
+    postgresProc.kill("SIGTERM");
+    try {
+      await waitFor(
+        async () => {
+          if (postgresProc.exitCode === null) throw new Error("still running");
+        },
+        { timeoutMs: 5000, intervalMs: 100 }
+      );
+    } catch {
+      postgresProc.kill("SIGKILL");
+    }
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  const adminUri = `postgresql://postgres:${postgresPassword}@127.0.0.1:${port}/testdb`;
+  return { port, socketDir, adminUri, postgresPassword };
+}
+
+async function runCliInit(args, env = {}) {
+  const node = process.execPath;
+  const cliPath = path.resolve(__dirname, "..", "dist", "bin", "postgres-ai.js");
+  const res = spawnSync(node, [cliPath, "init", ...args], {
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+  return res;
+}
+
+test(
+  "integration: init supports URI / conninfo / psql-like connection styles",
+  { skip: !havePostgresBinaries() },
+  async (t) => {
+    const pg = await withTempPostgres(t);
+
+    // 1) positional URI
+    {
+      const r = await runCliInit([pg.adminUri, "--password", "monpw", "--skip-optional-permissions"]);
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+    }
+
+    // 2) conninfo
+    {
+      const conninfo = `dbname=testdb host=127.0.0.1 port=${pg.port} user=postgres password=${pg.postgresPassword}`;
+      const r = await runCliInit([conninfo, "--password", "monpw2", "--skip-optional-permissions"]);
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+    }
+
+    // 3) psql-like options (+ PGPASSWORD)
+    {
+      const r = await runCliInit(
+        [
+          "-h",
+          "127.0.0.1",
+          "-p",
+          String(pg.port),
+          "-U",
+          "postgres",
+          "-d",
+          "testdb",
+          "--password",
+          "monpw3",
+          "--skip-optional-permissions",
+        ],
+        { PGPASSWORD: pg.postgresPassword }
+      );
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+    }
+  }
+);
+
+test(
+  "integration: init fixes slightly-off permissions idempotently",
+  { skip: !havePostgresBinaries() },
+  async (t) => {
+    const pg = await withTempPostgres(t);
+    const { Client } = require("pg");
+
+    // Create monitoring role with wrong password, no grants.
+    {
+      const c = new Client({ connectionString: pg.adminUri });
+      await c.connect();
+      await c.query(
+        "do $$ begin if not exists (select 1 from pg_roles where rolname='postgres_ai_mon') then create role postgres_ai_mon login password 'wrong'; end if; end $$;"
+      );
+      await c.end();
+    }
+
+    // Run init (should grant everything).
+    {
+      const r = await runCliInit([pg.adminUri, "--password", "correctpw", "--skip-optional-permissions"]);
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+    }
+
+    // Verify privileges.
+    {
+      const c = new Client({ connectionString: pg.adminUri });
+      await c.connect();
+      const dbOk = await c.query(
+        "select has_database_privilege('postgres_ai_mon', current_database(), 'CONNECT') as ok"
+      );
+      assert.equal(dbOk.rows[0].ok, true);
+      const roleOk = await c.query("select pg_has_role('postgres_ai_mon', 'pg_monitor', 'member') as ok");
+      assert.equal(roleOk.rows[0].ok, true);
+      const idxOk = await c.query(
+        "select has_table_privilege('postgres_ai_mon', 'pg_catalog.pg_index', 'SELECT') as ok"
+      );
+      assert.equal(idxOk.rows[0].ok, true);
+      const viewOk = await c.query(
+        "select has_table_privilege('postgres_ai_mon', 'public.pg_statistic', 'SELECT') as ok"
+      );
+      assert.equal(viewOk.rows[0].ok, true);
+      const sp = await c.query("select rolconfig from pg_roles where rolname='postgres_ai_mon'");
+      assert.ok(Array.isArray(sp.rows[0].rolconfig));
+      assert.ok(sp.rows[0].rolconfig.some((v) => String(v).includes("search_path=")));
+      await c.end();
+    }
+
+    // Run init again (idempotent).
+    {
+      const r = await runCliInit([pg.adminUri, "--password", "correctpw", "--skip-optional-permissions"]);
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+    }
+  }
+);
+
+test("integration: init reports nicely when lacking permissions", { skip: !havePostgresBinaries() }, async (t) => {
+  const pg = await withTempPostgres(t);
+  const { Client } = require("pg");
+
+  // Create limited user that can connect but cannot create roles / grant.
+  const limitedPw = "limitedpw";
+  {
+    const c = new Client({ connectionString: pg.adminUri });
+    await c.connect();
+    await c.query(
+      "do $$ begin if not exists (select 1 from pg_roles where rolname='limited') then create role limited login password $1; end if; end $$;",
+      [limitedPw]
+    );
+    await c.query("grant connect on database testdb to limited");
+    await c.end();
+  }
+
+  const limitedUri = `postgresql://limited:${limitedPw}@127.0.0.1:${pg.port}/testdb`;
+  const r = await runCliInit([limitedUri, "--password", "monpw", "--skip-optional-permissions"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /init failed:/);
+  // Should include step context and hint.
+  assert.match(r.stderr, /Failed at step "/);
+  assert.match(r.stderr, /Hint: connect as a superuser/i);
+});
+
+
