@@ -256,7 +256,11 @@ test("integration: init reports nicely when lacking permissions", { skip: !haveP
     await c.connect();
     await c.query(`do $$ begin
       if not exists (select 1 from pg_roles where rolname='limited') then
-        execute 'create role limited login password ${sqlLiteral(limitedPw)}';
+        begin
+          create role limited login password ${sqlLiteral(limitedPw)};
+        exception when duplicate_object then
+          null;
+        end;
       end if;
     end $$;`);
     await c.query("grant connect on database testdb to limited");
