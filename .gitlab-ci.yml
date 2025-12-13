@@ -143,7 +143,7 @@ cli:npm:publish:
       set -euo pipefail
       : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
 
-      # Tags should look like: cli-v0.14.0-beta.1
+      # Tags should look like: cli-v0.14.0-dev.1 (or cli-v0.14.0-beta.1)
       case "${CI_COMMIT_TAG:-}" in
         cli-v*) ;;
         *) echo "Not a CLI publish tag, skipping"; exit 1 ;;
@@ -153,6 +153,12 @@ cli:npm:publish:
 
       PKG_VERSION="$(node -p "require('./package.json').version")"
       TAG_VERSION="${CI_COMMIT_TAG#cli-v}"
+      DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta)\\.[0-9]+$/\\1/')"
+
+      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ]; then
+        echo "Unsupported prerelease channel in tag/version: $TAG_VERSION (expected -dev.N or -beta.N)"
+        exit 1
+      fi
 
       if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
         echo "Version mismatch: cli/package.json=$PKG_VERSION but tag=$TAG_VERSION"
@@ -164,11 +170,11 @@ cli:npm:publish:
 
       npm ci --no-audit --no-fund
       npm run build
-      npm publish --tag beta --access public
+      npm publish --tag "$DIST_TAG" --access public
   after_script:
     - rm -f ~/.npmrc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^cli-v\\d+\\.\\d+\\.\\d+-beta\\.\\d+$/'
+    - if: '$CI_COMMIT_TAG =~ /^cli-v\\d+\\.\\d+\\.\\d+-(dev|beta)\\.\\d+$/'
 
 cli:node:e2e:dind:
   stage: test
