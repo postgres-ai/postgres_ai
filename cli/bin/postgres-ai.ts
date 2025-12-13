@@ -132,6 +132,25 @@ program
   .option("--print-sql", "Print SQL steps before applying (passwords redacted by default)", false)
   .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
   .option("--dry-run", "Print SQL steps and exit without applying changes", false)
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  postgresai init postgresql://admin@host:5432/dbname",
+      "  postgresai init \"dbname=dbname host=host user=admin\"",
+      "  postgresai init -h host -p 5432 -U admin -d dbname",
+      "",
+      "Admin password:",
+      "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
+      "",
+      "Monitoring password:",
+      "  --password <password>         or  PGAI_MON_PASSWORD=...  (otherwise auto-generated)",
+      "",
+      "Inspect SQL without applying changes:",
+      "  postgresai init <conn> --dry-run",
+    ].join("\n")
+  )
   .action(async (conn: string | undefined, opts: {
     dbUrl?: string;
     host?: string;
@@ -151,10 +170,11 @@ program
       adminConn = resolveAdminConnection({
         conn,
         dbUrlFlag: opts.dbUrl,
-        host: opts.host,
-        port: opts.port,
-        username: opts.username,
-        dbname: opts.dbname,
+        // Allow libpq standard env vars as implicit defaults (common UX).
+        host: opts.host ?? process.env.PGHOST,
+        port: opts.port ?? process.env.PGPORT,
+        username: opts.username ?? process.env.PGUSER,
+        dbname: opts.dbname ?? process.env.PGDATABASE,
         adminPassword: opts.adminPassword,
         envPassword: process.env.PGPASSWORD,
       });
@@ -281,6 +301,15 @@ program
       if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
         if (errAny.code === "42501") {
           console.error("Hint: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges).");
+        }
+        if (errAny.code === "ECONNREFUSED") {
+          console.error("Hint: check host/port and ensure Postgres is reachable from this machine.");
+        }
+        if (errAny.code === "ENOTFOUND") {
+          console.error("Hint: DNS resolution failed; double-check the host name.");
+        }
+        if (errAny.code === "ETIMEDOUT") {
+          console.error("Hint: connection timed out; check network/firewall rules.");
         }
       }
       process.exitCode = 1;
