@@ -5,6 +5,17 @@ const assert = require("node:assert/strict");
 // Run via: npm --prefix cli test
 const init = require("../dist/lib/init.js");
 
+function runCli(args, env = {}) {
+  const { spawnSync } = require("node:child_process");
+  const path = require("node:path");
+  const node = process.execPath;
+  const cliPath = path.resolve(__dirname, "..", "dist", "bin", "postgres-ai.js");
+  return spawnSync(node, [cliPath, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+}
+
 test("maskConnectionString hides password when present", () => {
   const masked = init.maskConnectionString("postgresql://user:secret@localhost:5432/mydb");
   assert.match(masked, /postgresql:\/\/user:\*{5}@localhost:5432\/mydb/);
@@ -123,6 +134,13 @@ test("print-sql redaction regex matches password literal with embedded quotes", 
   assert.ok(step);
   const redacted = step.sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
   assert.match(redacted, /password '<redacted>'/i);
+});
+
+test("cli: init --print-sql works without connection (offline mode)", () => {
+  const r = runCli(["init", "--print-sql", "--dry-run", "-d", "mydb", "--password", "monpw"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /SQL plan \(offline; not connected\)/);
+  assert.match(r.stdout, /grant connect on database "mydb" to "postgres_ai_mon"/i);
 });
 
 

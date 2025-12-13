@@ -152,6 +152,9 @@ program
       "",
       "Inspect SQL without applying changes:",
       "  postgresai init <conn> --dry-run",
+      "",
+      "Offline SQL plan (no DB connection):",
+      "  postgresai init --print-sql -d dbname --password '...' --show-secrets",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -169,6 +172,52 @@ program
     printPassword?: boolean;
     dryRun?: boolean;
   }) => {
+    const shouldPrintSql = !!opts.printSql || !!opts.dryRun;
+
+    // Offline mode: allow printing SQL without providing/using an admin connection.
+    // Useful for audits/reviews; caller can provide -d/PGDATABASE and an explicit monitoring password.
+    if (!conn && !opts.dbUrl && !opts.host && !opts.port && !opts.username && !opts.adminPassword) {
+      if (shouldPrintSql) {
+        const database = (opts.dbname ?? process.env.PGDATABASE ?? "postgres").trim();
+        const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+        // Use explicit password/env if provided; otherwise use a placeholder (will be redacted unless --show-secrets).
+        const monPassword =
+          (opts.password ?? process.env.PGAI_MON_PASSWORD ?? "CHANGE_ME").toString();
+
+        const plan = await buildInitPlan({
+          database,
+          monitoringUser: opts.monitoringUser,
+          monitoringPassword: monPassword,
+          includeOptionalPermissions,
+          roleExists: undefined,
+        });
+
+        const redact = !opts.showSecrets;
+        const redactPasswords = (sql: string): string => {
+          if (!redact) return sql;
+          return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+        };
+
+        console.log("\n--- SQL plan (offline; not connected) ---");
+        console.log(`-- database: ${database}`);
+        console.log(`-- monitoring user: ${opts.monitoringUser}`);
+        console.log(`-- optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+        for (const step of plan.steps) {
+          console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+          console.log(redactPasswords(step.sql));
+        }
+        console.log("\n--- end SQL plan ---\n");
+        if (redact) {
+          console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
+        }
+        if (opts.dryRun) {
+          console.log("✓ dry-run completed (no changes were applied)");
+        }
+        return;
+      }
+    }
+
     let adminConn;
     try {
       adminConn = resolveAdminConnection({
@@ -194,8 +243,6 @@ program
     console.log(`Connecting to: ${adminConn.display}`);
     console.log(`Monitoring user: ${opts.monitoringUser}`);
     console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
-
-    const shouldPrintSql = !!opts.printSql || !!opts.dryRun;
 
     // Use native pg client instead of requiring psql to be installed
     const { Client } = require("pg");
