@@ -201,12 +201,13 @@ export async function promptHidden(prompt: string): Promise<string> {
 
   // Mask input by overriding internal write method.
   const anyRl = rl as any;
+  const out = process.stdout as NodeJS.WriteStream;
   anyRl._writeToOutput = (str: string) => {
     // Keep newlines and carriage returns; mask everything else.
     if (str === "\n" || str === "\r\n") {
-      (rl.output as NodeJS.WriteStream).write(str);
+      out.write(str);
     } else {
-      (rl.output as NodeJS.WriteStream).write("*");
+      out.write("*");
     }
   };
 
