@@ -255,8 +255,29 @@ program
       }
     } catch (error) {
       const errAny = error as any;
-      const message = error instanceof Error ? error.message : String(error);
+      let message = "";
+      if (error instanceof Error && error.message) {
+        message = error.message;
+      } else if (errAny && typeof errAny === "object" && typeof errAny.message === "string" && errAny.message) {
+        message = errAny.message;
+      } else {
+        message = String(error);
+      }
+      if (!message || message === "[object Object]") {
+        message = "Unknown error";
+      }
       console.error(`✗ init failed: ${message}`);
+      if (errAny && typeof errAny === "object") {
+        if (typeof errAny.code === "string" && errAny.code) {
+          console.error(`Error code: ${errAny.code}`);
+        }
+        if (typeof errAny.detail === "string" && errAny.detail) {
+          console.error(`Detail: ${errAny.detail}`);
+        }
+        if (typeof errAny.hint === "string" && errAny.hint) {
+          console.error(`Hint: ${errAny.hint}`);
+        }
+      }
       if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
         if (errAny.code === "42501") {
           console.error("Hint: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges).");

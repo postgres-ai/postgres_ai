@@ -95,6 +95,10 @@ test("resolveAdminConnection rejects when only PGPASSWORD is provided (no connec
   assert.throws(() => init.resolveAdminConnection({ envPassword: "pw" }), /Connection is required/);
 });
 
+test("resolveAdminConnection error message includes examples", () => {
+  assert.throws(() => init.resolveAdminConnection({}), /Examples:/);
+});
+
 test("print-sql redaction regex matches password literal with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
