@@ -178,7 +178,17 @@ export function resolveAdminConnection(opts: {
 
   if (!hasPsqlParts) {
     throw new Error(
-      "Connection is required. Provide a connection string/conninfo as a positional arg, or use --db-url, or use -h/-p/-U/-d."
+      [
+        "Connection is required.",
+        "",
+        "Examples:",
+        "  postgresai init postgresql://admin@host:5432/dbname",
+        "  postgresai init \"dbname=dbname host=host user=admin\"",
+        "  postgresai init -h host -p 5432 -U admin -d dbname",
+        "",
+        "Admin password:",
+        "  --admin-password <password>  (or set PGPASSWORD)",
+      ].join("\n")
     );
   }
 
