@@ -179,10 +179,11 @@ program
     console.log(`Monitoring user: ${opts.monitoringUser}`);
     console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
 
+    // Use native pg client instead of requiring psql to be installed
+    const { Client } = require("pg");
+    const client = new Client(adminConn.clientConfig);
+
     try {
-      // Use native pg client instead of requiring psql to be installed
-      const { Client } = require("pg");
-      const client = new Client(adminConn.clientConfig);
       await client.connect();
 
       const roleRes = await client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [
@@ -205,7 +206,6 @@ program
       });
 
       const { applied, skippedOptional } = await applyInitPlan({ client, plan });
-      await client.end();
 
       console.log("✓ init completed");
       if (skippedOptional.length > 0) {
@@ -226,6 +226,12 @@ program
         }
       }
       process.exitCode = 1;
+    } finally {
+      try {
+        await client.end();
+      } catch {
+        // ignore
+      }
     }
   });
 
