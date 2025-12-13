@@ -288,7 +288,7 @@ Get your access token at [PostgresAI](https://postgres.ai) for automated report 
 
 ## 🛣️ Roadmap
 
-- Host stats for on-premise and managed Postgres setups
+- Host stats for on-premises and managed Postgres setups
 - `pg_wait_sampling` and `pg_stat_kcache` extension support
 - Additional expert dashboards: autovacuum, checkpointer, lock analysis
 - Query plan analysis and automated recommendations
