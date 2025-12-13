@@ -91,6 +91,10 @@ test("resolveAdminConnection rejects invalid psql-like port", () => {
   );
 });
 
+test("resolveAdminConnection rejects when only PGPASSWORD is provided (no connection details)", () => {
+  assert.throws(() => init.resolveAdminConnection({ envPassword: "pw" }), /Connection is required/);
+});
+
 test("print-sql redaction regex matches password literal with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",

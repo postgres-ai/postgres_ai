@@ -189,8 +189,9 @@ export function resolveAdminConnection(opts: {
   const conn = (opts.conn || "").trim();
   const dbUrlFlag = (opts.dbUrlFlag || "").trim();
 
-  const hasPsqlParts =
-    !!(opts.host || opts.port || opts.username || opts.dbname || opts.adminPassword || opts.envPassword);
+  // NOTE: passwords alone (PGPASSWORD / --admin-password) do NOT constitute a connection.
+  // We require at least some connection addressing (host/port/user/db) if no positional arg / --db-url is provided.
+  const hasConnDetails = !!(opts.host || opts.port || opts.username || opts.dbname);
 
   if (conn && dbUrlFlag) {
     throw new Error("Provide either positional connection string or --db-url, not both");
@@ -207,7 +208,7 @@ export function resolveAdminConnection(opts: {
     return { clientConfig: cfg, display: describePgConfig(cfg) };
   }
 
-  if (!hasPsqlParts) {
+  if (!hasConnDetails) {
     throw new Error(
       [
         "Connection is required.",
