@@ -2,6 +2,8 @@ import * as readline from "readline";
 import { randomBytes } from "crypto";
 import { URL } from "url";
 import type { Client as PgClient } from "pg";
+import * as fs from "fs";
+import * as path from "path";
 
 export type PgClientConfig = {
   connectionString?: string;
@@ -30,6 +32,28 @@ export type InitPlan = {
   database: string;
   steps: InitStep[];
 };
+
+function packageRootDirFromCompiled(): string {
+  // dist/lib/init.js -> <pkg>/dist/lib ; package root is ../..
+  return path.resolve(__dirname, "..", "..");
+}
+
+function sqlDir(): string {
+  return path.join(packageRootDirFromCompiled(), "sql");
+}
+
+function loadSqlTemplate(filename: string): string {
+  const p = path.join(sqlDir(), filename);
+  return fs.readFileSync(p, "utf8");
+}
+
+function applyTemplate(sql: string, vars: Record<string, string>): string {
+  return sql.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, key) => {
+    const v = vars[key];
+    if (v === undefined) throw new Error(`Missing SQL template var: ${key}`);
+    return v;
+  });
+}
 
 function quoteIdent(ident: string): string {
   // Always quote. Escape embedded quotes by doubling.
@@ -318,94 +342,41 @@ export async function buildInitPlan(params: {
 
   const steps: InitStep[] = [];
 
-  // Role creation/update is done in two alternative steps. Caller decides by checking role existence.
+  const vars = {
+    ROLE_IDENT: qRole,
+    DB_IDENT: qDb,
+  };
+
+  // Role creation/update is done in one template file; caller decides statement.
   if (params.roleExists === false) {
-    steps.push({
-      name: "create monitoring user",
-      sql: `create user ${qRole} with password ${qPw};`,
+    const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), {
+      ...vars,
+      ROLE_STMT: `create user ${qRole} with password ${qPw};`,
     });
+    steps.push({ name: "01.role", sql: roleSql });
   } else if (params.roleExists === true) {
-    steps.push({
-      name: "update monitoring user password",
-      sql: `alter user ${qRole} with password ${qPw};`,
+    const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), {
+      ...vars,
+      ROLE_STMT: `alter user ${qRole} with password ${qPw};`,
     });
-  } else {
-    // Unknown: caller will rebuild after probing role existence.
+    steps.push({ name: "01.role", sql: roleSql });
   }
 
-  steps.push(
-    {
-      name: "grant connect on database",
-      sql: `grant connect on database ${qDb} to ${qRole};`,
-    },
-    {
-      name: "grant pg_monitor",
-      sql: `grant pg_monitor to ${qRole};`,
-    },
-    {
-      name: "grant select on pg_index",
-      sql: `grant select on pg_catalog.pg_index to ${qRole};`,
-    },
-    {
-      name: "create or replace public.pg_statistic view",
-      sql: `create or replace view public.pg_statistic as
-select
-    n.nspname as schemaname,
-    c.relname as tablename,
-    a.attname,
-    s.stanullfrac as null_frac,
-    s.stawidth as avg_width,
-    false as inherited
-from pg_catalog.pg_statistic s
-join pg_catalog.pg_class c on c.oid = s.starelid
-join pg_catalog.pg_namespace n on n.oid = c.relnamespace
-join pg_catalog.pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
-where a.attnum > 0 and not a.attisdropped;`,
-    },
-    {
-      name: "grant select on public.pg_statistic",
-      sql: `grant select on public.pg_statistic to ${qRole};`,
-    },
-    {
-      name: "ensure access to public schema (for hardened clusters)",
-      sql: `grant usage on schema public to ${qRole};`,
-    },
-    {
-      name: "set monitoring user search_path",
-      sql: `alter user ${qRole} set search_path = "$user", public, pg_catalog;`,
-    }
-  );
+  steps.push({
+    name: "02.permissions",
+    sql: applyTemplate(loadSqlTemplate("02.permissions.sql"), vars),
+  });
 
   if (params.includeOptionalPermissions) {
     steps.push(
       {
-        name: "create rds_tools extension (optional)",
-        sql: "create extension if not exists rds_tools;",
+        name: "03.optional_rds",
+        sql: applyTemplate(loadSqlTemplate("03.optional_rds.sql"), vars),
         optional: true,
       },
       {
-        name: "grant rds_tools.pg_ls_multixactdir() (optional)",
-        sql: `grant execute on function rds_tools.pg_ls_multixactdir() to ${qRole};`,
-        optional: true,
-      },
-      {
-        name: "grant pg_stat_file(text) (optional)",
-        sql: `grant execute on function pg_catalog.pg_stat_file(text) to ${qRole};`,
-        optional: true,
-      },
-      {
-        name: "grant pg_stat_file(text, boolean) (optional)",
-        sql: `grant execute on function pg_catalog.pg_stat_file(text, boolean) to ${qRole};`,
-        optional: true,
-      },
-      {
-        name: "grant pg_ls_dir(text) (optional)",
-        sql: `grant execute on function pg_catalog.pg_ls_dir(text) to ${qRole};`,
-        optional: true,
-      },
-      {
-        name: "grant pg_ls_dir(text, boolean, boolean) (optional)",
-        sql: `grant execute on function pg_catalog.pg_ls_dir(text, boolean, boolean) to ${qRole};`,
+        name: "04.optional_self_managed",
+        sql: applyTemplate(loadSqlTemplate("04.optional_self_managed.sql"), vars),
         optional: true,
       }
     );
