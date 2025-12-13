@@ -6,9 +6,34 @@ const path = require("node:path");
 const net = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
 
+function findOnPath(cmd) {
+  const which = spawnSync("sh", ["-lc", `command -v ${cmd}`], { encoding: "utf8" });
+  if (which.status === 0) return String(which.stdout || "").trim();
+  return null;
+}
+
+function findPgBin(cmd) {
+  const p = findOnPath(cmd);
+  if (p) return p;
+
+  // Debian/Ubuntu (GitLab CI node:*-bullseye images): binaries usually live here.
+  // We avoid filesystem globbing in JS and just ask the shell.
+  const probe = spawnSync(
+    "sh",
+    [
+      "-lc",
+      `ls -1 /usr/lib/postgresql/*/bin/${cmd} 2>/dev/null | head -n 1 || true`,
+    ],
+    { encoding: "utf8" }
+  );
+  const out = String(probe.stdout || "").trim();
+  if (out) return out;
+
+  return null;
+}
+
 function havePostgresBinaries() {
-  const r = spawnSync("initdb", ["--version"], { stdio: "ignore" });
-  return r.status === 0;
+  return !!(findPgBin("initdb") && findPgBin("postgres"));
 }
 
 async function getFreePort() {
@@ -44,7 +69,11 @@ async function withTempPostgres(t) {
   const socketDir = path.join(tmpRoot, "sock");
   fs.mkdirSync(socketDir, { recursive: true });
 
-  const init = spawnSync("initdb", ["-D", dataDir, "-U", "postgres", "-A", "trust"], {
+  const initdb = findPgBin("initdb");
+  const postgresBin = findPgBin("postgres");
+  assert.ok(initdb && postgresBin, "PostgreSQL binaries not found (need initdb and postgres)");
+
+  const init = spawnSync(initdb, ["-D", dataDir, "-U", "postgres", "-A", "trust"], {
     encoding: "utf8",
   });
   assert.equal(init.status, 0, init.stderr || init.stdout);
@@ -59,11 +88,9 @@ async function withTempPostgres(t) {
 
   const port = await getFreePort();
 
-  const postgresProc = spawn(
-    "postgres",
-    ["-D", dataDir, "-k", socketDir, "-h", "127.0.0.1", "-p", String(port)],
-    { stdio: ["ignore", "pipe", "pipe"] }
-  );
+  const postgresProc = spawn(postgresBin, ["-D", dataDir, "-k", socketDir, "-h", "127.0.0.1", "-p", String(port)], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   const { Client } = require("pg");
 
