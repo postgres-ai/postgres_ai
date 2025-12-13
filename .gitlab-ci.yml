@@ -162,11 +162,11 @@ cli:npm:publish:
       TAG_VERSION="${TAG_VERSION#v}"
 
       # Normalize 0.14-dev.1 -> 0.14.0-dev.1
-      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\\.[0-9]+-(dev|beta)\\.[0-9]+$'; then
-        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\\.[0-9]+)-((dev|beta)\\.[0-9]+)$/\\1.0-\\2/')"
+      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+-(dev|beta)\.[0-9]+$'; then
+        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\.[0-9]+)-((dev|beta)\.[0-9]+)$/\1.0-\2/')"
       fi
 
-      DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta)\\.[0-9]+$/\\1/')"
+      DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta)\.[0-9]+$/\1/')"
 
       if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ]; then
         echo "Unsupported prerelease channel in tag/version: $TAG_VERSION (expected -dev.N or -beta.N)"
