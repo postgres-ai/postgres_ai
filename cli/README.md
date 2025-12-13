@@ -59,7 +59,7 @@ npx postgresai init -h host -p 5432 -U admin -d dbname
 Password input options (in priority order):
 - `--password <password>`
 - `PGAI_MON_PASSWORD` environment variable
-- interactive prompt (TTY only)
+- if not provided: a strong password is generated automatically and printed once
 
 Optional permissions (RDS/self-managed extras from the root `README.md`) are enabled by default. To skip them:
 

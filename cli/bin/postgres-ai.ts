@@ -159,20 +159,6 @@ program
       return;
     }
 
-    let monPassword: string;
-    try {
-      monPassword = await resolveMonitoringPassword({
-        passwordFlag: opts.password,
-        passwordEnv: process.env.PGAI_MON_PASSWORD,
-        monitoringUser: opts.monitoringUser,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error(`✗ ${msg}`);
-      process.exitCode = 1;
-      return;
-    }
-
     const includeOptionalPermissions = !opts.skipOptionalPermissions;
 
     console.log(`Connecting to: ${adminConn.display}`);
@@ -195,6 +181,25 @@ program
       const database = dbRes.rows?.[0]?.db;
       if (typeof database !== "string" || !database) {
         throw new Error("Failed to resolve current database name");
+      }
+
+      let monPassword: string;
+      try {
+        const resolved = await resolveMonitoringPassword({
+          passwordFlag: opts.password,
+          passwordEnv: process.env.PGAI_MON_PASSWORD,
+          monitoringUser: opts.monitoringUser,
+        });
+        monPassword = resolved.password;
+        if (resolved.generated) {
+          console.log(`Generated password for monitoring user ${opts.monitoringUser}: ${monPassword}`);
+          console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`✗ ${msg}`);
+        process.exitCode = 1;
+        return;
       }
 
       const plan = await buildInitPlan({

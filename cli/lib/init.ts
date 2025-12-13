@@ -1,4 +1,5 @@
 import * as readline from "readline";
+import { randomBytes } from "crypto";
 import { URL } from "url";
 import type { Client as PgClient } from "pg";
 
@@ -268,31 +269,25 @@ export async function promptHidden(prompt: string): Promise<string> {
   });
 }
 
+function generateMonitoringPassword(): string {
+  // URL-safe and easy to copy/paste; length ~32 chars.
+  return randomBytes(24).toString("base64url");
+}
+
 export async function resolveMonitoringPassword(opts: {
   passwordFlag?: string;
   passwordEnv?: string;
   prompt?: (prompt: string) => Promise<string>;
   monitoringUser: string;
-}): Promise<string> {
+}): Promise<{ password: string; generated: boolean }> {
   const fromFlag = (opts.passwordFlag || "").trim();
-  if (fromFlag) return fromFlag;
+  if (fromFlag) return { password: fromFlag, generated: false };
 
   const fromEnv = (opts.passwordEnv || "").trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) return { password: fromEnv, generated: false };
 
-  if (!process.stdin.isTTY) {
-    throw new Error(
-      "Monitoring user password is required in non-interactive mode (use --password or PGAI_MON_PASSWORD)"
-    );
-  }
-
-  const prompter = opts.prompt || promptHidden;
-  while (true) {
-    const pw = (await prompter(`Enter password for monitoring user ${opts.monitoringUser}: `)).trim();
-    if (pw) return pw;
-    // eslint-disable-next-line no-console
-    console.error("Password cannot be empty");
-  }
+  // Default: auto-generate (safer than prompting; works in non-interactive mode).
+  return { password: generateMonitoringPassword(), generated: true };
 }
 
 export async function buildInitPlan(params: {
