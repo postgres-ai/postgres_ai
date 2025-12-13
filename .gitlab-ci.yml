@@ -145,16 +145,27 @@ cli:npm:publish:
       set -euo pipefail
       : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
 
-      # Tags should look like: cli-v0.14.0-dev.1 (or cli-v0.14.0-beta.1)
-      case "${CI_COMMIT_TAG:-}" in
-        cli-v*) ;;
-        *) echo "Not a CLI publish tag, skipping"; exit 1 ;;
-      esac
+      # Supported tag formats (examples):
+      # - v0.14.0-dev.1
+      # - 0.14.0-dev.1
+      # - 0.14-dev.1          (normalized to 0.14.0-dev.1)
+      RAW_TAG="${CI_COMMIT_TAG:-}"
+      if [ -z "$RAW_TAG" ]; then
+        echo "CI_COMMIT_TAG is empty"
+        exit 1
+      fi
 
       cd cli
 
       PKG_VERSION="$(node -p "require('./package.json').version")"
-      TAG_VERSION="${CI_COMMIT_TAG#cli-v}"
+      TAG_VERSION="$RAW_TAG"
+      TAG_VERSION="${TAG_VERSION#v}"
+
+      # Normalize 0.14-dev.1 -> 0.14.0-dev.1
+      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\\.[0-9]+-(dev|beta)\\.[0-9]+$'; then
+        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\\.[0-9]+)-(dev|beta\\.[0-9]+)$/\\1.0-\\2/')"
+      fi
+
       DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta)\\.[0-9]+$/\\1/')"
 
       if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ]; then
@@ -176,7 +187,7 @@ cli:npm:publish:
   after_script:
     - rm -f ~/.npmrc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^cli-v\\d+\\.\\d+\\.\\d+-(dev|beta)\\.\\d+$/'
+    - if: '$CI_COMMIT_TAG =~ /^v?\\d+\\.\\d+(\\.\\d+)?-(dev|beta)\\.\\d+$/'
 
 cli:node:e2e:dind:
   stage: test
