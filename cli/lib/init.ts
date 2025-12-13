@@ -402,7 +402,13 @@ export async function applyInitPlan(params: {
         applied.push(step.name);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        throw new Error(`Failed at step "${step.name}": ${msg}`);
+        const errAny = e as any;
+        const wrapped: any = new Error(`Failed at step "${step.name}": ${msg}`);
+        // Preserve Postgres error code so callers can provide better hints (e.g., 42501 insufficient_privilege).
+        if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+          wrapped.code = errAny.code;
+        }
+        throw wrapped;
       }
     }
     await params.client.query("commit;");
