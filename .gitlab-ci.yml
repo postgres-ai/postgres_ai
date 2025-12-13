@@ -188,10 +188,8 @@ cli:npm:publish:
     - rm -f ~/.npmrc
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v?\\d+\\.\\d+(\\.\\d+)?-(dev|beta)\\.\\d+$/'
-    # GitLab "Run pipeline" UI creates a web pipeline; include this job as manual so the pipeline isn't empty.
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: false
+    # Allow publishing from GitLab "Run pipeline" UI when the selected ref looks like a release tag.
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_REF_NAME =~ /^v?\\d+\\.\\d+(\\.\\d+)?-(dev|beta)\\.\\d+$/'
 
 cli:node:e2e:dind:
   stage: test
