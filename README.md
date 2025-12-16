@@ -112,13 +112,19 @@ Verify everything is in place (no changes):
 PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --verify
 ```
 
-If you want to reset the monitoring password only (no other changes):
+If you want to reset the monitoring password only (no other changes), you can rely on auto-generation:
+
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password
+```
+
+By default, `postgresai init` auto-generates a strong password (see above).
+
+If you want to set a specific password instead:
 
 ```bash
 PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
 ```
-
-By default, `postgresai init` auto-generates a strong password (see above).
 
 If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default). This can be done without a DB connection (useful for audits/reviews):
 
