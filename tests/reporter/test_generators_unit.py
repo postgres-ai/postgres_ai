@@ -747,6 +747,10 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_h004_redundant_indexes_report",
         "generate_k001_query_calls_report",
         "generate_k003_top_queries_report",
+        "generate_m001_mean_time_report",
+        "generate_m002_rows_report",
+        "generate_m003_io_time_report",
+        "generate_n001_wait_events_report",
     ]
 
     for name in builders:
