@@ -2305,18 +2305,17 @@ class PostgresReportGenerator:
         )
 
     def generate_n001_wait_events_report(self, cluster: str = "local", node_name: str = "node-01",
-                                         time_range_minutes: int = 60, sampling_interval_seconds: int = 15) -> Dict[str, Any]:
+                                         hours: int = 24) -> Dict[str, Any]:
         """
-        Generate N001 Wait Events report grouped by wait_event_type and query_id.
+        Generate N001 Wait Events report with hourly breakdown grouped by wait_event_type and query_id.
         
         Args:
             cluster: Cluster name
             node_name: Node name
-            time_range_minutes: Time range in minutes for metrics collection (default: 60)
-            sampling_interval_seconds: Wait events sampling interval in seconds (default: 15)
+            hours: Number of hours to analyze (default: 24)
             
         Returns:
-            Dictionary containing wait events grouped by type and query_id with occurrences and time
+            Dictionary containing wait events grouped by type and query_id with hourly occurrences
         """
         print("Generating N001 Wait Events report...")
 
@@ -2326,9 +2325,10 @@ class PostgresReportGenerator:
         if not databases:
             print("Warning: N001 - No databases found")
 
-        # Calculate time range
-        end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=time_range_minutes)
+        # Build timeline
+        now = int(time.time())
+        end_s = self._floor_hour(now)
+        start_s, timeline = self._build_timeline(end_s, hours, step_s=3600)
 
         wait_events_by_db = {}
         
@@ -2344,17 +2344,21 @@ class PostgresReportGenerator:
             ]
             filter_str = '{' + ','.join(filters) + '}'
             
-            # Get wait events data over the time range
+            # Get wait events data over the time range with hourly step
             metric_name = f'pgwatch_wait_events_total{filter_str}'
             
             try:
-                result = self.query_range(metric_name, start_time, end_time, step="60s")
+                result = self.query_range(metric_name, datetime.fromtimestamp(start_s), 
+                                        datetime.fromtimestamp(end_s), step="3600s")
                 
                 if not result:
                     print(f"Warning: N001 - No wait events data for database {db_name}")
                     continue
                 
-                # Process results to group by wait_event_type -> query_id -> count and time
+                # Build timestamp to hour index map
+                ts_to_hour = {ts: idx for idx, ts in enumerate(timeline)}
+                
+                # Process results to group by wait_event_type -> query_id with hourly breakdown
                 wait_events_grouped = {}
                 
                 for series in result:
@@ -2366,29 +2370,11 @@ class PostgresReportGenerator:
                     # Get the values (timestamp, value pairs)
                     values = series.get('values', [])
                     
-                    # Count occurrences (number of data points where wait event was observed)
-                    # Sum the values to get total wait event count
-                    # Each value represents the number of sessions in that wait state at that moment
-                    total_count = 0
-                    for timestamp, value in values:
-                        try:
-                            total_count += float(value)
-                        except (ValueError, TypeError):
-                            continue
-                    
-                    if total_count == 0:
-                        continue
-                    
-                    # Calculate estimated time spent: occurrences * sampling_interval
-                    # This gives us session-seconds spent in this wait state
-                    time_seconds = total_count * sampling_interval_seconds
-                    
                     # Group by wait_event_type
                     if wait_event_type not in wait_events_grouped:
                         wait_events_grouped[wait_event_type] = {
                             'queries': {},
                             'total_occurrences': 0,
-                            'total_time_seconds': 0,
                             'unique_queries': 0
                         }
                     
@@ -2396,58 +2382,79 @@ class PostgresReportGenerator:
                     if query_id not in wait_events_grouped[wait_event_type]['queries']:
                         wait_events_grouped[wait_event_type]['queries'][query_id] = {
                             'occurrences': 0,
-                            'time_seconds': 0,
+                            'hourly_occurrences': [0] * hours,
                             'wait_events': {}
                         }
                     
-                    # Track individual wait events within the type
-                    wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events'][wait_event] = {
-                        'occurrences': int(total_count),
-                        'time_seconds': round(time_seconds, 2)
-                    }
-                    wait_events_grouped[wait_event_type]['queries'][query_id]['occurrences'] += int(total_count)
-                    wait_events_grouped[wait_event_type]['queries'][query_id]['time_seconds'] += time_seconds
-                    wait_events_grouped[wait_event_type]['total_occurrences'] += int(total_count)
-                    wait_events_grouped[wait_event_type]['total_time_seconds'] += time_seconds
+                    # Process hourly values
+                    for timestamp, value in values:
+                        try:
+                            count = float(value)
+                            if count == 0:
+                                continue
+                            
+                            ts = int(timestamp)
+                            if ts not in ts_to_hour:
+                                continue
+                            
+                            hour_idx = ts_to_hour[ts]
+                            
+                            # Update hourly arrays for query only
+                            wait_events_grouped[wait_event_type]['queries'][query_id]['hourly_occurrences'][hour_idx] += int(count)
+                            
+                            # Track individual wait events
+                            if wait_event not in wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events']:
+                                wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events'][wait_event] = {
+                                    'occurrences': 0
+                                }
+                            wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events'][wait_event]['occurrences'] += int(count)
+                            
+                        except (ValueError, TypeError):
+                            continue
+                
+                # Calculate totals
+                for wait_type in wait_events_grouped:
+                    for query_id in wait_events_grouped[wait_type]['queries']:
+                        query_data = wait_events_grouped[wait_type]['queries'][query_id]
+                        query_data['occurrences'] = sum(query_data['hourly_occurrences'])
+                    
+                    # Calculate total_occurrences from all queries
+                    wait_events_grouped[wait_type]['total_occurrences'] = sum(
+                        q['occurrences'] for q in wait_events_grouped[wait_type]['queries'].values()
+                    )
                 
                 # Skip databases with no wait events data
                 if not wait_events_grouped:
                     print(f"Warning: N001 - No wait events data for database {db_name}")
                     continue
                 
-                # Count unique queries per wait event type and round time values
+                # Count unique queries and convert to list
                 for wait_type in wait_events_grouped:
                     wait_events_grouped[wait_type]['unique_queries'] = len(wait_events_grouped[wait_type]['queries'])
-                    wait_events_grouped[wait_type]['total_time_seconds'] = round(wait_events_grouped[wait_type]['total_time_seconds'], 2)
-                
-                # Sort queries by time spent within each wait event type
-                for wait_type in wait_events_grouped:
+                    
                     queries_list = []
                     for query_id, data in wait_events_grouped[wait_type]['queries'].items():
                         queries_list.append({
                             'query_id': query_id,
                             'occurrences': data['occurrences'],
-                            'time_seconds': round(data['time_seconds'], 2),
+                            'hourly_occurrences': data['hourly_occurrences'],
                             'wait_events': data['wait_events']
                         })
-                    # Sort by time spent descending (primary), then occurrences (secondary)
-                    queries_list.sort(key=lambda x: (x['time_seconds'], x['occurrences']), reverse=True)
+                    # Sort by occurrences descending
+                    queries_list.sort(key=lambda x: x['occurrences'], reverse=True)
                     wait_events_grouped[wait_type]['queries_list'] = queries_list
                     # Remove the dict version
                     del wait_events_grouped[wait_type]['queries']
                 
-                total_time_seconds = sum(wt['total_time_seconds'] for wt in wait_events_grouped.values())
-                
                 wait_events_by_db[db_name] = {
                     'wait_event_types': wait_events_grouped,
                     'summary': {
-                        'time_range_minutes': time_range_minutes,
-                        'start_time': start_time.isoformat(),
-                        'end_time': end_time.isoformat(),
+                        'time_range_hours': hours,
+                        'start_time': datetime.fromtimestamp(start_s).isoformat(),
+                        'end_time': datetime.fromtimestamp(end_s).isoformat(),
                         'wait_event_types_count': len(wait_events_grouped),
                         'total_occurrences': sum(wt['total_occurrences'] for wt in wait_events_grouped.values()),
-                        'total_time_seconds': round(total_time_seconds, 2),
-                        'sampling_interval_seconds': sampling_interval_seconds
+                        'hourly_timestamps': timeline
                     }
                 }
                 
@@ -3236,11 +3243,14 @@ class PostgresReportGenerator:
         ]
 
         for check_id, report_func in report_types:
-            # Determine if this report needs time_range_minutes parameter (hourly pg_stat_statements reports)
-            hourly_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+            # Determine if this report needs hourly parameters
+            pgss_hourly_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+            wait_events_reports = ['N001']
             report_kwargs = {}
-            if check_id in hourly_reports:
+            if check_id in pgss_hourly_reports:
                 report_kwargs['time_range_minutes'] = 1440  # 24 hours
+            elif check_id in wait_events_reports:
+                report_kwargs['hours'] = 24  # 24 hours
             
             if len(nodes_to_process) == 1:
                 # Single node - generate report normally
@@ -3706,7 +3716,7 @@ def main():
                 elif args.check_id == 'M003':
                     report = generator.generate_m003_io_time_report(cluster, args.node_name, time_range_minutes=1440)
                 elif args.check_id == 'N001':
-                    report = generator.generate_n001_wait_events_report(cluster, args.node_name)
+                    report = generator.generate_n001_wait_events_report(cluster, args.node_name, hours=24)
 
                 output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
                 
