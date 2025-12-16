@@ -165,6 +165,53 @@ test("resolveMonitoringPassword auto-generates a strong, URL-safe password by de
   assert.match(r.password, /^[A-Za-z0-9_-]+$/);
 });
 
+test("applyInitPlan preserves Postgres error fields on step failures", async () => {
+  const plan = {
+    monitoringUser: "postgres_ai_mon",
+    database: "mydb",
+    steps: [{ name: "01.role", sql: "select 1" }],
+  };
+
+  const pgErr = Object.assign(new Error("permission denied to create role"), {
+    code: "42501",
+    detail: "some detail",
+    hint: "some hint",
+    schema: "pg_catalog",
+    table: "pg_roles",
+    constraint: "some_constraint",
+    routine: "aclcheck_error",
+  });
+
+  const calls = [];
+  const client = {
+    query: async (sql) => {
+      calls.push(sql);
+      if (sql === "begin;") return { rowCount: 1 };
+      if (sql === "rollback;") return { rowCount: 1 };
+      if (sql === "select 1") throw pgErr;
+      throw new Error(`unexpected sql: ${sql}`);
+    },
+  };
+
+  await assert.rejects(
+    () => init.applyInitPlan({ client, plan }),
+    (e) => {
+      assert.ok(e instanceof Error);
+      assert.match(e.message, /Failed at step "01\.role":/);
+      assert.equal(e.code, "42501");
+      assert.equal(e.detail, "some detail");
+      assert.equal(e.hint, "some hint");
+      assert.equal(e.schema, "pg_catalog");
+      assert.equal(e.table, "pg_roles");
+      assert.equal(e.constraint, "some_constraint");
+      assert.equal(e.routine, "aclcheck_error");
+      return true;
+    }
+  );
+
+  assert.deepEqual(calls, ["begin;", "select 1", "rollback;"]);
+});
+
 test("print-sql redaction regex matches password literal with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",

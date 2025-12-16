@@ -422,9 +422,31 @@ export async function applyInitPlan(params: {
         const msg = e instanceof Error ? e.message : String(e);
         const errAny = e as any;
         const wrapped: any = new Error(`Failed at step "${step.name}": ${msg}`);
-        // Preserve Postgres error code so callers can provide better hints (e.g., 42501 insufficient_privilege).
-        if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
-          wrapped.code = errAny.code;
+        // Preserve useful Postgres error fields so callers can provide better hints / diagnostics.
+        const pgErrorFields = [
+          "code",
+          "detail",
+          "hint",
+          "position",
+          "internalPosition",
+          "internalQuery",
+          "where",
+          "schema",
+          "table",
+          "column",
+          "dataType",
+          "constraint",
+          "file",
+          "line",
+          "routine",
+        ] as const;
+        if (errAny && typeof errAny === "object") {
+          for (const field of pgErrorFields) {
+            if (errAny[field] !== undefined) wrapped[field] = errAny[field];
+          }
+        }
+        if (e instanceof Error && e.stack) {
+          wrapped.stack = e.stack;
         }
         throw wrapped;
       }
