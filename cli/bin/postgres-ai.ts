@@ -12,6 +12,7 @@ import { promisify } from "util";
 import * as readline from "readline";
 import * as http from "https";
 import { URL } from "url";
+import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
@@ -245,7 +246,6 @@ program
     console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
 
     // Use native pg client instead of requiring psql to be installed
-    const { Client } = require("pg");
     const client = new Client(adminConn.clientConfig);
 
     try {
@@ -254,7 +254,7 @@ program
       const roleRes = await client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [
         opts.monitoringUser,
       ]);
-      const roleExists = roleRes.rowCount > 0;
+      const roleExists = (roleRes.rowCount ?? 0) > 0;
 
       const dbRes = await client.query("select current_database() as db");
       const database = dbRes.rows?.[0]?.db;
