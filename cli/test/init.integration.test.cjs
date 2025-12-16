@@ -92,25 +92,41 @@ async function withTempPostgres(t) {
 
   const port = await getFreePort();
 
-  const postgresProc = spawn(postgresBin, ["-D", dataDir, "-k", socketDir, "-h", "127.0.0.1", "-p", String(port)], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  let postgresProc;
+  try {
+    postgresProc = spawn(
+      postgresBin,
+      ["-D", dataDir, "-k", socketDir, "-h", "127.0.0.1", "-p", String(port)],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
 
-  // Register cleanup immediately so failures below don't leave a running postgres and hang CI.
-  t.after(async () => {
-    postgresProc.kill("SIGTERM");
+    // Register cleanup immediately so failures below don't leave a running postgres and hang CI.
+    t.after(async () => {
+      postgresProc.kill("SIGTERM");
+      try {
+        await waitFor(
+          async () => {
+            if (postgresProc.exitCode === null) throw new Error("still running");
+          },
+          { timeoutMs: 5000, intervalMs: 100 }
+        );
+      } catch {
+        postgresProc.kill("SIGKILL");
+      }
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    });
+  } catch (e) {
+    // If anything goes wrong before cleanup is registered, ensure we don't leak a running postgres.
     try {
-      await waitFor(
-        async () => {
-          if (postgresProc.exitCode === null) throw new Error("still running");
-        },
-        { timeoutMs: 5000, intervalMs: 100 }
-      );
+      if (postgresProc) postgresProc.kill("SIGKILL");
     } catch {
-      postgresProc.kill("SIGKILL");
+      // ignore
     }
     fs.rmSync(tmpRoot, { recursive: true, force: true });
-  });
+    throw e;
+  }
 
   const { Client } = require("pg");
 
