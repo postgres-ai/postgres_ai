@@ -120,16 +120,10 @@ PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset
 
 By default, `postgresai init` auto-generates a strong password (see above).
 
-If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default):
+If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default). This can be done without a DB connection (useful for audits/reviews):
 
 ```bash
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --print-sql
-```
-
-You can also print an offline SQL plan without a DB connection (useful for audits/reviews):
-
-```bash
-# Offline plan output does not connect to Postgres, so provide a monitoring password explicitly:
+# `--print-sql` does not connect to Postgres in this mode, so provide a monitoring password explicitly:
 npx postgresai init --print-sql -d dbname --password '...' --show-secrets
 ```
 
