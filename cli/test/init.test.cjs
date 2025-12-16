@@ -37,19 +37,20 @@ test("parseLibpqConninfo supports quoted values", () => {
   assert.equal(cfg.host, "local host");
 });
 
-test("buildInitPlan includes create user when role does not exist", async () => {
+test("buildInitPlan includes a race-safe role DO block", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
     monitoringUser: "postgres_ai_mon",
     monitoringPassword: "pw",
     includeOptionalPermissions: false,
-    roleExists: false,
   });
 
   assert.equal(plan.database, "mydb");
   const roleStep = plan.steps.find((s) => s.name === "01.role");
   assert.ok(roleStep);
+  assert.match(roleStep.sql, /do\s+\$\$/i);
   assert.match(roleStep.sql, /create\s+user/i);
+  assert.match(roleStep.sql, /alter\s+user/i);
   assert.ok(!plan.steps.some((s) => s.optional));
 });
 
@@ -61,7 +62,6 @@ test("buildInitPlan rejects identifiers with null bytes", async () => {
         monitoringUser: "bad\0user",
         monitoringPassword: "pw",
         includeOptionalPermissions: false,
-        roleExists: false,
       }),
     /Identifier cannot contain null bytes/
   );
@@ -75,22 +75,9 @@ test("buildInitPlan rejects literals with null bytes", async () => {
         monitoringUser: "postgres_ai_mon",
         monitoringPassword: "pw\0bad",
         includeOptionalPermissions: false,
-        roleExists: false,
       }),
     /Literal cannot contain null bytes/
   );
-});
-
-test("buildInitPlan includes role step when roleExists is omitted", async () => {
-  const plan = await init.buildInitPlan({
-    database: "mydb",
-    monitoringUser: "postgres_ai_mon",
-    monitoringPassword: "pw",
-    includeOptionalPermissions: false,
-  });
-  const roleStep = plan.steps.find((s) => s.name === "01.role");
-  assert.ok(roleStep);
-  assert.match(roleStep.sql, /do\s+\$\$/i);
 });
 
 test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", async () => {
@@ -99,7 +86,6 @@ test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", asyn
     monitoringUser: "postgres_ai_mon",
     monitoringPassword: "pa'ss",
     includeOptionalPermissions: false,
-    roleExists: false,
   });
   const step = plan.steps.find((s) => s.name === "01.role");
   assert.ok(step);
@@ -107,18 +93,13 @@ test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", asyn
   assert.equal(step.params, undefined);
 });
 
-test("buildInitPlan includes alter user when role exists", async () => {
+test("buildInitPlan includes optional steps when enabled", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
     monitoringUser: "postgres_ai_mon",
     monitoringPassword: "pw",
     includeOptionalPermissions: true,
-    roleExists: true,
   });
-
-  const roleStep = plan.steps.find((s) => s.name === "01.role");
-  assert.ok(roleStep);
-  assert.match(roleStep.sql, /alter\s+user/i);
   assert.ok(plan.steps.some((s) => s.optional));
 });
 

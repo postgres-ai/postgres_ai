@@ -343,7 +343,6 @@ export async function buildInitPlan(params: {
   monitoringUser?: string;
   monitoringPassword: string;
   includeOptionalPermissions: boolean;
-  roleExists?: boolean;
 }): Promise<InitPlan> {
   const monitoringUser = params.monitoringUser || "postgres_ai_mon";
   const database = params.database;
@@ -361,21 +360,20 @@ export async function buildInitPlan(params: {
   };
 
   // Role creation/update is done in one template file.
-  // If roleExists is unknown, use a single DO block to create-or-alter safely.
-  let roleStmt: string | null = null;
-  if (params.roleExists === false) {
-    roleStmt = `create user ${qRole} with password ${qPw};`;
-  } else if (params.roleExists === true) {
-    roleStmt = `alter user ${qRole} with password ${qPw};`;
-  } else {
-    roleStmt = `do $$ begin
+  // Always use a single DO block to avoid race conditions between "role exists?" checks and CREATE USER.
+  // We:
+  // - create role if missing (and handle duplicate_object in case another session created it concurrently),
+  // - then ALTER ROLE to ensure the password is set to the desired value.
+  const roleStmt = `do $$ begin
   if not exists (select 1 from pg_catalog.pg_roles where rolname = ${qRoleNameLit}) then
-    create user ${qRole} with password ${qPw};
-  else
-    alter user ${qRole} with password ${qPw};
+    begin
+      create user ${qRole} with password ${qPw};
+    exception when duplicate_object then
+      null;
+    end;
   end if;
+  alter user ${qRole} with password ${qPw};
 end $$;`;
-  }
 
   const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), { ...vars, ROLE_STMT: roleStmt });
   steps.push({ name: "01.role", sql: roleSql });

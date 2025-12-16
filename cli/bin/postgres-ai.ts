@@ -216,7 +216,6 @@ program
           monitoringUser: opts.monitoringUser,
           monitoringPassword: monPassword,
           includeOptionalPermissions,
-          roleExists: undefined,
         });
 
         console.log("\n--- SQL plan (offline; not connected) ---");
@@ -271,11 +270,6 @@ program
     try {
       client = new Client(adminConn.clientConfig);
       await client.connect();
-
-      const roleRes = await client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [
-        opts.monitoringUser,
-      ]);
-      const roleExists = (roleRes.rowCount ?? 0) > 0;
 
       const dbRes = await client.query("select current_database() as db");
       const database = dbRes.rows?.[0]?.db;
@@ -354,7 +348,6 @@ program
         monitoringUser: opts.monitoringUser,
         monitoringPassword: monPassword,
         includeOptionalPermissions,
-        roleExists,
       });
 
       const effectivePlan = opts.resetPassword
