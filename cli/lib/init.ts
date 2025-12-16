@@ -75,6 +75,11 @@ function quoteLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+export function redactPasswordsInSql(sql: string): string {
+  // Replace PASSWORD '<literal>' (handles doubled quotes inside).
+  return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+}
+
 export function maskConnectionString(dbUrl: string): string {
   // Hide password if present (postgresql://user:pass@host/db).
   try {

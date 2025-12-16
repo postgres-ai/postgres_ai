@@ -16,7 +16,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, DEFAULT_MONITORING_USER, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { applyInitPlan, buildInitPlan, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -197,7 +197,7 @@ program
     const redactPasswords = (sql: string): string => {
       if (!shouldRedactSecrets) return sql;
       // Replace PASSWORD '<literal>' (handles doubled quotes inside).
-      return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+      return redactPasswordsInSql(sql);
     };
 
     // Offline mode: allow printing SQL without providing/using an admin connection.

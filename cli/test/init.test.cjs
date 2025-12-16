@@ -249,17 +249,16 @@ test("verifyInitSetup runs inside a repeatable read snapshot and rolls back", as
   assert.equal(calls[calls.length - 1].toLowerCase(), "rollback;");
 });
 
-test("print-sql redaction regex matches password literal with embedded quotes", async () => {
+test("redactPasswordsInSql redacts password literals with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
-    monitoringUser: "postgres_ai_mon",
+    monitoringUser: DEFAULT_MONITORING_USER,
     monitoringPassword: "pa'ss",
     includeOptionalPermissions: false,
-    roleExists: false,
   });
   const step = plan.steps.find((s) => s.name === "01.role");
   assert.ok(step);
-  const redacted = step.sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+  const redacted = init.redactPasswordsInSql(step.sql);
   assert.match(redacted, /password '<redacted>'/i);
 });
 
