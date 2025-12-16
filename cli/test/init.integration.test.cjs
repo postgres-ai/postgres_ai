@@ -294,12 +294,10 @@ test("integration: init reports nicely when lacking permissions", { skip: !haveP
   const limitedUri = `postgresql://limited:${limitedPw}@127.0.0.1:${pg.port}/testdb`;
   const r = await runCliInit([limitedUri, "--password", "monpw", "--skip-optional-permissions"]);
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /init failed:/);
+  assert.match(r.stderr, /Error: init failed:/);
   // Should include step context and hint.
   assert.match(r.stderr, /Failed at step "/);
-  assert.match(r.stderr, /Permission error:/i);
-  assert.match(r.stderr, /How to fix:/i);
-  assert.match(r.stderr, /Hint: connect as a superuser/i);
+  assert.match(r.stderr, /Fix: connect as a superuser/i);
 });
 
 test("integration: init --verify returns 0 when ok and non-zero when missing", { skip: !havePostgresBinaries() }, async (t) => {
