@@ -180,7 +180,7 @@ program
     printSql?: boolean;
     showSecrets?: boolean;
     printPassword?: boolean;
-  }) => {
+  }, cmd: Command) => {
     if (opts.verify && opts.resetPassword) {
       console.error("✗ Provide only one of --verify or --reset-password");
       process.exitCode = 1;
@@ -251,6 +251,11 @@ program
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`✗ ${msg}`);
+      // When connection details are missing, show full init help (options + examples).
+      if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
+        console.error("");
+        cmd.outputHelp({ error: true });
+      }
       process.exitCode = 1;
       return;
     }

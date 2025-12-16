@@ -122,6 +122,14 @@ test("resolveAdminConnection error message includes examples", () => {
   assert.throws(() => init.resolveAdminConnection({}), /Examples:/);
 });
 
+test("cli: init with missing connection prints init help/options", () => {
+  const r = runCli(["init"]);
+  assert.notEqual(r.status, 0);
+  // We should show options, not just the error message.
+  assert.match(r.stderr, /--print-sql/);
+  assert.match(r.stderr, /--monitoring-user/);
+});
+
 test("print-sql redaction regex matches password literal with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
