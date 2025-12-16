@@ -193,6 +193,61 @@ test("applyInitPlan preserves Postgres error fields on step failures", async () 
   assert.deepEqual(calls, ["begin;", "select 1", "rollback;"]);
 });
 
+test("verifyInitSetup runs inside a repeatable read snapshot and rolls back", async () => {
+  const calls = [];
+  const client = {
+    query: async (sql, params) => {
+      calls.push(String(sql));
+
+      if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+        return { rowCount: 1, rows: [] };
+      }
+      if (String(sql).toLowerCase() === "rollback;") {
+        return { rowCount: 1, rows: [] };
+      }
+      if (String(sql).includes("select rolconfig")) {
+        return { rowCount: 1, rows: [{ rolconfig: ['search_path="$user", public, pg_catalog'] }] };
+      }
+      if (String(sql).includes("from pg_catalog.pg_roles")) {
+        return { rowCount: 1, rows: [] };
+      }
+      if (String(sql).includes("has_database_privilege")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("pg_has_role")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("has_table_privilege") && String(sql).includes("pg_catalog.pg_index")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("to_regclass('public.pg_statistic')")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("has_table_privilege") && String(sql).includes("public.pg_statistic")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("has_schema_privilege")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+
+      throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+    },
+  };
+
+  const r = await init.verifyInitSetup({
+    client,
+    database: "mydb",
+    monitoringUser: "postgres_ai_mon",
+    includeOptionalPermissions: false,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.missingRequired.length, 0);
+
+  assert.ok(calls.length > 2);
+  assert.match(calls[0].toLowerCase(), /^begin isolation level repeatable read/);
+  assert.equal(calls[calls.length - 1].toLowerCase(), "rollback;");
+});
+
 test("print-sql redaction regex matches password literal with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
