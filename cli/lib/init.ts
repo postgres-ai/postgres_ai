@@ -6,6 +6,8 @@ import type { Client as PgClient } from "pg";
 import * as fs from "fs";
 import * as path from "path";
 
+export const DEFAULT_MONITORING_USER = "postgres_ai_mon";
+
 export type PgClientConfig = {
   connectionString?: string;
   host?: string;
@@ -345,7 +347,7 @@ export async function buildInitPlan(params: {
   monitoringPassword: string;
   includeOptionalPermissions: boolean;
 }): Promise<InitPlan> {
-  const monitoringUser = params.monitoringUser || "postgres_ai_mon";
+  const monitoringUser = params.monitoringUser || DEFAULT_MONITORING_USER;
   const database = params.database;
 
   const qRole = quoteIdent(monitoringUser);

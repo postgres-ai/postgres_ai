@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 // These tests intentionally import the compiled JS output.
 // Run via: npm --prefix cli test
 const init = require("../dist/lib/init.js");
+const DEFAULT_MONITORING_USER = init.DEFAULT_MONITORING_USER;
 
 function runCli(args, env = {}) {
   const { spawnSync } = require("node:child_process");
@@ -40,7 +41,7 @@ test("parseLibpqConninfo supports quoted values", () => {
 test("buildInitPlan includes a race-safe role DO block", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
-    monitoringUser: "postgres_ai_mon",
+    monitoringUser: DEFAULT_MONITORING_USER,
     monitoringPassword: "pw",
     includeOptionalPermissions: false,
   });
@@ -72,7 +73,7 @@ test("buildInitPlan rejects literals with null bytes", async () => {
     () =>
       init.buildInitPlan({
         database: "mydb",
-        monitoringUser: "postgres_ai_mon",
+        monitoringUser: DEFAULT_MONITORING_USER,
         monitoringPassword: "pw\0bad",
         includeOptionalPermissions: false,
       }),
@@ -83,7 +84,7 @@ test("buildInitPlan rejects literals with null bytes", async () => {
 test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
-    monitoringUser: "postgres_ai_mon",
+    monitoringUser: DEFAULT_MONITORING_USER,
     monitoringPassword: "pa'ss",
     includeOptionalPermissions: false,
   });
@@ -96,7 +97,7 @@ test("buildInitPlan inlines password safely for CREATE/ALTER ROLE grammar", asyn
 test("buildInitPlan includes optional steps when enabled", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
-    monitoringUser: "postgres_ai_mon",
+    monitoringUser: DEFAULT_MONITORING_USER,
     monitoringPassword: "pw",
     includeOptionalPermissions: true,
   });
@@ -140,7 +141,7 @@ test("cli: init with missing connection prints init help/options", () => {
 });
 
 test("resolveMonitoringPassword auto-generates a strong, URL-safe password by default", async () => {
-  const r = await init.resolveMonitoringPassword({ monitoringUser: "postgres_ai_mon" });
+  const r = await init.resolveMonitoringPassword({ monitoringUser: DEFAULT_MONITORING_USER });
   assert.equal(r.generated, true);
   assert.ok(typeof r.password === "string" && r.password.length >= 30);
   assert.match(r.password, /^[A-Za-z0-9_-]+$/);
@@ -148,7 +149,7 @@ test("resolveMonitoringPassword auto-generates a strong, URL-safe password by de
 
 test("applyInitPlan preserves Postgres error fields on step failures", async () => {
   const plan = {
-    monitoringUser: "postgres_ai_mon",
+    monitoringUser: DEFAULT_MONITORING_USER,
     database: "mydb",
     steps: [{ name: "01.role", sql: "select 1" }],
   };
@@ -237,7 +238,7 @@ test("verifyInitSetup runs inside a repeatable read snapshot and rolls back", as
   const r = await init.verifyInitSetup({
     client,
     database: "mydb",
-    monitoringUser: "postgres_ai_mon",
+    monitoringUser: DEFAULT_MONITORING_USER,
     includeOptionalPermissions: false,
   });
   assert.equal(r.ok, true);
@@ -266,7 +267,7 @@ test("cli: init --print-sql works without connection (offline mode)", () => {
   const r = runCli(["init", "--print-sql", "-d", "mydb", "--password", "monpw"]);
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /SQL plan \(offline; not connected\)/);
-  assert.match(r.stdout, /grant connect on database "mydb" to "postgres_ai_mon"/i);
+  assert.match(r.stdout, new RegExp(`grant connect on database "mydb" to "${DEFAULT_MONITORING_USER}"`, "i"));
 });
 
 

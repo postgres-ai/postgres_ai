@@ -16,7 +16,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { applyInitPlan, buildInitPlan, DEFAULT_MONITORING_USER, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -127,7 +127,7 @@ program
   .option("-U, --username <username>", "PostgreSQL user (psql-like)")
   .option("-d, --dbname <dbname>", "PostgreSQL database name (psql-like)")
   .option("--admin-password <password>", "Admin connection password (otherwise uses PGPASSWORD if set)")
-  .option("--monitoring-user <name>", "Monitoring role name to create/update", "postgres_ai_mon")
+  .option("--monitoring-user <name>", "Monitoring role name to create/update", DEFAULT_MONITORING_USER)
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
   .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
