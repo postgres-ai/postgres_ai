@@ -319,7 +319,11 @@ program
         if (resolved.generated) {
           const canPrint = process.stdout.isTTY || !!opts.printPassword;
           if (canPrint) {
-            console.log(`Generated password for monitoring user ${opts.monitoringUser}: ${monPassword}`);
+            console.log("");
+            console.log(`--- Generated monitoring password for ${opts.monitoringUser} ---`);
+            console.log(monPassword);
+            console.log("--- End generated monitoring password ---");
+            console.log("");
             console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
           } else {
             console.error(

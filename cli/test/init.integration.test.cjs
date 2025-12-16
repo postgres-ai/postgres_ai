@@ -208,7 +208,8 @@ test(
     {
       const r = await runCliInit([pg.adminUri, "--print-password", "--skip-optional-permissions"]);
       assert.equal(r.status, 0, r.stderr || r.stdout);
-      assert.match(r.stdout, /Generated password for monitoring user/i);
+      assert.match(r.stdout, /--- Generated monitoring password for postgres_ai_mon ---/i);
+      assert.match(r.stdout, /--- End generated monitoring password ---/i);
     }
   }
 );
