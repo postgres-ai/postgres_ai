@@ -172,6 +172,12 @@ program
     printPassword?: boolean;
   }) => {
     const shouldPrintSql = !!opts.printSql;
+    const shouldRedactSecrets = !opts.showSecrets;
+    const redactPasswords = (sql: string): string => {
+      if (!shouldRedactSecrets) return sql;
+      // Replace PASSWORD '<literal>' (handles doubled quotes inside).
+      return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
+    };
 
     // Offline mode: allow printing SQL without providing/using an admin connection.
     // Useful for audits/reviews; caller can provide -d/PGDATABASE and an explicit monitoring password.
@@ -192,12 +198,6 @@ program
           roleExists: undefined,
         });
 
-        const redact = !opts.showSecrets;
-        const redactPasswords = (sql: string): string => {
-          if (!redact) return sql;
-          return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
-        };
-
         console.log("\n--- SQL plan (offline; not connected) ---");
         console.log(`-- database: ${database}`);
         console.log(`-- monitoring user: ${opts.monitoringUser}`);
@@ -207,7 +207,7 @@ program
           console.log(redactPasswords(step.sql));
         }
         console.log("\n--- end SQL plan ---\n");
-        if (redact) {
+        if (shouldRedactSecrets) {
           console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
         }
         return;
@@ -302,20 +302,13 @@ program
       });
 
       if (shouldPrintSql) {
-        const redact = !opts.showSecrets;
-        const redactPasswords = (sql: string): string => {
-          if (!redact) return sql;
-          // Replace PASSWORD '<literal>' (handles doubled quotes inside).
-          return sql.replace(/password\s+'(?:''|[^'])*'/gi, "password '<redacted>'");
-        };
-
         console.log("\n--- SQL plan ---");
         for (const step of plan.steps) {
           console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
           console.log(redactPasswords(step.sql));
         }
         console.log("\n--- end SQL plan ---\n");
-        if (redact) {
+        if (shouldRedactSecrets) {
           console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
         }
         return;
