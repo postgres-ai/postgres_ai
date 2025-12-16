@@ -55,6 +55,40 @@ test("buildInitPlan includes a race-safe role DO block", async () => {
   assert.ok(!plan.steps.some((s) => s.optional));
 });
 
+test("buildInitPlan handles special characters in monitoring user and database identifiers", async () => {
+  const monitoringUser = 'user "with" quotes ✓';
+  const database = 'db name "with" quotes ✓';
+  const plan = await init.buildInitPlan({
+    database,
+    monitoringUser,
+    monitoringPassword: "pw",
+    includeOptionalPermissions: false,
+  });
+
+  const roleStep = plan.steps.find((s) => s.name === "01.role");
+  assert.ok(roleStep);
+  // Double quotes inside identifiers must be doubled.
+  assert.match(roleStep.sql, /create\s+user\s+"user ""with"" quotes ✓"/i);
+  assert.match(roleStep.sql, /alter\s+user\s+"user ""with"" quotes ✓"/i);
+
+  const permStep = plan.steps.find((s) => s.name === "02.permissions");
+  assert.ok(permStep);
+  assert.match(permStep.sql, /grant connect on database "db name ""with"" quotes ✓" to "user ""with"" quotes ✓"/i);
+});
+
+test("buildInitPlan keeps backslashes in passwords (no unintended escaping)", async () => {
+  const pw = String.raw`pw\with\backslash`;
+  const plan = await init.buildInitPlan({
+    database: "mydb",
+    monitoringUser: DEFAULT_MONITORING_USER,
+    monitoringPassword: pw,
+    includeOptionalPermissions: false,
+  });
+  const roleStep = plan.steps.find((s) => s.name === "01.role");
+  assert.ok(roleStep);
+  assert.ok(roleStep.sql.includes(`password '${pw}'`));
+});
+
 test("buildInitPlan rejects identifiers with null bytes", async () => {
   await assert.rejects(
     () =>
