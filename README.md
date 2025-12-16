@@ -86,53 +86,44 @@ Failure to secure these ports may expose sensitive database information!
 
 ## 🚀 Quick start
 
-Create a new DB user in the database to be monitored (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database):
-```sql
--- Create a user for postgres_ai monitoring
-begin;
-create user postgres_ai_mon with password '<password>';
+Create a database user for monitoring (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database).
 
-grant connect on database <database_name> to postgres_ai_mon;
+Use the CLI to create/update the monitoring role and grant all required permissions (idempotent):
 
-grant pg_monitor to postgres_ai_mon;
-grant select on pg_index to postgres_ai_mon;
-
--- Create a public view for pg_statistic access (optional, for bloat analysis)
-create view public.pg_statistic as
-select 
-    n.nspname as schemaname,
-    c.relname as tablename,
-    a.attname,
-    s.stanullfrac as null_frac,
-    s.stawidth as avg_width,
-    false as inherited
-from pg_statistic s
-join pg_class c on c.oid = s.starelid
-join pg_namespace n on n.oid = c.relnamespace  
-join pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
-where a.attnum > 0 and not a.attisdropped;
-
-grant select on public.pg_statistic to postgres_ai_mon;
-alter user postgres_ai_mon set search_path = "$user", public, pg_catalog;
-commit;
+```bash
+# Connect as an admin/superuser and apply required permissions.
+# Admin password comes from PGPASSWORD (libpq standard) unless you pass --admin-password.
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --password '...'
 ```
 
-### Optional permissions to analyze risks of certain performance cliffs
+Optional permissions (RDS/self-managed extras) are enabled by default. To skip them:
 
-For RDS Postgres and Aurora:
-
-```sql
-create extension if not exists rds_tools;
-grant execute on function rds_tools.pg_ls_multixactdir() to postgres_ai_mon;
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --password '...' --skip-optional-permissions
 ```
 
-For self-managed Postgres:
+Verify everything is in place (no changes):
 
-```sql
-grant execute on function pg_stat_file(text) to postgres_ai_mon;
-grant execute on function pg_stat_file(text, boolean) to postgres_ai_mon;
-grant execute on function pg_ls_dir(text) to postgres_ai_mon;
-grant execute on function pg_ls_dir(text, boolean, boolean) to postgres_ai_mon;
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --verify
+```
+
+Reset the monitoring password only (no other changes):
+
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+```
+
+If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default):
+
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --print-sql
+```
+
+You can also print an offline SQL plan without a DB connection (useful for audits/reviews):
+
+```bash
+npx postgresai init --print-sql -d dbname --password '...' --show-secrets
 ```
 
 **One command setup:**
