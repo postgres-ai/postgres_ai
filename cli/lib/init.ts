@@ -420,7 +420,12 @@ export async function applyInitPlan(params: {
     }
     await params.client.query("commit;");
   } catch (e) {
-    await params.client.query("rollback;");
+    // Rollback errors should never mask the original failure.
+    try {
+      await params.client.query("rollback;");
+    } catch {
+      // ignore
+    }
     throw e;
   }
 
