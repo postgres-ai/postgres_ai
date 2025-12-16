@@ -157,8 +157,6 @@ cli:npm:publish:
         exit 1
       fi
 
-      cd cli
-
       TAG_VERSION="$RAW_TAG"
       TAG_VERSION="${TAG_VERSION#v}"
 
@@ -182,10 +180,21 @@ cli:npm:publish:
       # Configure npm auth without committing credentials
       printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
 
+      echo "Publishing postgresai@${TAG_VERSION} to dist-tag ${DIST_TAG}"
+      cd cli
       npm ci --no-audit --no-fund
       # Make the git tag the source of truth without committing version bumps.
       npm version --no-git-tag-version "$TAG_VERSION"
       npm run build
+      npm publish --tag "$DIST_TAG" --access public
+
+      echo "Publishing pgai@${TAG_VERSION} (wrapper) to dist-tag ${DIST_TAG}"
+      cd ../pgai
+      # Update version + dependency so `npx pgai@<tag>` pulls the matching postgresai version.
+      npm pkg set "dependencies.postgresai=$TAG_VERSION"
+      npm version --no-git-tag-version "$TAG_VERSION"
+      # No lockfile: use npm install here.
+      npm install --no-audit --no-fund
       npm publish --tag "$DIST_TAG" --access public
   after_script:
     - rm -f ~/.npmrc

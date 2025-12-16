@@ -36,6 +36,13 @@ postgresai --help
 pgai --help  # short alias
 ```
 
+You can also run it without installing via `npx`:
+
+```bash
+npx postgresai --help
+npx pgai --help
+```
+
 ## init (create monitoring user in Postgres)
 
 This command creates (or updates) the `postgres_ai_mon` user and grants the permissions described in the root `README.md` (it is idempotent).
@@ -44,6 +51,7 @@ Run without installing (positional connection string):
 
 ```bash
 npx postgresai init postgresql://admin@host:5432/dbname
+npx pgai init postgresql://admin@host:5432/dbname
 ```
 
 It also accepts libpq “conninfo” syntax:
