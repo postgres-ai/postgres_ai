@@ -267,9 +267,9 @@ program
     console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
 
     // Use native pg client instead of requiring psql to be installed
-    const client = new Client(adminConn.clientConfig);
-
+    let client: Client | undefined;
     try {
+      client = new Client(adminConn.clientConfig);
       await client.connect();
 
       const roleRes = await client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [
@@ -445,10 +445,12 @@ program
       }
       process.exitCode = 1;
     } finally {
-      try {
-        await client.end();
-      } catch {
-        // ignore
+      if (client) {
+        try {
+          await client.end();
+        } catch {
+          // ignore
+        }
       }
     }
   });
