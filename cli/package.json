@@ -1,6 +1,6 @@
 {
   "name": "postgresai",
-  "version": "0.14.0-dev.6",
+  "version": "0.0.0-dev.0",
   "description": "postgres_ai CLI (Node.js)",
   "license": "Apache-2.0",
   "private": false,

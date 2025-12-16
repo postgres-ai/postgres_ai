@@ -320,6 +320,8 @@ test("integration: init --verify returns 0 when ok and non-zero when missing", {
   {
     const c = new Client({ connectionString: pg.adminUri });
     await c.connect();
+    // pg_catalog tables are often readable via PUBLIC by default; revoke from PUBLIC too so the failure is deterministic.
+    await c.query("revoke select on pg_catalog.pg_index from public");
     await c.query("revoke select on pg_catalog.pg_index from postgres_ai_mon");
     await c.end();
   }
