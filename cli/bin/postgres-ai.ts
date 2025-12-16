@@ -319,10 +319,12 @@ program
         if (resolved.generated) {
           const canPrint = process.stdout.isTTY || !!opts.printPassword;
           if (canPrint) {
-            console.log("");
-            console.log(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
-            console.log(`PGAI_MON_PASSWORD=${monPassword}`);
-            console.log("");
+            // Print secrets to stderr to reduce the chance they end up in piped stdout logs.
+            console.error("");
+            console.error(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
+            // Quote for shell copy/paste safety.
+            console.error(`PGAI_MON_PASSWORD='${monPassword}'`);
+            console.error("");
             console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
           } else {
             console.error(
