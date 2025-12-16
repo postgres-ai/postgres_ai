@@ -137,7 +137,7 @@ test("print-sql redaction regex matches password literal with embedded quotes", 
 });
 
 test("cli: init --print-sql works without connection (offline mode)", () => {
-  const r = runCli(["init", "--print-sql", "--dry-run", "-d", "mydb", "--password", "monpw"]);
+  const r = runCli(["init", "--print-sql", "-d", "mydb", "--password", "monpw"]);
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /SQL plan \(offline; not connected\)/);
   assert.match(r.stdout, /grant connect on database "mydb" to "postgres_ai_mon"/i);

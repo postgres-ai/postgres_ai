@@ -78,12 +78,6 @@ To see what SQL would be executed (passwords redacted by default):
 npx postgresai init postgresql://admin@host:5432/dbname --print-sql
 ```
 
-To print SQL and exit without applying anything:
-
-```bash
-npx postgresai init postgresql://admin@host:5432/dbname --dry-run
-```
-
 ## Quick start
 
 ### Authentication

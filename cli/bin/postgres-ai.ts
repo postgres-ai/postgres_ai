@@ -130,10 +130,9 @@ program
   .option("--monitoring-user <name>", "Monitoring role name to create/update", "postgres_ai_mon")
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
-  .option("--print-sql", "Print SQL plan before applying (does not exit; use --dry-run to exit)", false)
+  .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
   .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
   .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
-  .option("--dry-run", "Print SQL steps and exit without applying changes", false)
   .addHelpText(
     "after",
     [
@@ -152,7 +151,7 @@ program
       "  To print it in non-interactive mode: --print-password",
       "",
       "Inspect SQL without applying changes:",
-      "  postgresai init <conn> --dry-run",
+      "  postgresai init <conn> --print-sql",
       "",
       "Offline SQL plan (no DB connection):",
       "  postgresai init --print-sql -d dbname --password '...' --show-secrets",
@@ -171,9 +170,8 @@ program
     printSql?: boolean;
     showSecrets?: boolean;
     printPassword?: boolean;
-    dryRun?: boolean;
   }) => {
-    const shouldPrintSql = !!opts.printSql || !!opts.dryRun;
+    const shouldPrintSql = !!opts.printSql;
 
     // Offline mode: allow printing SQL without providing/using an admin connection.
     // Useful for audits/reviews; caller can provide -d/PGDATABASE and an explicit monitoring password.
@@ -211,9 +209,6 @@ program
         console.log("\n--- end SQL plan ---\n");
         if (redact) {
           console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
-        }
-        if (opts.dryRun) {
-          console.log("✓ dry-run completed (no changes were applied)");
         }
         return;
       }
@@ -323,10 +318,6 @@ program
         if (redact) {
           console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
         }
-      }
-
-      if (opts.dryRun) {
-        console.log("✓ dry-run completed (no changes were applied)");
         return;
       }
 
