@@ -133,6 +133,23 @@ If you want to see what will be executed first, use `--print-sql` (prints the SQ
 npx postgresai init --print-sql -d dbname --password '...' --show-secrets
 ```
 
+### Troubleshooting
+
+**Permission denied errors**
+
+If you see errors like `permission denied` / `insufficient_privilege` / code `42501`, you are not connected with enough privileges to create roles, grant permissions, or create extensions/views.
+
+- **How to fix**:
+  - Connect as a **superuser**, or a role with **CREATEROLE** and sufficient **GRANT/DDL** privileges
+  - On RDS/Aurora: use the **master/admin** user
+  - On managed providers: use the provider’s **admin** role/user
+
+- **Review SQL before running** (audit-friendly):
+
+```bash
+npx postgresai init --print-sql -d mydb --password '...' --show-secrets
+```
+
 **One command setup:**
 
 ```bash

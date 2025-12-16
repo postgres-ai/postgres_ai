@@ -149,6 +149,8 @@ cli:npm:publish:
       # - v0.14.0-dev.1
       # - 0.14.0-dev.1
       # - 0.14-dev.1          (normalized to 0.14.0-dev.1)
+      # - 0.14.0-rc.1
+      # - v0.14.0            (stable, published to latest)
       RAW_TAG="${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME:-}}"
       if [ -z "$RAW_TAG" ]; then
         echo "CI_COMMIT_TAG is empty"
@@ -160,15 +162,20 @@ cli:npm:publish:
       TAG_VERSION="$RAW_TAG"
       TAG_VERSION="${TAG_VERSION#v}"
 
-      # Normalize 0.14-dev.1 -> 0.14.0-dev.1
-      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+-(dev|beta)\.[0-9]+$'; then
-        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\.[0-9]+)-((dev|beta)\.[0-9]+)$/\1.0-\2/')"
+      # Normalize 0.14-dev.1 -> 0.14.0-dev.1 (also for beta/rc)
+      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\.[0-9]+)-((dev|beta|rc)\.[0-9]+)$/\1.0-\2/')"
       fi
 
-      DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta)\.[0-9]+$/\1/')"
+      DIST_TAG=""
+      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+        DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta|rc)\.[0-9]+$/\1/')"
+      elif printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        DIST_TAG="latest"
+      fi
 
-      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ]; then
-        echo "Unsupported prerelease channel in tag/version: $TAG_VERSION (expected -dev.N or -beta.N)"
+      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ] && [ "$DIST_TAG" != "rc" ] && [ "$DIST_TAG" != "latest" ]; then
+        echo "Unsupported tag/version: $TAG_VERSION (expected X.Y.Z, X.Y.Z-dev.N, X.Y.Z-beta.N, or X.Y.Z-rc.N)"
         exit 1
       fi
 
@@ -183,7 +190,10 @@ cli:npm:publish:
   after_script:
     - rm -f ~/.npmrc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+(\.\d+)?-(dev|beta)\.\d+$/'
+    # prereleases (also allow patchless X.Y-dev.N, normalized in script)
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+(\.\d+)?-(dev|beta|rc)\.\d+$/'
+    # stable releases
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
     # GitLab "Run pipeline" UI ("web" pipelines) often doesn't populate tag vars consistently.
     # Keep this job available manually so the pipeline is never empty; the script validates the ref name.
     - if: '$CI_PIPELINE_SOURCE == "web"'

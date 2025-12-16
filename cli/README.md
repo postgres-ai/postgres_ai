@@ -15,6 +15,8 @@ Or install the latest beta release explicitly:
 npm install -g postgresai@beta
 ```
 
+Note: in this repository, `cli/package.json` uses a placeholder version (`0.0.0-dev.0`). The real published version is set by the git tag in CI when publishing to npm.
+
 ### From Homebrew (macOS)
 
 ```bash
