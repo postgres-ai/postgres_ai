@@ -16,7 +16,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, resolveAdminConnection, resolveMonitoringPassword } from "../lib/init";
+import { applyInitPlan, buildInitPlan, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -130,6 +130,8 @@ program
   .option("--monitoring-user <name>", "Monitoring role name to create/update", "postgres_ai_mon")
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
+  .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
+  .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
   .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
   .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
   .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
@@ -153,6 +155,12 @@ program
       "Inspect SQL without applying changes:",
       "  postgresai init <conn> --print-sql",
       "",
+      "Verify setup (no changes):",
+      "  postgresai init <conn> --verify",
+      "",
+      "Reset monitoring password only:",
+      "  postgresai init <conn> --reset-password --password '...'",
+      "",
       "Offline SQL plan (no DB connection):",
       "  postgresai init --print-sql -d dbname --password '...' --show-secrets",
     ].join("\n")
@@ -167,10 +175,23 @@ program
     monitoringUser: string;
     password?: string;
     skipOptionalPermissions?: boolean;
+    verify?: boolean;
+    resetPassword?: boolean;
     printSql?: boolean;
     showSecrets?: boolean;
     printPassword?: boolean;
   }) => {
+    if (opts.verify && opts.resetPassword) {
+      console.error("✗ Provide only one of --verify or --reset-password");
+      process.exitCode = 1;
+      return;
+    }
+    if (opts.verify && opts.printSql) {
+      console.error("✗ --verify cannot be combined with --print-sql");
+      process.exitCode = 1;
+      return;
+    }
+
     const shouldPrintSql = !!opts.printSql;
     const shouldRedactSecrets = !opts.showSecrets;
     const redactPasswords = (sql: string): string => {
@@ -257,6 +278,31 @@ program
         throw new Error("Failed to resolve current database name");
       }
 
+      if (opts.verify) {
+        const v = await verifyInitSetup({
+          client,
+          database,
+          monitoringUser: opts.monitoringUser,
+          includeOptionalPermissions,
+        });
+        if (v.ok) {
+          console.log("✓ init verify: OK");
+          if (v.missingOptional.length > 0) {
+            console.log("⚠ Optional items missing:");
+            for (const m of v.missingOptional) console.log(`- ${m}`);
+          }
+          return;
+        }
+        console.error("✗ init verify failed: missing required items");
+        for (const m of v.missingRequired) console.error(`- ${m}`);
+        if (v.missingOptional.length > 0) {
+          console.error("Optional items missing:");
+          for (const m of v.missingOptional) console.error(`- ${m}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
       let monPassword: string;
       try {
         const resolved = await resolveMonitoringPassword({
@@ -301,9 +347,13 @@ program
         roleExists,
       });
 
+      const effectivePlan = opts.resetPassword
+        ? { ...plan, steps: plan.steps.filter((s) => s.name === "01.role") }
+        : plan;
+
       if (shouldPrintSql) {
         console.log("\n--- SQL plan ---");
-        for (const step of plan.steps) {
+        for (const step of effectivePlan.steps) {
           console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
           console.log(redactPasswords(step.sql));
         }
@@ -314,9 +364,9 @@ program
         return;
       }
 
-      const { applied, skippedOptional } = await applyInitPlan({ client, plan });
+      const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
 
-      console.log("✓ init completed");
+      console.log(opts.resetPassword ? "✓ init password reset completed" : "✓ init completed");
       if (skippedOptional.length > 0) {
         console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
         for (const s of skippedOptional) console.log(`- ${s}`);

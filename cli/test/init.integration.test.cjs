@@ -299,4 +299,65 @@ test("integration: init reports nicely when lacking permissions", { skip: !haveP
   assert.match(r.stderr, /Hint: connect as a superuser/i);
 });
 
+test("integration: init --verify returns 0 when ok and non-zero when missing", { skip: !havePostgresBinaries() }, async (t) => {
+  const pg = await withTempPostgres(t);
+  const { Client } = require("pg");
+
+  // Prepare: run init
+  {
+    const r = await runCliInit([pg.adminUri, "--password", "monpw", "--skip-optional-permissions"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+  }
+
+  // Verify should pass
+  {
+    const r = await runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    assert.match(r.stdout, /init verify: OK/i);
+  }
+
+  // Break a required privilege and ensure verify fails
+  {
+    const c = new Client({ connectionString: pg.adminUri });
+    await c.connect();
+    await c.query("revoke select on pg_catalog.pg_index from postgres_ai_mon");
+    await c.end();
+  }
+  {
+    const r = await runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /init verify failed/i);
+    assert.match(r.stderr, /pg_catalog\.pg_index/i);
+  }
+});
+
+test("integration: init --reset-password updates the monitoring role login password", { skip: !havePostgresBinaries() }, async (t) => {
+  const pg = await withTempPostgres(t);
+  const { Client } = require("pg");
+
+  // Initial setup with password pw1
+  {
+    const r = await runCliInit([pg.adminUri, "--password", "pw1", "--skip-optional-permissions"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+  }
+
+  // Reset to pw2
+  {
+    const r = await runCliInit([pg.adminUri, "--reset-password", "--password", "pw2", "--skip-optional-permissions"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    assert.match(r.stdout, /password reset/i);
+  }
+
+  // Connect as monitoring user with new password should work
+  {
+    const c = new Client({
+      connectionString: `postgresql://postgres_ai_mon:pw2@127.0.0.1:${pg.port}/testdb`,
+    });
+    await c.connect();
+    const ok = await c.query("select 1 as ok");
+    assert.equal(ok.rows[0].ok, 1);
+    await c.end();
+  }
+});
+
 

@@ -438,4 +438,123 @@ export async function applyInitPlan(params: {
   return { applied, skippedOptional };
 }
 
+export type VerifyInitResult = {
+  ok: boolean;
+  missingRequired: string[];
+  missingOptional: string[];
+};
+
+export async function verifyInitSetup(params: {
+  client: PgClient;
+  database: string;
+  monitoringUser: string;
+  includeOptionalPermissions: boolean;
+}): Promise<VerifyInitResult> {
+  const missingRequired: string[] = [];
+  const missingOptional: string[] = [];
+
+  const role = params.monitoringUser;
+  const db = params.database;
+
+  const roleRes = await params.client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [role]);
+  const roleExists = (roleRes.rowCount ?? 0) > 0;
+  if (!roleExists) {
+    missingRequired.push(`role "${role}" does not exist`);
+    // If role is missing, other checks will error or be meaningless.
+    return { ok: false, missingRequired, missingOptional };
+  }
+
+  const connectRes = await params.client.query(
+    "select has_database_privilege($1, $2, 'CONNECT') as ok",
+    [role, db]
+  );
+  if (!connectRes.rows?.[0]?.ok) {
+    missingRequired.push(`CONNECT on database "${db}"`);
+  }
+
+  const pgMonitorRes = await params.client.query(
+    "select pg_has_role($1, 'pg_monitor', 'member') as ok",
+    [role]
+  );
+  if (!pgMonitorRes.rows?.[0]?.ok) {
+    missingRequired.push("membership in role pg_monitor");
+  }
+
+  const pgIndexRes = await params.client.query(
+    "select has_table_privilege($1, 'pg_catalog.pg_index', 'SELECT') as ok",
+    [role]
+  );
+  if (!pgIndexRes.rows?.[0]?.ok) {
+    missingRequired.push("SELECT on pg_catalog.pg_index");
+  }
+
+  const viewExistsRes = await params.client.query("select to_regclass('public.pg_statistic') is not null as ok");
+  if (!viewExistsRes.rows?.[0]?.ok) {
+    missingRequired.push("view public.pg_statistic exists");
+  } else {
+    const viewPrivRes = await params.client.query(
+      "select has_table_privilege($1, 'public.pg_statistic', 'SELECT') as ok",
+      [role]
+    );
+    if (!viewPrivRes.rows?.[0]?.ok) {
+      missingRequired.push("SELECT on view public.pg_statistic");
+    }
+  }
+
+  const schemaUsageRes = await params.client.query(
+    "select has_schema_privilege($1, 'public', 'USAGE') as ok",
+    [role]
+  );
+  if (!schemaUsageRes.rows?.[0]?.ok) {
+    missingRequired.push("USAGE on schema public");
+  }
+
+  const rolcfgRes = await params.client.query("select rolconfig from pg_catalog.pg_roles where rolname = $1", [role]);
+  const rolconfig = rolcfgRes.rows?.[0]?.rolconfig;
+  const spLine = Array.isArray(rolconfig) ? rolconfig.find((v: any) => String(v).startsWith("search_path=")) : undefined;
+  if (typeof spLine !== "string" || !spLine) {
+    missingRequired.push("role search_path is set");
+  } else {
+    // We accept any ordering as long as public and pg_catalog are included.
+    const sp = spLine.toLowerCase();
+    if (!sp.includes("public") || !sp.includes("pg_catalog")) {
+      missingRequired.push("role search_path includes public and pg_catalog");
+    }
+  }
+
+  if (params.includeOptionalPermissions) {
+    // Optional RDS/Aurora extras
+    {
+      const extRes = await params.client.query("select 1 from pg_extension where extname = 'rds_tools'");
+      if ((extRes.rowCount ?? 0) === 0) {
+        missingOptional.push("extension rds_tools");
+      } else {
+        const fnRes = await params.client.query(
+          "select has_function_privilege($1, 'rds_tools.pg_ls_multixactdir()', 'EXECUTE') as ok",
+          [role]
+        );
+        if (!fnRes.rows?.[0]?.ok) {
+          missingOptional.push("EXECUTE on rds_tools.pg_ls_multixactdir()");
+        }
+      }
+    }
+
+    // Optional self-managed extras
+    const optionalFns = [
+      "pg_catalog.pg_stat_file(text)",
+      "pg_catalog.pg_stat_file(text, boolean)",
+      "pg_catalog.pg_ls_dir(text)",
+      "pg_catalog.pg_ls_dir(text, boolean, boolean)",
+    ];
+    for (const fn of optionalFns) {
+      const fnRes = await params.client.query("select has_function_privilege($1, $2, 'EXECUTE') as ok", [role, fn]);
+      if (!fnRes.rows?.[0]?.ok) {
+        missingOptional.push(`EXECUTE on ${fn}`);
+      }
+    }
+  }
+
+  return { ok: missingRequired.length === 0, missingRequired, missingOptional };
+}
+
 

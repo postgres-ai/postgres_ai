@@ -78,6 +78,20 @@ To see what SQL would be executed (passwords redacted by default):
 npx postgresai init postgresql://admin@host:5432/dbname --print-sql
 ```
 
+### Verify and password reset
+
+Verify that everything is configured as expected (no changes):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --verify
+```
+
+Reset monitoring user password only (no other changes):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+```
+
 ## Quick start
 
 ### Authentication
