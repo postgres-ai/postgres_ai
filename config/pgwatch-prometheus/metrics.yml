@@ -370,6 +370,8 @@ metrics:
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
           name as tag_setting_name,
+          -- Use reset_val for lock_timeout because pgwatch sets it to 100ms during collection,
+          -- which would mask the actual configured value. reset_val shows the true server config.
           case when name = 'lock_timeout' then reset_val else setting end as tag_setting_value,
           unit as tag_unit,
           category as tag_category,
