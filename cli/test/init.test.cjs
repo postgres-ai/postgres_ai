@@ -130,6 +130,13 @@ test("cli: init with missing connection prints init help/options", () => {
   assert.match(r.stderr, /--monitoring-user/);
 });
 
+test("resolveMonitoringPassword auto-generates a strong, URL-safe password by default", async () => {
+  const r = await init.resolveMonitoringPassword({ monitoringUser: "postgres_ai_mon" });
+  assert.equal(r.generated, true);
+  assert.ok(typeof r.password === "string" && r.password.length >= 30);
+  assert.match(r.password, /^[A-Za-z0-9_-]+$/);
+});
+
 test("print-sql redaction regex matches password literal with embedded quotes", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",

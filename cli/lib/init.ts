@@ -307,8 +307,13 @@ export async function promptHidden(prompt: string): Promise<string> {
 }
 
 function generateMonitoringPassword(): string {
-  // URL-safe and easy to copy/paste; length ~32 chars.
-  return randomBytes(24).toString("base64url");
+  // URL-safe and easy to copy/paste; 24 bytes => 32 base64url chars (no padding).
+  // Note: randomBytes() throws on failure; we add a tiny sanity check for unexpected output.
+  const password = randomBytes(24).toString("base64url");
+  if (password.length < 30) {
+    throw new Error("Password generation failed: unexpected output length");
+  }
+  return password;
 }
 
 export async function resolveMonitoringPassword(opts: {
