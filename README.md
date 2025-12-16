@@ -93,13 +93,17 @@ Use the CLI to create/update the monitoring role and grant all required permissi
 ```bash
 # Connect as an admin/superuser and apply required permissions.
 # Admin password comes from PGPASSWORD (libpq standard) unless you pass --admin-password.
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --password '...'
+#
+# Monitoring password:
+# - by default, postgresai generates a strong password automatically
+# - it is printed only in interactive (TTY) mode, or if you opt in via --print-password
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname
 ```
 
 Optional permissions (RDS/self-managed extras) are enabled by default. To skip them:
 
 ```bash
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --password '...' --skip-optional-permissions
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
 ```
 
 Verify everything is in place (no changes):
@@ -123,6 +127,7 @@ PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --print
 You can also print an offline SQL plan without a DB connection (useful for audits/reviews):
 
 ```bash
+# Offline plan output does not connect to Postgres, so provide a monitoring password explicitly:
 npx postgresai init --print-sql -d dbname --password '...' --show-secrets
 ```
 
