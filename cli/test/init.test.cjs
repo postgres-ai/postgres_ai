@@ -53,6 +53,34 @@ test("buildInitPlan includes create user when role does not exist", async () => 
   assert.ok(!plan.steps.some((s) => s.optional));
 });
 
+test("buildInitPlan rejects identifiers with null bytes", async () => {
+  await assert.rejects(
+    () =>
+      init.buildInitPlan({
+        database: "mydb",
+        monitoringUser: "bad\0user",
+        monitoringPassword: "pw",
+        includeOptionalPermissions: false,
+        roleExists: false,
+      }),
+    /Identifier cannot contain null bytes/
+  );
+});
+
+test("buildInitPlan rejects literals with null bytes", async () => {
+  await assert.rejects(
+    () =>
+      init.buildInitPlan({
+        database: "mydb",
+        monitoringUser: "postgres_ai_mon",
+        monitoringPassword: "pw\0bad",
+        includeOptionalPermissions: false,
+        roleExists: false,
+      }),
+    /Literal cannot contain null bytes/
+  );
+});
+
 test("buildInitPlan includes role step when roleExists is omitted", async () => {
   const plan = await init.buildInitPlan({
     database: "mydb",
