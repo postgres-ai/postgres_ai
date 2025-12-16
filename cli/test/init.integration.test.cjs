@@ -297,6 +297,8 @@ test("integration: init reports nicely when lacking permissions", { skip: !haveP
   assert.match(r.stderr, /init failed:/);
   // Should include step context and hint.
   assert.match(r.stderr, /Failed at step "/);
+  assert.match(r.stderr, /Permission error:/i);
+  assert.match(r.stderr, /How to fix:/i);
   assert.match(r.stderr, /Hint: connect as a superuser/i);
 });
 

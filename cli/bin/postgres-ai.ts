@@ -397,6 +397,13 @@ program
         message = "Unknown error";
       }
       console.error(`✗ init failed: ${message}`);
+      // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
+      const stepMatch =
+        typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
+      const failedStep = stepMatch?.[1];
+      if (failedStep) {
+        console.error(`Step: ${failedStep}`);
+      }
       if (errAny && typeof errAny === "object") {
         if (typeof errAny.code === "string" && errAny.code) {
           console.error(`Error code: ${errAny.code}`);
@@ -410,6 +417,18 @@ program
       }
       if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
         if (errAny.code === "42501") {
+          console.error("");
+          console.error("Permission error: your admin connection is not allowed to complete the setup.");
+          if (failedStep === "01.role") {
+            console.error("What failed: create/update the monitoring role (needs CREATEROLE or superuser).");
+          } else if (failedStep === "02.permissions") {
+            console.error("What failed: grant required permissions / create view / set role search_path.");
+          }
+          console.error("How to fix:");
+          console.error("- Connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges).");
+          console.error("- On managed Postgres, use the provider's admin/master user.");
+          console.error("Tip: run with --print-sql to review the exact SQL plan.");
+          console.error("");
           console.error("Hint: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges).");
         }
         if (errAny.code === "ECONNREFUSED") {
