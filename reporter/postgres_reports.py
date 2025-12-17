@@ -133,6 +133,63 @@ class PostgresReportGenerator:
         
         return index_definitions
 
+    def get_queryid_queries_from_sink(self, query_text_limit: int = 5000) -> Dict[str, Dict[str, str]]:
+        """
+        Get queryid-to-query text mappings from the Postgres sink database.
+        
+        Args:
+            query_text_limit: Maximum number of characters for each query text (default: 5000)
+        
+        Returns:
+            Dictionary with database names as keys, containing queryid->query mappings
+        """
+        if not self.pg_conn:
+            if not self.connect_postgres_sink():
+                return {}
+        
+        queries_by_db: Dict[str, Dict[str, str]] = {}
+        
+        try:
+            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Query unique queryid-to-query mappings
+                # The pgss_queryid_queries table stores deduplicated queryid->query mappings
+                query = """
+                    select distinct on (dbname, data->>'queryid')
+                        dbname,
+                        data->>'queryid' as queryid,
+                        data->>'query' as query
+                    from public.pgss_queryid_queries
+                    where
+                        data->>'queryid' is not null
+                        and data->>'query' is not null
+                    order by dbname, data->>'queryid', time desc
+                """
+                cursor.execute(query)
+                
+                for row in cursor.fetchall():
+                    db_name = row['dbname']
+                    queryid = row['queryid']
+                    query_text = row['query']
+                    
+                    # Skip if queryid is missing
+                    if not queryid:
+                        continue
+                    
+                    # Truncate query text if it exceeds the limit
+                    if query_text and len(query_text) > query_text_limit:
+                        query_text = query_text[:query_text_limit] + '...'
+                    
+                    # Initialize database dict if needed
+                    if db_name not in queries_by_db:
+                        queries_by_db[db_name] = {}
+                    
+                    queries_by_db[db_name][queryid] = query_text or ''
+        
+        except Exception as e:
+            print(f"Error fetching queryid queries from Postgres sink: {e}")
+        
+        return queries_by_db
+
     def query_instant(self, query: str) -> Dict[str, Any]:
         """
         Execute an instant PromQL query.
@@ -3275,6 +3332,276 @@ class PostgresReportGenerator:
 
         return reports
 
+    def generate_queries_json(self, query_text_limit: int = 5000) -> Dict[str, Dict[str, str]]:
+        """
+        Generate JSON with queryid-to-query text mappings.
+        This is not a letter-report, it's a supplementary file with query texts.
+        
+        Args:
+            query_text_limit: Maximum number of characters for each query text (default: 5000)
+        
+        Returns:
+            Dictionary with database names as keys, containing queryid->query mappings
+        """
+        print("Generating queries JSON (queryid to query text mappings)...")
+        return self.get_queryid_queries_from_sink(query_text_limit)
+
+    def extract_queryids_from_reports(self, reports: Dict[str, Any]) -> Dict[str, set]:
+        """
+        Extract all unique queryids from the hourly reports (K001-K007, M001-M003, N001).
+        
+        Args:
+            reports: Dictionary of generated reports keyed by check_id
+            
+        Returns:
+            Dictionary mapping database names to sets of queryids
+        """
+        queryids_by_db: Dict[str, set] = {}
+        
+        def extract_from_query_metrics(container: Dict, target_key: str = 'query_metrics', 
+                                       id_field: str = 'queryid'):
+            """Helper to extract queryids from a container that may have nested structure."""
+            if not isinstance(container, dict):
+                return
+            
+            # Direct: container has query_metrics
+            if target_key in container:
+                for query in container.get(target_key, []):
+                    qid = query.get(id_field)
+                    if qid and str(qid) != '0':
+                        # Try to find db_name from context or use a placeholder
+                        yield str(qid), None
+            
+            # Check for 'data' wrapper: container -> data -> db_name -> query_metrics
+            if 'data' in container and isinstance(container['data'], dict):
+                for db_name, db_data in container['data'].items():
+                    if isinstance(db_data, dict) and target_key in db_data:
+                        for query in db_data.get(target_key, []):
+                            qid = query.get(id_field)
+                            if qid and str(qid) != '0':
+                                yield str(qid), db_name
+            
+            # Direct db_name -> query_metrics (no data wrapper)
+            for key, value in container.items():
+                if key == 'data':
+                    continue
+                if isinstance(value, dict) and target_key in value:
+                    for query in value.get(target_key, []):
+                        qid = query.get(id_field)
+                        if qid and str(qid) != '0':
+                            yield str(qid), key
+        
+        # Reports with queryid field in query_metrics list
+        pgss_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+        
+        for report_id in pgss_reports:
+            if report_id not in reports:
+                continue
+            
+            report = reports[report_id]
+            results = report.get('results', {})
+            
+            # Handle multi-node structure: results -> node_name -> data -> db_name -> query_metrics
+            for node_key, node_data in results.items():
+                if isinstance(node_data, dict):
+                    for queryid, db_name in extract_from_query_metrics(node_data):
+                        if db_name:
+                            if db_name not in queryids_by_db:
+                                queryids_by_db[db_name] = set()
+                            queryids_by_db[db_name].add(queryid)
+        
+        # N001 Wait Events report - has query_id in queries_list under wait_event_types
+        if 'N001' in reports:
+            report = reports['N001']
+            results = report.get('results', {})
+            
+            for node_key, node_data in results.items():
+                if not isinstance(node_data, dict):
+                    continue
+                
+                # Check for 'data' wrapper
+                data_container = node_data.get('data', node_data)
+                
+                for db_name, db_data in data_container.items():
+                    if not isinstance(db_data, dict):
+                        continue
+                    
+                    wait_types = db_data.get('wait_event_types', {})
+                    if not wait_types:
+                        continue
+                    
+                    if db_name not in queryids_by_db:
+                        queryids_by_db[db_name] = set()
+                    
+                    for wait_type, wait_data in wait_types.items():
+                        for query in wait_data.get('queries_list', []):
+                            query_id = query.get('query_id')
+                            if query_id and str(query_id) != '0':
+                                queryids_by_db[db_name].add(str(query_id))
+        
+        # Log summary
+        total_queryids = sum(len(qids) for qids in queryids_by_db.values())
+        print(f"Extracted {total_queryids} unique queryids from hourly reports across {len(queryids_by_db)} database(s)")
+        
+        return queryids_by_db
+
+    def get_query_metrics_from_prometheus(self, cluster: str, node_name: str, db_name: str,
+                                          queryid: str, hours: int = 24) -> Dict[str, Any]:
+        """
+        Get all pg_stat_statements metrics for a specific query directly from Prometheus.
+        Fetches daily totals for all metrics shown on Dashboard 3 (Single queryid analysis).
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            db_name: Database name
+            queryid: Query ID
+            hours: Number of hours to aggregate (default: 24 for daily totals)
+            
+        Returns:
+            Dictionary of metrics with daily totals
+        """
+        metrics = {}
+        
+        # Build filters for this specific query
+        filters = [
+            f'cluster="{cluster}"',
+            f'node_name="{node_name}"',
+            f'datname="{db_name}"',
+            f'queryid="{queryid}"'
+        ]
+        filter_str = '{' + ','.join(filters) + '}'
+        
+        # Time range - calculate exact 24h window
+        now = int(time.time())
+        end_s = self._floor_hour(now)
+        start_s = end_s - (hours * 3600)  # Exact hours back from end
+        
+        # All pg_stat_statements metrics to fetch (matching Dashboard 3)
+        pgss_metrics = {
+            'calls': 'pgwatch_pg_stat_statements_calls',
+            'exec_time_ms': 'pgwatch_pg_stat_statements_exec_time_total',
+            'plan_time_ms': 'pgwatch_pg_stat_statements_plan_time_total',
+            'rows': 'pgwatch_pg_stat_statements_rows',
+            'shared_blks_hit_bytes': 'pgwatch_pg_stat_statements_shared_bytes_hit_total',
+            'shared_blks_read_bytes': 'pgwatch_pg_stat_statements_shared_bytes_read_total',
+            'shared_blks_dirtied_bytes': 'pgwatch_pg_stat_statements_shared_bytes_dirtied_total',
+            'shared_blks_written_bytes': 'pgwatch_pg_stat_statements_shared_bytes_written_total',
+            'wal_bytes': 'pgwatch_pg_stat_statements_wal_bytes',
+            'wal_fpi': 'pgwatch_pg_stat_statements_wal_fpi',
+            'wal_records': 'pgwatch_pg_stat_statements_wal_records',
+            'temp_bytes_read': 'pgwatch_pg_stat_statements_temp_bytes_read',
+            'temp_bytes_written': 'pgwatch_pg_stat_statements_temp_bytes_written',
+            'blk_read_time_ms': 'pgwatch_pg_stat_statements_block_read_total',
+            'blk_write_time_ms': 'pgwatch_pg_stat_statements_block_write_total',
+            'jit_generation_time_ms': 'pgwatch_pg_stat_statements_jit_generation_time',
+            'jit_inlining_time_ms': 'pgwatch_pg_stat_statements_jit_inlining_time',
+            'jit_optimization_time_ms': 'pgwatch_pg_stat_statements_jit_optimization_time',
+            'jit_emission_time_ms': 'pgwatch_pg_stat_statements_jit_emission_time',
+        }
+        
+        # Fetch each metric
+        for metric_key, metric_name in pgss_metrics.items():
+            try:
+                # Query for total increase over the time range
+                query = f'sum(increase({metric_name}{filter_str}[{hours}h]))'
+                result = self.query_instant(query)
+                
+                if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                    for item in result['data']['result']:
+                        value = float(item['value'][1]) if item.get('value') else 0
+                        # Only include metrics that have non-zero values
+                        if value > 0:
+                            metrics[metric_key] = value
+                        break
+            except Exception as e:
+                # Silently skip metrics that fail (some may not exist for older PG versions)
+                pass
+        
+        # Add time range info
+        metrics['time_range'] = {
+            'hours': hours,
+            'start_time': datetime.fromtimestamp(start_s).isoformat(),
+            'end_time': datetime.fromtimestamp(end_s).isoformat()
+        }
+        
+        return metrics
+
+    def generate_per_query_jsons(self, reports: Dict[str, Any], cluster: str,
+                                 node_name: str = None,
+                                 query_text_limit: int = 5000,
+                                 hours: int = 24) -> List[Dict[str, Any]]:
+        """
+        Generate individual JSON files for each query mentioned in hourly reports.
+        Fetches all metrics directly from Prometheus (matching Dashboard 3).
+        
+        Args:
+            reports: Dictionary of generated reports keyed by check_id
+            cluster: Cluster name
+            node_name: Node name (optional, will use primary if not specified)
+            query_text_limit: Maximum number of characters for each query text
+            hours: Number of hours for metric aggregation (default: 24)
+            
+        Returns:
+            List of dictionaries with 'filename' and 'data' for each query
+        """
+        print("Generating per-query JSON files...")
+        
+        # Extract all queryids from reports
+        queryids_by_db = self.extract_queryids_from_reports(reports)
+        
+        if not queryids_by_db:
+            print("No queryids found in hourly reports")
+            return []
+        
+        # Get node name if not specified
+        if node_name is None:
+            nodes = self.get_all_nodes(cluster)
+            node_name = nodes.get('primary') or 'node-01'
+        
+        # Get query texts from sink
+        query_texts = self.get_queryid_queries_from_sink(query_text_limit)
+        
+        query_files = []
+        total_queries = sum(len(qids) for qids in queryids_by_db.values())
+        processed = 0
+        
+        for db_name, queryids in queryids_by_db.items():
+            db_query_texts = query_texts.get(db_name, {})
+            
+            for queryid in queryids:
+                processed += 1
+                print(f"  Processing query {processed}/{total_queries}: {queryid[:20]}...")
+                
+                # Get query text
+                query_text = db_query_texts.get(queryid)
+                
+                # Get all metrics directly from Prometheus
+                metrics = self.get_query_metrics_from_prometheus(
+                    cluster, node_name, db_name, queryid, hours=hours
+                )
+                
+                # Build the query JSON
+                query_data = {
+                    "query_id": queryid,
+                    "query_text": query_text,
+                    "database": db_name,
+                    "cluster": cluster,
+                    "node_name": node_name,
+                    "metrics": metrics
+                }
+                
+                # Create filename: query_{queryid}.json
+                filename = f"query_{queryid}.json"
+                
+                query_files.append({
+                    "filename": filename,
+                    "data": query_data
+                })
+        
+        print(f"Generated {len(query_files)} per-query JSON files")
+        return query_files
+
     def get_all_clusters(self) -> List[str]:
         """
         Get all unique cluster names (projects) from the metrics.
@@ -3654,6 +3981,31 @@ def main():
                     print(f"Generated report: {output_filename}")
                     if not args.no_upload:
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                
+                # Generate queries JSON (queryid to query text mappings)
+                # This is not a letter-report, named as <project_name>_queries.json
+                queries_data = generator.generate_queries_json(query_text_limit=5000)
+                if queries_data:
+                    project_name = args.project_name if args.project_name != 'project-name' else cluster
+                    queries_filename = f"{project_name}_queries.json"
+                    with open(queries_filename, "w") as f:
+                        json.dump(queries_data, f, indent=2)
+                    print(f"Generated queries file: {queries_filename}")
+                    if not args.no_upload:
+                        generator.upload_report_file(args.api_url, args.token, report_id, queries_filename)
+                
+                # Generate per-query JSON files for queries mentioned in hourly reports
+                # Each queryid gets its own file with all metrics from pg_stat_statements
+                query_files = generator.generate_per_query_jsons(
+                    reports, cluster, node_name=args.node_name, query_text_limit=5000, hours=24
+                )
+                for query_file in query_files:
+                    filename = query_file['filename']
+                    with open(filename, "w") as f:
+                        json.dump(query_file['data'], f, indent=2)
+                    print(f"Generated query file: {filename}")
+                    if not args.no_upload:
+                        generator.upload_report_file(args.api_url, args.token, report_id, filename)
                 
                 if args.output == '-':
                     pass
