@@ -227,8 +227,8 @@ cli:npm:publish:
     GIT_STRATEGY: fetch
 
 .docker-build-script: &docker-build-script |
-  echo "Logging into Docker Hub..."
-  echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+  echo "Logging into container registry..."
+  echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
 
   echo "Enabling binfmt (QEMU) for multi-arch builds..."
   docker run --privileged --rm tonistiigi/binfmt --install all
@@ -269,8 +269,11 @@ docker:publish:images:
   script:
     - |
       set -euo pipefail
-      : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
-      : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
+      REGISTRY="${DH_CI_REGISTRY:-${DOCKERHUB_REGISTRY:-docker.io}}"
+      REGISTRY_USER="${DH_CI_REGISTRY_USER:-${DOCKERHUB_USERNAME:-}}"
+      REGISTRY_PASSWORD="${DH_CI_REGISTRY_PASSWORD:-${DOCKERHUB_TOKEN:-}}"
+      : "${REGISTRY_USER:?DH_CI_REGISTRY_USER (or DOCKERHUB_USERNAME) is required}"
+      : "${REGISTRY_PASSWORD:?DH_CI_REGISTRY_PASSWORD (or DOCKERHUB_TOKEN) is required}"
 
       RAW_TAG="${CI_COMMIT_TAG:-}"
       if [ -z "$RAW_TAG" ]; then
@@ -295,8 +298,11 @@ docker:publish:dev:
   script:
     - |
       set -euo pipefail
-      : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
-      : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
+      REGISTRY="${DH_CI_REGISTRY:-${DOCKERHUB_REGISTRY:-docker.io}}"
+      REGISTRY_USER="${DH_CI_REGISTRY_USER:-${DOCKERHUB_USERNAME:-}}"
+      REGISTRY_PASSWORD="${DH_CI_REGISTRY_PASSWORD:-${DOCKERHUB_TOKEN:-}}"
+      : "${REGISTRY_USER:?DH_CI_REGISTRY_USER (or DOCKERHUB_USERNAME) is required}"
+      : "${REGISTRY_PASSWORD:?DH_CI_REGISTRY_PASSWORD (or DOCKERHUB_TOKEN) is required}"
 
       SHORT_SHA="$(echo "$CI_COMMIT_SHA" | cut -c1-8)"
       VERSION="dev-${SHORT_SHA}"
@@ -354,9 +360,12 @@ release:verify:
       npm view "pgai@${NPM_VERSION}" version
 
       echo "Verifying Docker images availability and metadata..."
-      : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
-      : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
-      echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+      REGISTRY="${DH_CI_REGISTRY:-${DOCKERHUB_REGISTRY:-docker.io}}"
+      REGISTRY_USER="${DH_CI_REGISTRY_USER:-${DOCKERHUB_USERNAME:-}}"
+      REGISTRY_PASSWORD="${DH_CI_REGISTRY_PASSWORD:-${DOCKERHUB_TOKEN:-}}"
+      : "${REGISTRY_USER:?DH_CI_REGISTRY_USER (or DOCKERHUB_USERNAME) is required}"
+      : "${REGISTRY_PASSWORD:?DH_CI_REGISTRY_PASSWORD (or DOCKERHUB_TOKEN) is required}"
+      echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
 
       docker pull "postgresai/reporter:${RAW_TAG}"
       docker pull "postgresai/monitoring_flask_backend:${RAW_TAG}"
