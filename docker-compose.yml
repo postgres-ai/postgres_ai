@@ -154,7 +154,7 @@ services:
     restart: unless-stopped
   # PostgreSQL Reports Generator - Runs reports after 1 hour
   postgres-reports:
-    image: postgresai/reporter:1.0.2
+    image: postgresai/reporter:latest
     container_name: postgres-reports
     working_dir: /app
     volumes:

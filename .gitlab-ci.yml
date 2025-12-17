@@ -331,7 +331,7 @@ docker:publish:dev:
     - *docker-build-script
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: always
+      when: manual
 
 release:verify:
   stage: publish
