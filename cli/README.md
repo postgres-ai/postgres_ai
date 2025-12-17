@@ -29,17 +29,24 @@ brew install postgresai
 
 ## Usage
 
-The CLI provides three command aliases (prefer `postgresai`):
+The `postgresai` package provides two command aliases (prefer `postgresai`):
 ```bash
 postgres-ai --help
 postgresai --help
-pgai --help
 ```
 
 You can also run it without installing via `npx`:
 
 ```bash
 npx postgresai --help
+```
+
+### Optional shorthand: `pgai`
+
+If you want `npx pgai ...` as a shorthand for `npx postgresai ...`, install the separate `pgai` wrapper package:
+
+```bash
+npx pgai --help
 ```
 
 ## init (create monitoring user in Postgres)
