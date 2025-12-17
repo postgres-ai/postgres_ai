@@ -1,3 +1,6 @@
+include:
+  - local: 'components/index_pilot/.gitlab-ci.yml'
+
 stages:
   - test
   - publish
