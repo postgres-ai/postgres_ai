@@ -1,0 +1,8 @@
+services:
+  # Local development override: build Flask backend from source instead of pulling an image.
+  monitoring_flask_backend:
+    build:
+      context: ./monitoring_flask_backend
+    image: postgresai/monitoring_flask_backend:local
+
+
