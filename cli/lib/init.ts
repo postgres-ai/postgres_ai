@@ -223,19 +223,8 @@ export function resolveAdminConnection(opts: {
   }
 
   if (!hasConnDetails) {
-    throw new Error(
-      [
-        "Connection is required.",
-        "",
-        "Examples:",
-        "  postgresai init postgresql://admin@host:5432/dbname",
-        "  postgresai init \"dbname=dbname host=host user=admin\"",
-        "  postgresai init -h host -p 5432 -U admin -d dbname",
-        "",
-        "Admin password:",
-        "  --admin-password <password>  (or set PGPASSWORD)",
-      ].join("\n")
-    );
+    // Keep this message short: the CLI prints full help (including examples) on this error.
+    throw new Error("Connection is required.");
   }
 
   const cfg: PgClientConfig = {};
