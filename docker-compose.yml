@@ -1,24 +1,34 @@
 services:
+  # Config Initializer - Copies static configs from image to volume
+  config-init:
+    image: postgresai/monitoring-config:0.14.0-dev.20
+    container_name: config-init
+    volumes:
+      - monitoring_config:/target
+    environment:
+      - TARGET_DIR=/target
+
   # Sources Generator - Generates sources.yml files from instances.yaml template
   sources-generator:
     image: alpine:3.22.0
     container_name: sources-generator
     working_dir: /app
     volumes:
-      - ./instances.yml:/app/instances.yaml
-      - ./config:/app/config
+      - ./instances.yml:/app/instances.yaml:ro
+      - monitoring_config:/app/config
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
     command: >
       sh -c "
-      mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
-      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch-postgres/sources.yml &&
-      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch-postgres/sources.yml &&
+      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch/sources.yml &&
+      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch/sources.yml &&
       echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
-      echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
       sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
-      echo 'Generated sources.yml files for both postgres and prometheus'
+      echo 'Generated sources.yml files for both pgwatch instances'
       "
 
-  # Target Database - The PostgreSQL database being monitored
+  # Target Database - The PostgreSQL database being monitored (demo only)
   target-db:
     image: postgres:15
     container_name: target-db
@@ -26,17 +36,19 @@ services:
       POSTGRES_DB: target_database
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    command:
-      [
-        "postgres",
-        "-c",
-        "shared_preload_libraries=pg_stat_statements",
-        "-c",
-        "pg_stat_statements.track=all",
-      ]
+    entrypoint: >
+      sh -c "
+      cp /monitoring_config/target-db/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
+      exec docker-entrypoint.sh postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      "
     volumes:
       - target_db_data:/var/lib/postgresql/data
-      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - monitoring_config:/monitoring_config:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
   # Note: pg_hba.conf is configured to allow passwordless connections (trust)
@@ -51,10 +63,18 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
+    entrypoint: >
+      sh -c "
+      cp /monitoring_config/sink-postgres/*.sh /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
+      cp /monitoring_config/sink-postgres/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
+      exec docker-entrypoint.sh postgres
+      "
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
-      - ./config/sink-postgres/00-configure-pg-hba.sh:/docker-entrypoint-initdb.d/00-configure-pg-hba.sh
-      - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - monitoring_config:/monitoring_config:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   # VictoriaMetrics Sink - Storage for metrics in Prometheus format
   sink-prometheus:
@@ -64,14 +84,17 @@ services:
       - "${BIND_HOST:-}59090:9090"
     volumes:
       - victoria_metrics_data:/victoria-metrics-data
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - monitoring_config:/monitoring_config:ro
     command:
       - "-storageDataPath=/victoria-metrics-data"
       - "-retentionPeriod=336h"
       - "-httpListenAddr=:9090"
-      - "-promscrape.config=/etc/prometheus/prometheus.yml"
+      - "-promscrape.config=/monitoring_config/prometheus/prometheus.yml"
       - "-promscrape.config.strictParse=false"
       - "-promscrape.maxScrapeSize=128000000"
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
@@ -79,17 +102,18 @@ services:
     container_name: pgwatch-postgres
     command:
       [
-        "--sources=/etc/pgwatch/sources.yml",
-        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sources=/monitoring_config/pgwatch/sources.yml",
+        "--metrics=/monitoring_config/pgwatch/metrics.yml",
         "--sink=postgresql://pgwatch@sink-postgres:5432/measurements?sslmode=disable",
         "--web-addr=:8080",
       ]
     depends_on:
-      - sources-generator
-      - sink-postgres
+      sources-generator:
+        condition: service_completed_successfully
+      sink-postgres:
+        condition: service_started
     volumes:
-      - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+      - monitoring_config:/monitoring_config:ro
     restart: unless-stopped
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
@@ -98,17 +122,18 @@ services:
     container_name: pgwatch-prometheus
     command:
       [
-        "--sources=/etc/pgwatch/sources.yml",
-        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sources=/monitoring_config/pgwatch-prometheus/sources.yml",
+        "--metrics=/monitoring_config/pgwatch-prometheus/metrics.yml",
         "--sink=prometheus://0.0.0.0:9091/pgwatch",
         "--web-addr=:8089",
       ]
     depends_on:
-      - sources-generator
-      - sink-prometheus
+      sources-generator:
+        condition: service_completed_successfully
+      sink-prometheus:
+        condition: service_started
     volumes:
-      - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+      - monitoring_config:/monitoring_config:ro
     restart: unless-stopped
 
   # Grafana with datasources - Visualization layer
@@ -136,15 +161,25 @@ services:
       - "${GRAFANA_BIND_HOST:-}3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./config/grafana/provisioning/grafana.ini:/etc/grafana/grafana.ini
+      - monitoring_config:/monitoring_config:ro
+    entrypoint: >
+      sh -c "
+      rm -rf /etc/grafana/provisioning &&
+      ln -s /monitoring_config/grafana/provisioning /etc/grafana/provisioning &&
+      rm -rf /var/lib/grafana/dashboards &&
+      ln -s /monitoring_config/grafana/dashboards /var/lib/grafana/dashboards &&
+      exec /run.sh
+      "
     depends_on:
-      - sink-postgres
-      - sink-prometheus
+      config-init:
+        condition: service_completed_successfully
+      sink-postgres:
+        condition: service_started
+      sink-prometheus:
+        condition: service_started
     restart: unless-stopped
   monitoring_flask_backend:
-    image: postgresai/monitoring_flask_backend:latest
+    image: postgresai/monitoring_flask_backend:0.14.0-dev.20
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
@@ -152,9 +187,10 @@ services:
     depends_on:
       - sink-prometheus
     restart: unless-stopped
-  # PostgreSQL Reports Generator - Runs reports after 1 hour
+
+  # PostgreSQL Reports Generator - Runs reports after 30 minutes
   postgres-reports:
-    image: postgresai/reporter:latest
+    image: postgresai/reporter:0.14.0-dev.20
     container_name: postgres-reports
     working_dir: /app
     volumes:
@@ -226,6 +262,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  monitoring_config:
   target_db_data:
   sink_postgres_data:
   victoria_metrics_data:
