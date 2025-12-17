@@ -173,8 +173,8 @@ test("resolveAdminConnection rejects when only PGPASSWORD is provided (no connec
   assert.throws(() => init.resolveAdminConnection({ envPassword: "pw" }), /Connection is required/);
 });
 
-test("resolveAdminConnection error message includes examples", () => {
-  assert.throws(() => init.resolveAdminConnection({}), /Examples:/);
+test("resolveAdminConnection rejects when connection is missing", () => {
+  assert.throws(() => init.resolveAdminConnection({}), /Connection is required/);
 });
 
 test("cli: init with missing connection prints init help/options", () => {

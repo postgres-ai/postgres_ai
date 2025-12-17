@@ -63,27 +63,6 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 - Supports Postgres versions 14-18
 - **pg_stat_statements extension must be created** for the DB used for connection
 
-## ⚠️ Security Notice
-
-**WARNING: Security is your responsibility!**
-
-This monitoring solution exposes several ports that **MUST** be properly firewalled:
-- **Port 3000** (Grafana) - Contains sensitive database metrics and dashboards
-- **Port 58080** (PGWatch Postgres) - Database monitoring interface  
-- **Port 58089** (PGWatch Prometheus) - Database monitoring interface
-- **Port 59090** (Victoria Metrics) - Metrics storage and queries
-- **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
-- **Port 55000** (Flask API) - Backend API service
-- **Port 55432** (Demo DB) - When using `--demo` option
-- **Port 55433** (Metrics DB) - Postgres metrics storage
-
-**Configure your firewall to:**
-- Block public access to all monitoring ports
-- Allow access only from trusted networks/IPs
-- Use VPN or SSH tunnels for remote access
-
-Failure to secure these ports may expose sensitive database information!
-
 ## 🚀 Quick start
 
 Create a database user for monitoring (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database).
@@ -91,7 +70,10 @@ Create a database user for monitoring (skip this if you want to just check out `
 Use the CLI to create/update the monitoring role and grant all required permissions (idempotent):
 
 ```bash
-# Connect as an admin/superuser and apply required permissions.
+# Connect as an admin/superuser and run the idempotent setup:
+# - create/update the monitoring role
+# - create required view(s)
+# - apply required grants (and optional extensions where supported)
 # Admin password comes from PGPASSWORD (libpq standard) unless you pass --admin-password.
 #
 # Monitoring password:
@@ -132,17 +114,14 @@ If you want to see what will be executed first, use `--print-sql` (prints the SQ
 npx postgresai init --print-sql
 ```
 
-Optionally, to render the plan for a specific database and/or show the password literal:
+Optionally, to render the plan for a specific database:
 
 ```bash
 # Pick database (default is PGDATABASE or "postgres"):
 npx postgresai init --print-sql -d dbname
 
-# Provide an explicit monitoring password (still redacted unless you opt in):
+# Provide an explicit monitoring password (still redacted in output):
 npx postgresai init --print-sql -d dbname --password '...'
-
-# Dangerous: print secrets in the SQL output:
-npx postgresai init --print-sql -d dbname --password '...' --show-secrets
 ```
 
 ### Troubleshooting
@@ -161,7 +140,7 @@ If you see errors like `permission denied` / `insufficient_privilege` / code `42
 - **Review SQL before running** (audit-friendly):
 
     ```bash
-    npx postgresai init --print-sql -d mydb --password '...' --show-secrets
+    npx postgresai init --print-sql -d mydb
     ```
 
 **One command setup:**
@@ -190,6 +169,27 @@ Or if you want to just check out how it works:
 ```
 
 That's it! Everything is installed, configured, and running.
+
+## ⚠️ Security Notice
+
+**WARNING: Security is your responsibility!**
+
+This monitoring solution exposes several ports that **MUST** be properly firewalled:
+- **Port 3000** (Grafana) - Contains sensitive database metrics and dashboards
+- **Port 58080** (PGWatch Postgres) - Database monitoring interface  
+- **Port 58089** (PGWatch Prometheus) - Database monitoring interface
+- **Port 59090** (Victoria Metrics) - Metrics storage and queries
+- **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
+- **Port 55000** (Flask API) - Backend API service
+- **Port 55432** (Demo DB) - When using `--demo` option
+- **Port 55433** (Metrics DB) - Postgres metrics storage
+
+**Configure your firewall to:**
+- Block public access to all monitoring ports
+- Allow access only from trusted networks/IPs
+- Use VPN or SSH tunnels for remote access
+
+Failure to secure these ports may expose sensitive database information!
 
 ## 📊 What you get
 
