@@ -144,9 +144,7 @@ services:
       - sink-prometheus
     restart: unless-stopped
   monitoring_flask_backend:
-    build:
-      context: ./monitoring_flask_backend
-    image: postgresai/monitoring_flask_backend:local
+    image: postgresai/monitoring_flask_backend:latest
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
