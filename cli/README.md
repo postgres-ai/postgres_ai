@@ -10,10 +10,12 @@ Command-line interface for PostgresAI monitoring and database management.
 npm install -g postgresai
 ```
 
-Or install the latest alpha release explicitly:
+Or install the latest beta release explicitly:
 ```bash
-npm install -g postgresai@alpha
+npm install -g postgresai@beta
 ```
+
+Note: in this repository, `cli/package.json` uses a placeholder version (`0.0.0-dev.0`). The real published version is set by the git tag in CI when publishing to npm.
 
 ### From Homebrew (macOS)
 
@@ -31,7 +33,70 @@ The CLI provides three command aliases:
 ```bash
 postgres-ai --help
 postgresai --help
-pgai --help  # short alias
+```
+
+You can also run it without installing via `npx`:
+
+```bash
+npx postgresai --help
+```
+
+## init (create monitoring user in Postgres)
+
+This command creates (or updates) the `postgres_ai_mon` user and grants the permissions described in the root `README.md` (it is idempotent).
+
+Run without installing (positional connection string):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname
+```
+
+It also accepts libpq “conninfo” syntax:
+
+```bash
+npx postgresai init "dbname=dbname host=host user=admin"
+```
+
+And psql-like options:
+
+```bash
+npx postgresai init -h host -p 5432 -U admin -d dbname
+```
+
+Password input options (in priority order):
+- `--password <password>`
+- `PGAI_MON_PASSWORD` environment variable
+- if not provided: a strong password is generated automatically
+
+By default, the generated password is printed **only in interactive (TTY) mode**. In non-interactive mode, you must either provide the password explicitly, or opt-in to printing it:
+- `--print-password` (dangerous in CI logs)
+
+Optional permissions (RDS/self-managed extras from the root `README.md`) are enabled by default. To skip them:
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
+```
+
+### Print SQL / dry run
+
+To see what SQL would be executed (passwords redacted by default):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --print-sql
+```
+
+### Verify and password reset
+
+Verify that everything is configured as expected (no changes):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --verify
+```
+
+Reset monitoring user password only (no other changes):
+
+```bash
+npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
 ```
 
 ## Quick start
@@ -40,7 +105,7 @@ pgai --help  # short alias
 
 Authenticate via browser to obtain API key:
 ```bash
-pgai auth
+postgresai auth
 ```
 
 This will:
@@ -122,7 +187,7 @@ postgres-ai mon shell <service>                # Open shell to monitoring servic
 ### MCP server (`mcp` group)
 
 ```bash
-pgai mcp start                 # Start MCP stdio server exposing tools
+postgresai mcp start                 # Start MCP stdio server exposing tools
 ```
 
 Cursor configuration example (Settings → MCP):
@@ -131,7 +196,7 @@ Cursor configuration example (Settings → MCP):
 {
   "mcpServers": {
     "PostgresAI": {
-      "command": "pgai",
+      "command": "postgresai",
       "args": ["mcp", "start"],
       "env": {
         "PGAI_API_BASE_URL": "https://postgres.ai/api/general/"
@@ -142,16 +207,16 @@ Cursor configuration example (Settings → MCP):
 ```
 
 Tools exposed:
-- list_issues: returns the same JSON as `pgai issues list`.
+- list_issues: returns the same JSON as `postgresai issues list`.
 - view_issue: view a single issue with its comments (args: { issue_id, debug? })
 - post_issue_comment: post a comment (args: { issue_id, content, parent_comment_id?, debug? })
 
 ### Issues management (`issues` group)
 
 ```bash
-pgai issues list                                  # List issues (shows: id, title, status, created_at)
-pgai issues view <issueId>                        # View issue details and comments
-pgai issues post_comment <issueId> <content>      # Post a comment to an issue
+postgresai issues list                                  # List issues (shows: id, title, status, created_at)
+postgresai issues view <issueId>                        # View issue details and comments
+postgresai issues post_comment <issueId> <content>      # Post a comment to an issue
 # Options:
 #   --parent <uuid>  Parent comment ID (for replies)
 #   --debug          Enable debug output
@@ -165,13 +230,13 @@ By default, issues commands print human-friendly YAML when writing to a terminal
 - Use `--json` to force JSON output:
 
 ```bash
-pgai issues list --json | jq '.[] | {id, title}'
+postgresai issues list --json | jq '.[] | {id, title}'
 ```
 
 - Rely on auto-detection: when stdout is not a TTY (e.g., piped or redirected), output is JSON automatically:
 
 ```bash
-pgai issues view <issueId> > issue.json
+postgresai issues view <issueId> > issue.json
 ```
 
 #### Grafana management
@@ -235,7 +300,7 @@ Linux/macOS (bash/zsh):
 ```bash
 export PGAI_API_BASE_URL=https://v2.postgres.ai/api/general/
 export PGAI_UI_BASE_URL=https://console-dev.postgres.ai
-pgai auth --debug
+postgresai auth --debug
 ```
 
 Windows PowerShell:
@@ -243,13 +308,13 @@ Windows PowerShell:
 ```powershell
 $env:PGAI_API_BASE_URL = "https://v2.postgres.ai/api/general/"
 $env:PGAI_UI_BASE_URL = "https://console-dev.postgres.ai"
-pgai auth --debug
+postgresai auth --debug
 ```
 
 Via CLI options (overrides env):
 
 ```bash
-pgai auth --debug \
+postgresai auth --debug \
   --api-base-url https://v2.postgres.ai/api/general/ \
   --ui-base-url https://console-dev.postgres.ai
 ```
