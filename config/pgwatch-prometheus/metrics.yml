@@ -1348,7 +1348,6 @@ metrics:
               ) as rows_data_stats
           ) as rows_hdr_pdg_stats
         ) as relation_stats
-        where (bs*(relpages)/(1024*1024))::float > 1
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
@@ -1425,7 +1424,6 @@ metrics:
             ) as s
           ) as s2
         ) as s3
-        where (bs*tblpages)/(1024*1024)::float > 1
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
@@ -1820,7 +1818,6 @@ metrics:
           schema_name as tag_schema_name,
           table_name as tag_table_name,
           index_name as tag_index_name,
-          current_database() as tag_datname,
           idx_scan,
           all_scans,
           index_scan_pct,
