@@ -1,4 +1,3 @@
-import * as readline from "readline";
 import { randomBytes } from "crypto";
 import { URL } from "url";
 import type { ConnectionOptions as TlsConnectionOptions } from "tls";
@@ -243,72 +242,6 @@ export function resolveAdminConnection(opts: {
   return { clientConfig: cfg, display: describePgConfig(cfg) };
 }
 
-export async function promptHidden(prompt: string): Promise<string> {
-  // Implement our own hidden input reader so:
-  // - prompt text is visible
-  // - only user input is masked
-  // - we don't rely on non-public readline internals
-  if (!process.stdin.isTTY) {
-    throw new Error("Cannot prompt for password in non-interactive mode");
-  }
-
-  const stdin = process.stdin;
-  const stdout = process.stdout as NodeJS.WriteStream;
-
-  stdout.write(prompt);
-
-  return await new Promise<string>((resolve, reject) => {
-    let value = "";
-
-    const cleanup = () => {
-      try {
-        stdin.setRawMode(false);
-      } catch {
-        // ignore
-      }
-      stdin.removeListener("keypress", onKeypress);
-    };
-
-    const onKeypress = (str: string, key: any) => {
-      if (key?.ctrl && key?.name === "c") {
-        stdout.write("\n");
-        cleanup();
-        reject(new Error("Cancelled"));
-        return;
-      }
-
-      if (key?.name === "return" || key?.name === "enter") {
-        stdout.write("\n");
-        cleanup();
-        resolve(value);
-        return;
-      }
-
-      if (key?.name === "backspace") {
-        if (value.length > 0) {
-          value = value.slice(0, -1);
-          // Erase one mask char.
-          stdout.write("\b \b");
-        }
-        return;
-      }
-
-      // Ignore other control keys.
-      if (key?.ctrl || key?.meta) return;
-
-      if (typeof str === "string" && str.length > 0) {
-        value += str;
-        stdout.write("*");
-      }
-    };
-
-    readline.emitKeypressEvents(stdin);
-    stdin.setRawMode(true);
-    stdin.on("keypress", onKeypress);
-    stdin.resume();
-  });
-}
-
 function generateMonitoringPassword(): string {
   // URL-safe and easy to copy/paste; 24 bytes => 32 base64url chars (no padding).
   // Note: randomBytes() throws on failure; we add a tiny sanity check for unexpected output.
@@ -322,7 +255,6 @@ function generateMonitoringPassword(): string {
 export async function resolveMonitoringPassword(opts: {
   passwordFlag?: string;
   passwordEnv?: string;
-  prompt?: (prompt: string) => Promise<string>;
   monitoringUser: string;
 }): Promise<{ password: string; generated: boolean }> {
   const fromFlag = (opts.passwordFlag || "").trim();
