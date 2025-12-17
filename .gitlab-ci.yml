@@ -214,7 +214,7 @@ cli:npm:publish:
   rules:
     - if: '$CI_COMMIT_TAG'
 
-docker:publish:images:
+.docker-publish-base: &docker-publish-base
   stage: publish
   image: docker:27.3
   services:
@@ -225,6 +225,47 @@ docker:publish:images:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.45"
     GIT_STRATEGY: fetch
+
+.docker-build-script: &docker-build-script |
+  echo "Logging into Docker Hub..."
+  echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+  echo "Enabling binfmt (QEMU) for multi-arch builds..."
+  docker run --privileged --rm tonistiigi/binfmt --install all
+
+  echo "Creating/using buildx builder..."
+  docker buildx create --name postgres-ai-builder --use 2>/dev/null || docker buildx use postgres-ai-builder
+  docker buildx inspect --bootstrap
+
+  echo "Building and pushing images: $VERSION"
+  echo "  Platforms: $PLATFORMS"
+  echo "  BUILD_TS: $BUILD_TS"
+
+  docker buildx build \
+    --platform "$PLATFORMS" \
+    --build-arg "VERSION=$VERSION" \
+    --build-arg "BUILD_TS=$BUILD_TS" \
+    -f reporter/Dockerfile \
+    -t "postgresai/reporter:$VERSION" \
+    --push \
+    reporter
+
+  docker buildx build \
+    --platform "$PLATFORMS" \
+    --build-arg "VERSION=$VERSION" \
+    --build-arg "BUILD_TS=$BUILD_TS" \
+    -f monitoring_flask_backend/Dockerfile \
+    -t "postgresai/monitoring_flask_backend:$VERSION" \
+    --push \
+    monitoring_flask_backend
+
+  echo ""
+  echo "Published images:"
+  echo "  postgresai/reporter:$VERSION"
+  echo "  postgresai/monitoring_flask_backend:$VERSION"
+
+docker:publish:images:
+  <<: *docker-publish-base
   script:
     - |
       set -euo pipefail
@@ -237,11 +278,6 @@ docker:publish:images:
         exit 1
       fi
 
-      # Docker tag must be compatible with reference format:
-      # - no spaces
-      # - must not contain '/'
-      # - max 128 chars
-      # - allowed: [A-Za-z0-9_.-]
       if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'; then
         echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$)"
         exit 1
@@ -250,40 +286,30 @@ docker:publish:images:
       VERSION="$RAW_TAG"
       BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
       PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
-
-      echo "Logging into Docker Hub..."
-      echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-
-      echo "Enabling binfmt (QEMU) for multi-arch builds..."
-      docker run --privileged --rm tonistiigi/binfmt --install all
-
-      echo "Creating/using buildx builder..."
-      docker buildx create --name postgres-ai-builder --use 2>/dev/null || docker buildx use postgres-ai-builder
-      docker buildx inspect --bootstrap
-
-      echo "Building and pushing multi-arch images for tag: $VERSION"
-      echo "  Platforms: $PLATFORMS"
-      echo "  BUILD_TS: $BUILD_TS"
-
-      docker buildx build \
-        --platform "$PLATFORMS" \
-        --build-arg "VERSION=$VERSION" \
-        --build-arg "BUILD_TS=$BUILD_TS" \
-        -f reporter/Dockerfile \
-        -t "postgresai/reporter:$VERSION" \
-        --push \
-        reporter
-
-      docker buildx build \
-        --platform "$PLATFORMS" \
-        --build-arg "VERSION=$VERSION" \
-        --build-arg "BUILD_TS=$BUILD_TS" \
-        -f monitoring_flask_backend/Dockerfile \
-        -t "postgresai/monitoring_flask_backend:$VERSION" \
-        --push \
-        monitoring_flask_backend
+    - *docker-build-script
   rules:
     - if: '$CI_COMMIT_TAG'
+
+docker:publish:dev:
+  <<: *docker-publish-base
+  script:
+    - |
+      set -euo pipefail
+      : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
+      : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
+
+      SHORT_SHA="$(echo "$CI_COMMIT_SHA" | cut -c1-8)"
+      VERSION="dev-${SHORT_SHA}"
+      BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      PLATFORMS="${PLATFORMS:-linux/amd64}"
+
+      echo "Branch: $CI_COMMIT_REF_NAME"
+      echo "Commit: $CI_COMMIT_SHA"
+      echo "Version: $VERSION"
+    - *docker-build-script
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
 
 release:verify:
   stage: publish

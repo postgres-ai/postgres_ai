@@ -158,8 +158,6 @@ services:
     container_name: postgres-reports
     working_dir: /app
     volumes:
-      - ./reporter/postgres_reports.py:/app/postgres_reports.py
-      - ./reporter/requirements.txt:/app/requirements.txt
       - ./.pgwatch-config:/app/.pgwatch-config
       - ./instances.yml:/app/instances.yml
     environment:
@@ -169,9 +167,6 @@ services:
       - pgwatch-prometheus
     command: >
       sh -c "
-      echo 'Installing Python dependencies...' &&
-      pip install -r requirements.txt &&
-      pip install pyyaml &&
       echo 'Waiting 30 minutes before generating reports...' &&
       sleep 1800 &&
       echo 'Starting PostgreSQL reports generation...' &&
