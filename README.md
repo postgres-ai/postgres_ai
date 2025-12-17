@@ -132,17 +132,14 @@ If you want to see what will be executed first, use `--print-sql` (prints the SQ
 npx postgresai init --print-sql
 ```
 
-Optionally, to render the plan for a specific database and/or show the password literal:
+Optionally, to render the plan for a specific database:
 
 ```bash
 # Pick database (default is PGDATABASE or "postgres"):
 npx postgresai init --print-sql -d dbname
 
-# Provide an explicit monitoring password (still redacted unless you opt in):
+# Provide an explicit monitoring password (still redacted in output):
 npx postgresai init --print-sql -d dbname --password '...'
-
-# Dangerous: print secrets in the SQL output:
-npx postgresai init --print-sql -d dbname --password '...' --show-secrets
 ```
 
 ### Troubleshooting
@@ -161,7 +158,7 @@ If you see errors like `permission denied` / `insufficient_privilege` / code `42
 - **Review SQL before running** (audit-friendly):
 
     ```bash
-    npx postgresai init --print-sql -d mydb --password '...' --show-secrets
+    npx postgresai init --print-sql -d mydb
     ```
 
 **One command setup:**

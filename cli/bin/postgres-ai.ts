@@ -133,7 +133,6 @@ program
   .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
   .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
   .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
-  .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
   .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
   .addHelpText(
     "after",
@@ -167,7 +166,7 @@ program
       "  postgresai init <conn> --reset-password --password '...'",
       "",
       "Offline SQL plan (no DB connection):",
-      "  postgresai init --print-sql -d dbname --password '...' --show-secrets",
+      "  postgresai init --print-sql",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -183,7 +182,6 @@ program
     verify?: boolean;
     resetPassword?: boolean;
     printSql?: boolean;
-    showSecrets?: boolean;
     printPassword?: boolean;
   }, cmd: Command) => {
     if (opts.verify && opts.resetPassword) {
@@ -198,23 +196,19 @@ program
     }
 
     const shouldPrintSql = !!opts.printSql;
-    const shouldRedactSecrets = !opts.showSecrets;
-    const redactPasswords = (sql: string): string => {
-      if (!shouldRedactSecrets) return sql;
-      // Replace PASSWORD '<literal>' (handles doubled quotes inside).
-      return redactPasswordsInSql(sql);
-    };
+    const redactPasswords = (sql: string): string => redactPasswordsInSql(sql);
 
     // Offline mode: allow printing SQL without providing/using an admin connection.
-    // Useful for audits/reviews; caller can provide -d/PGDATABASE and an explicit monitoring password.
+    // Useful for audits/reviews; caller can provide -d/PGDATABASE.
     if (!conn && !opts.dbUrl && !opts.host && !opts.port && !opts.username && !opts.adminPassword) {
       if (shouldPrintSql) {
         const database = (opts.dbname ?? process.env.PGDATABASE ?? "postgres").trim();
         const includeOptionalPermissions = !opts.skipOptionalPermissions;
 
-        // Use explicit password/env if provided; otherwise use a placeholder (will be redacted unless --show-secrets).
+        // Use explicit password/env if provided; otherwise use a placeholder.
+        // Printed SQL always redacts secrets.
         const monPassword =
-          (opts.password ?? process.env.PGAI_MON_PASSWORD ?? "CHANGE_ME").toString();
+          (opts.password ?? process.env.PGAI_MON_PASSWORD ?? "<redacted>").toString();
 
         const plan = await buildInitPlan({
           database,
@@ -232,9 +226,7 @@ program
           console.log(redactPasswords(step.sql));
         }
         console.log("\n--- end SQL plan ---\n");
-        if (shouldRedactSecrets) {
-          console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
-        }
+        console.log("Note: passwords are redacted in the printed SQL output.");
         return;
       }
     }
@@ -367,9 +359,7 @@ program
           console.log(redactPasswords(step.sql));
         }
         console.log("\n--- end SQL plan ---\n");
-        if (shouldRedactSecrets) {
-          console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
-        }
+              console.log("Note: passwords are redacted in the printed SQL output.");
         return;
       }
 
