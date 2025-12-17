@@ -175,34 +175,18 @@ services:
       echo 'Waiting 30 minutes before generating reports...' &&
       sleep 1800 &&
       echo 'Starting PostgreSQL reports generation...' &&
-      LAST_FULL_RUN=0 &&
       while true; do
-        CURRENT_TIME=$$(date +%s) &&
-        HOURS_SINCE_FULL=$$(( (CURRENT_TIME - LAST_FULL_RUN) / 3600 )) &&
-        if [ $$HOURS_SINCE_FULL -ge 24 ] || [ $$LAST_FULL_RUN -eq 0 ]; then
-          echo 'Generating all reports (24h cycle)...' &&
-          if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
-            API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
-            python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY 
-          else
-            echo 'No API key configured, generating reports without upload...' &&
-            python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
-          fi &&
-          LAST_FULL_RUN=$$CURRENT_TIME &&
-          echo 'Full reports generated. Next full run in 24 hours.'
+        echo 'Extracting cluster and node name from instances.yml...' &&
+        echo 'Generating PostgreSQL reports...' &&
+        if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
+          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY
         else
-          echo 'Generating K004 report only (hourly cycle)...' &&
-          if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
-            API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
-            python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --check-id K004 --output /app/k004_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY
-          else
-            echo 'No API key configured, generating K004 without upload...' &&
-            python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --check-id K004 --output /app/k004_$$(date +%Y%m%d_%H%M%S).json --no-upload
-          fi &&
-          echo 'K004 report generated.'
+          echo 'No API key configured, generating reports without upload...' &&
+          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
         fi &&
-        echo 'Sleeping for 1 hour...' &&
-        sleep 3600
+        echo 'Reports generated. Sleeping for 24 hours...' &&
+        sleep 86400
       done
       "
 
