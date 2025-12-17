@@ -373,7 +373,7 @@ def test_get_all_databases_merges_sources(monkeypatch: pytest.MonkeyPatch, gener
                 "data": {
                     "result": [
                         {"metric": {"datname": "appdb"}, "value": [0, "1"]},
-                        {"metric": {"datname": "template0"}, "value": [0, "1"]},
+                        {"metric": {"datname": "template0"}, "value": [0, "1"]},  # excluded
                     ]
                 },
             }
@@ -382,8 +382,8 @@ def test_get_all_databases_merges_sources(monkeypatch: pytest.MonkeyPatch, gener
                 "status": "success",
                 "data": {
                     "result": [
-                        {"metric": {"dbname": "analytics"}, "value": [0, "1"]},
-                        {"metric": {"dbname": "appdb"}, "value": [0, "1"]},
+                        {"metric": {"datname": "analytics"}, "value": [0, "1"]},
+                        {"metric": {"datname": "appdb"}, "value": [0, "1"]},  # duplicate
                     ]
                 },
             }
@@ -747,6 +747,10 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_h004_redundant_indexes_report",
         "generate_k001_query_calls_report",
         "generate_k003_top_queries_report",
+        "generate_k004_temp_bytes_report",
+        "generate_k005_wal_bytes_report",
+        "generate_k006_shared_read_report",
+        "generate_k007_shared_hit_report",
         "generate_m001_mean_time_report",
         "generate_m002_rows_report",
         "generate_m003_io_time_report",
