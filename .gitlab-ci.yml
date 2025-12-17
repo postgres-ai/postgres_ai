@@ -240,6 +240,9 @@ cli:npm:publish:
   echo "Building and pushing images: $VERSION"
   echo "  Platforms: $PLATFORMS"
   echo "  BUILD_TS: $BUILD_TS"
+  if [ "${PUBLISH_LATEST:-false}" = "true" ]; then
+    echo "  Also tagging as: latest"
+  fi
 
   docker buildx build \
     --platform "$PLATFORMS" \
@@ -247,6 +250,7 @@ cli:npm:publish:
     --build-arg "BUILD_TS=$BUILD_TS" \
     -f reporter/Dockerfile \
     -t "postgresai/reporter:$VERSION" \
+    ${PUBLISH_LATEST:+-t "postgresai/reporter:latest"} \
     --push \
     reporter
 
@@ -256,6 +260,7 @@ cli:npm:publish:
     --build-arg "BUILD_TS=$BUILD_TS" \
     -f monitoring_flask_backend/Dockerfile \
     -t "postgresai/monitoring_flask_backend:$VERSION" \
+    ${PUBLISH_LATEST:+-t "postgresai/monitoring_flask_backend:latest"} \
     --push \
     monitoring_flask_backend
 
@@ -263,6 +268,10 @@ cli:npm:publish:
   echo "Published images:"
   echo "  postgresai/reporter:$VERSION"
   echo "  postgresai/monitoring_flask_backend:$VERSION"
+  if [ "${PUBLISH_LATEST:-false}" = "true" ]; then
+    echo "  postgresai/reporter:latest"
+    echo "  postgresai/monitoring_flask_backend:latest"
+  fi
 
 docker:publish:images:
   <<: *docker-publish-base
@@ -284,6 +293,13 @@ docker:publish:images:
       if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'; then
         echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$)"
         exit 1
+      fi
+
+      # Only stable SemVer tags update :latest (e.g. 0.14.0 or v0.14.0)
+      if printf '%s' "$RAW_TAG" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+        PUBLISH_LATEST=true
+      else
+        PUBLISH_LATEST=false
       fi
 
       VERSION="$RAW_TAG"
