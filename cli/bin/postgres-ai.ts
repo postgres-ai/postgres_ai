@@ -12,9 +12,11 @@ import { promisify } from "util";
 import * as readline from "readline";
 import * as http from "https";
 import { URL } from "url";
+import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
+import { applyInitPlan, buildInitPlan, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -115,6 +117,337 @@ program
     "--ui-base-url <url>",
     "UI base URL for browser routes (overrides PGAI_UI_BASE_URL)"
   );
+
+program
+  .command("init [conn]")
+  .description("Create a monitoring user and grant all required permissions (idempotent)")
+  .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
+  .option("-h, --host <host>", "PostgreSQL host (psql-like)")
+  .option("-p, --port <port>", "PostgreSQL port (psql-like)")
+  .option("-U, --username <username>", "PostgreSQL user (psql-like)")
+  .option("-d, --dbname <dbname>", "PostgreSQL database name (psql-like)")
+  .option("--admin-password <password>", "Admin connection password (otherwise uses PGPASSWORD if set)")
+  .option("--monitoring-user <name>", "Monitoring role name to create/update", DEFAULT_MONITORING_USER)
+  .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
+  .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
+  .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
+  .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
+  .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
+  .option("--show-secrets", "When printing SQL, do not redact secrets (DANGEROUS)", false)
+  .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  postgresai init postgresql://admin@host:5432/dbname",
+      "  postgresai init \"dbname=dbname host=host user=admin\"",
+      "  postgresai init -h host -p 5432 -U admin -d dbname",
+      "",
+      "Admin password:",
+      "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
+      "",
+      "Monitoring password:",
+      "  --password <password>         or  PGAI_MON_PASSWORD=...  (otherwise auto-generated)",
+      "  If auto-generated, it is printed only on TTY by default.",
+      "  To print it in non-interactive mode: --print-password",
+      "",
+      "Environment variables (libpq standard):",
+      "  PGHOST, PGPORT, PGUSER, PGDATABASE  — connection defaults",
+      "  PGPASSWORD                          — admin password",
+      "  PGAI_MON_PASSWORD                   — monitoring password",
+      "",
+      "Inspect SQL without applying changes:",
+      "  postgresai init <conn> --print-sql",
+      "",
+      "Verify setup (no changes):",
+      "  postgresai init <conn> --verify",
+      "",
+      "Reset monitoring password only:",
+      "  postgresai init <conn> --reset-password --password '...'",
+      "",
+      "Offline SQL plan (no DB connection):",
+      "  postgresai init --print-sql -d dbname --password '...' --show-secrets",
+    ].join("\n")
+  )
+  .action(async (conn: string | undefined, opts: {
+    dbUrl?: string;
+    host?: string;
+    port?: string;
+    username?: string;
+    dbname?: string;
+    adminPassword?: string;
+    monitoringUser: string;
+    password?: string;
+    skipOptionalPermissions?: boolean;
+    verify?: boolean;
+    resetPassword?: boolean;
+    printSql?: boolean;
+    showSecrets?: boolean;
+    printPassword?: boolean;
+  }, cmd: Command) => {
+    if (opts.verify && opts.resetPassword) {
+      console.error("✗ Provide only one of --verify or --reset-password");
+      process.exitCode = 1;
+      return;
+    }
+    if (opts.verify && opts.printSql) {
+      console.error("✗ --verify cannot be combined with --print-sql");
+      process.exitCode = 1;
+      return;
+    }
+
+    const shouldPrintSql = !!opts.printSql;
+    const shouldRedactSecrets = !opts.showSecrets;
+    const redactPasswords = (sql: string): string => {
+      if (!shouldRedactSecrets) return sql;
+      // Replace PASSWORD '<literal>' (handles doubled quotes inside).
+      return redactPasswordsInSql(sql);
+    };
+
+    // Offline mode: allow printing SQL without providing/using an admin connection.
+    // Useful for audits/reviews; caller can provide -d/PGDATABASE and an explicit monitoring password.
+    if (!conn && !opts.dbUrl && !opts.host && !opts.port && !opts.username && !opts.adminPassword) {
+      if (shouldPrintSql) {
+        const database = (opts.dbname ?? process.env.PGDATABASE ?? "postgres").trim();
+        const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+        // Use explicit password/env if provided; otherwise use a placeholder (will be redacted unless --show-secrets).
+        const monPassword =
+          (opts.password ?? process.env.PGAI_MON_PASSWORD ?? "CHANGE_ME").toString();
+
+        const plan = await buildInitPlan({
+          database,
+          monitoringUser: opts.monitoringUser,
+          monitoringPassword: monPassword,
+          includeOptionalPermissions,
+        });
+
+        console.log("\n--- SQL plan (offline; not connected) ---");
+        console.log(`-- database: ${database}`);
+        console.log(`-- monitoring user: ${opts.monitoringUser}`);
+        console.log(`-- optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+        for (const step of plan.steps) {
+          console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+          console.log(redactPasswords(step.sql));
+        }
+        console.log("\n--- end SQL plan ---\n");
+        if (shouldRedactSecrets) {
+          console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
+        }
+        return;
+      }
+    }
+
+    let adminConn;
+    try {
+      adminConn = resolveAdminConnection({
+        conn,
+        dbUrlFlag: opts.dbUrl,
+        // Allow libpq standard env vars as implicit defaults (common UX).
+        host: opts.host ?? process.env.PGHOST,
+        port: opts.port ?? process.env.PGPORT,
+        username: opts.username ?? process.env.PGUSER,
+        dbname: opts.dbname ?? process.env.PGDATABASE,
+        adminPassword: opts.adminPassword,
+        envPassword: process.env.PGPASSWORD,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`Error: init: ${msg}`);
+      // When connection details are missing, show full init help (options + examples).
+      if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
+        console.error("");
+        cmd.outputHelp({ error: true });
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+    console.log(`Connecting to: ${adminConn.display}`);
+    console.log(`Monitoring user: ${opts.monitoringUser}`);
+    console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+
+    // Use native pg client instead of requiring psql to be installed
+    let client: Client | undefined;
+    try {
+      client = new Client(adminConn.clientConfig);
+      await client.connect();
+
+      const dbRes = await client.query("select current_database() as db");
+      const database = dbRes.rows?.[0]?.db;
+      if (typeof database !== "string" || !database) {
+        throw new Error("Failed to resolve current database name");
+      }
+
+      if (opts.verify) {
+        const v = await verifyInitSetup({
+          client,
+          database,
+          monitoringUser: opts.monitoringUser,
+          includeOptionalPermissions,
+        });
+        if (v.ok) {
+          console.log("✓ init verify: OK");
+          if (v.missingOptional.length > 0) {
+            console.log("⚠ Optional items missing:");
+            for (const m of v.missingOptional) console.log(`- ${m}`);
+          }
+          return;
+        }
+        console.error("✗ init verify failed: missing required items");
+        for (const m of v.missingRequired) console.error(`- ${m}`);
+        if (v.missingOptional.length > 0) {
+          console.error("Optional items missing:");
+          for (const m of v.missingOptional) console.error(`- ${m}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
+      let monPassword: string;
+      try {
+        const resolved = await resolveMonitoringPassword({
+          passwordFlag: opts.password,
+          passwordEnv: process.env.PGAI_MON_PASSWORD,
+          monitoringUser: opts.monitoringUser,
+        });
+        monPassword = resolved.password;
+        if (resolved.generated) {
+          const canPrint = process.stdout.isTTY || !!opts.printPassword;
+          if (canPrint) {
+            // Print secrets to stderr to reduce the chance they end up in piped stdout logs.
+            const shellSafe = monPassword.replace(/'/g, "'\\''");
+            console.error("");
+            console.error(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
+            // Quote for shell copy/paste safety.
+            console.error(`PGAI_MON_PASSWORD='${shellSafe}'`);
+            console.error("");
+            console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+          } else {
+            console.error(
+              [
+                `✗ Monitoring password was auto-generated for ${opts.monitoringUser} but not printed in non-interactive mode.`,
+                "",
+                "Provide it explicitly:",
+                "  --password <password>   or   PGAI_MON_PASSWORD=...",
+                "",
+                "Or (NOT recommended) print the generated password:",
+                "  --print-password",
+              ].join("\n")
+            );
+            process.exitCode = 1;
+            return;
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`✗ ${msg}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const plan = await buildInitPlan({
+        database,
+        monitoringUser: opts.monitoringUser,
+        monitoringPassword: monPassword,
+        includeOptionalPermissions,
+      });
+
+      const effectivePlan = opts.resetPassword
+        ? { ...plan, steps: plan.steps.filter((s) => s.name === "01.role") }
+        : plan;
+
+      if (shouldPrintSql) {
+        console.log("\n--- SQL plan ---");
+        for (const step of effectivePlan.steps) {
+          console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+          console.log(redactPasswords(step.sql));
+        }
+        console.log("\n--- end SQL plan ---\n");
+        if (shouldRedactSecrets) {
+          console.log("Note: passwords are redacted in the printed SQL (use --show-secrets to print them).");
+        }
+        return;
+      }
+
+      const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
+
+      console.log(opts.resetPassword ? "✓ init password reset completed" : "✓ init completed");
+      if (skippedOptional.length > 0) {
+        console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+        for (const s of skippedOptional) console.log(`- ${s}`);
+      }
+      // Keep output compact but still useful
+      if (process.stdout.isTTY) {
+        console.log(`Applied ${applied.length} steps`);
+      }
+    } catch (error) {
+      const errAny = error as any;
+      let message = "";
+      if (error instanceof Error && error.message) {
+        message = error.message;
+      } else if (errAny && typeof errAny === "object" && typeof errAny.message === "string" && errAny.message) {
+        message = errAny.message;
+      } else {
+        message = String(error);
+      }
+      if (!message || message === "[object Object]") {
+        message = "Unknown error";
+      }
+      console.error(`Error: init: ${message}`);
+      // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
+      const stepMatch =
+        typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
+      const failedStep = stepMatch?.[1];
+      if (failedStep) {
+        console.error(`  Step: ${failedStep}`);
+      }
+      if (errAny && typeof errAny === "object") {
+        if (typeof errAny.code === "string" && errAny.code) {
+          console.error(`  Code: ${errAny.code}`);
+        }
+        if (typeof errAny.detail === "string" && errAny.detail) {
+          console.error(`  Detail: ${errAny.detail}`);
+        }
+        if (typeof errAny.hint === "string" && errAny.hint) {
+          console.error(`  Hint: ${errAny.hint}`);
+        }
+      }
+      if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+        if (errAny.code === "42501") {
+          if (failedStep === "01.role") {
+            console.error("  Context: role creation/update requires CREATEROLE or superuser");
+          } else if (failedStep === "02.permissions") {
+            console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
+          }
+          console.error("  Fix: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges)");
+          console.error("  Fix: on managed Postgres, use the provider's admin/master user");
+          console.error("  Tip: run with --print-sql to review the exact SQL plan");
+        }
+        if (errAny.code === "ECONNREFUSED") {
+          console.error("  Hint: check host/port and ensure Postgres is reachable from this machine");
+        }
+        if (errAny.code === "ENOTFOUND") {
+          console.error("  Hint: DNS resolution failed; double-check the host name");
+        }
+        if (errAny.code === "ETIMEDOUT") {
+          console.error("  Hint: connection timed out; check network/firewall rules");
+        }
+      }
+      process.exitCode = 1;
+    } finally {
+      if (client) {
+        try {
+          await client.end();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  });
 
 /**
  * Stub function for not implemented commands
