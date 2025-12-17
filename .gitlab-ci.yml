@@ -22,7 +22,7 @@ reporter:tests:
     - chown -R postgres:postgres "$CI_PROJECT_DIR"
     - su - postgres -c "cd \"$CI_PROJECT_DIR\" && python -m pytest --run-integration tests/reporter"
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 cli:smoke:test:
   stage: test
@@ -39,7 +39,7 @@ cli:smoke:test:
       echo "$out" | grep -q "Postgres AI CLI"
       echo "$out" | grep -q "COMMANDS:"
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 cli:e2e:dind:
   stage: test
@@ -82,7 +82,8 @@ cli:e2e:dind:
     - docker ps -a || true
     - docker system prune -af || true
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
 cli:node:smoke:
   stage: test
   image: node:20-alpine
@@ -111,7 +112,7 @@ cli:node:smoke:
     - node ./cli/dist/bin/postgres-ai.js mon targets add 'postgresql://user:pass@host:5432/db' ci-test || true
     - node ./cli/dist/bin/postgres-ai.js mon targets remove ci-test || true
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 cli:node:tests:
   stage: test
@@ -131,7 +132,7 @@ cli:node:tests:
   script:
     - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && npm --prefix cli test"
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 cli:npm:publish:
   stage: publish
@@ -420,7 +421,7 @@ cli:node:e2e:dind:
   after_script:
     - docker ps -a || true
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 cli:node:full:dind:
   stage: test
