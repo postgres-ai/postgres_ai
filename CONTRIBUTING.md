@@ -19,6 +19,13 @@ git submodule update --init --recursive
 
 The default `docker-compose.yml` uses published images. For local development you can opt-in to building services from source via `docker-compose.local.yml`.
 
+### Make targets (optional)
+
+```bash
+make up
+make up-local
+```
+
 ### Option A: Run via the `postgres_ai` script (recommended)
 
 `postgres_ai` uses a single compose file path stored in `COMPOSE_FILE`. You can override it to include the local compose override:
