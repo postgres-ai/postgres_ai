@@ -307,7 +307,7 @@ docker:publish:dev:
       SHORT_SHA="$(echo "$CI_COMMIT_SHA" | cut -c1-8)"
       VERSION="dev-${SHORT_SHA}"
       BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-      PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
+      PLATFORMS="${PLATFORMS:-linux/amd64}"
 
       echo "Branch: $CI_COMMIT_REF_NAME"
       echo "Commit: $CI_COMMIT_SHA"
