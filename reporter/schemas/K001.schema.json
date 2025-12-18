@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "K001 report schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "checkId": { "const": "K001" },
+    "checkTitle": { "const": "Globally aggregated query metrics" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "queryMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queryid",
+        "database",
+        "user",
+        "duration_seconds",
+        "calls",
+        "calls_per_sec",
+        "calls_per_call",
+        "total_time",
+        "total_time_per_sec",
+        "total_time_per_call",
+        "rows",
+        "rows_per_sec",
+        "rows_per_call",
+        "shared_blks_hit",
+        "shared_blks_hit_per_sec",
+        "shared_blks_hit_per_call",
+        "shared_blks_read",
+        "shared_blks_read_per_sec",
+        "shared_blks_read_per_call",
+        "shared_blks_dirtied",
+        "shared_blks_dirtied_per_sec",
+        "shared_blks_dirtied_per_call",
+        "shared_blks_written",
+        "shared_blks_written_per_sec",
+        "shared_blks_written_per_call",
+        "blk_read_time",
+        "blk_read_time_per_sec",
+        "blk_read_time_per_call",
+        "blk_write_time",
+        "blk_write_time_per_sec",
+        "blk_write_time_per_call"
+      ],
+      "properties": {
+        "queryid": { "type": "string" },
+        "database": { "type": "string" },
+        "user": { "type": "string" },
+        "duration_seconds": { "type": "number" },
+        "calls": { "type": "number" },
+        "calls_per_sec": { "type": "number" },
+        "calls_per_call": { "type": "number" },
+        "total_time": { "type": "number" },
+        "total_time_per_sec": { "type": "number" },
+        "total_time_per_call": { "type": "number" },
+        "rows": { "type": "number" },
+        "rows_per_sec": { "type": "number" },
+        "rows_per_call": { "type": "number" },
+        "shared_blks_hit": { "type": "number" },
+        "shared_blks_hit_per_sec": { "type": "number" },
+        "shared_blks_hit_per_call": { "type": "number" },
+        "shared_blks_read": { "type": "number" },
+        "shared_blks_read_per_sec": { "type": "number" },
+        "shared_blks_read_per_call": { "type": "number" },
+        "shared_blks_dirtied": { "type": "number" },
+        "shared_blks_dirtied_per_sec": { "type": "number" },
+        "shared_blks_dirtied_per_call": { "type": "number" },
+        "shared_blks_written": { "type": "number" },
+        "shared_blks_written_per_sec": { "type": "number" },
+        "shared_blks_written_per_call": { "type": "number" },
+        "blk_read_time": { "type": "number" },
+        "blk_read_time_per_sec": { "type": "number" },
+        "blk_read_time_per_call": { "type": "number" },
+        "blk_write_time": { "type": "number" },
+        "blk_write_time_per_sec": { "type": "number" },
+        "blk_write_time_per_call": { "type": "number" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_queries",
+        "total_calls",
+        "total_time_ms",
+        "total_rows",
+        "time_range_minutes",
+        "start_time",
+        "end_time"
+      ],
+      "properties": {
+        "total_queries": { "type": "integer" },
+        "total_calls": { "type": "number" },
+        "total_time_ms": { "type": "number" },
+        "total_rows": { "type": "number" },
+        "time_range_minutes": { "type": "integer" },
+        "start_time": { "type": "string" },
+        "end_time": { "type": "string" }
+      }
+    },
+    "dbEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query_metrics", "summary"],
+      "properties": {
+        "query_metrics": { "type": "array", "items": { "$ref": "#/$defs/queryMetric" } },
+        "summary": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/dbEntry" }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}
+
+
