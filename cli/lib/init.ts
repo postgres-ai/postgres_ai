@@ -17,6 +17,41 @@ export type PgClientConfig = {
   ssl?: boolean | TlsConnectionOptions;
 };
 
+/**
+ * Convert PostgreSQL sslmode to node-postgres ssl config.
+ */
+function sslModeToConfig(mode: string): boolean | TlsConnectionOptions {
+  if (mode.toLowerCase() === "disable") return false;
+  if (mode.toLowerCase() === "verify-full" || mode.toLowerCase() === "verify-ca") return true;
+  // For require/prefer/allow: encrypt without certificate verification
+  return { rejectUnauthorized: false };
+}
+
+/** Extract sslmode from a PostgreSQL connection URI. */
+function extractSslModeFromUri(uri: string): string | undefined {
+  try {
+    return new URL(uri).searchParams.get("sslmode") ?? undefined;
+  } catch {
+    return uri.match(/[?&]sslmode=([^&]+)/i)?.[1];
+  }
+}
+
+/** Check if a host is local (localhost, 127.x.x.x, ::1, or Unix socket). */
+function isLocalHost(host: string | undefined): boolean {
+  if (!host) return true;
+  const h = host.toLowerCase();
+  return h === "localhost" || h.startsWith("127.") || h === "::1" || h.startsWith("/");
+}
+
+/** Extract host from a PostgreSQL connection URI. */
+function extractHostFromUri(uri: string): string | undefined {
+  try {
+    return new URL(uri).hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export type AdminConnection = {
   clientConfig: PgClientConfig;
   display: string;
@@ -142,6 +177,7 @@ function tokenizeConninfo(input: string): string[] {
 export function parseLibpqConninfo(input: string): PgClientConfig {
   const tokens = tokenizeConninfo(input);
   const cfg: PgClientConfig = {};
+  let sslmode: string | undefined;
 
   for (const t of tokens) {
     const eq = t.indexOf("=");
@@ -170,10 +206,18 @@ export function parseLibpqConninfo(input: string): PgClientConfig {
       case "database":
         cfg.database = val;
         break;
-      // ignore everything else (sslmode, options, application_name, etc.)
+      case "sslmode":
+        sslmode = val;
+        break;
+      // ignore everything else (options, application_name, etc.)
       default:
         break;
     }
+  }
+
+  // Apply SSL configuration based on sslmode
+  if (sslmode) {
+    cfg.ssl = sslModeToConfig(sslmode);
   }
 
   return cfg;
@@ -202,6 +246,9 @@ export function resolveAdminConnection(opts: {
   const conn = (opts.conn || "").trim();
   const dbUrlFlag = (opts.dbUrlFlag || "").trim();
 
+  // Resolve explicit SSL setting from environment (undefined = auto-detect)
+  const explicitSsl = process.env.PGSSLMODE;
+
   // NOTE: passwords alone (PGPASSWORD / --admin-password) do NOT constitute a connection.
   // We require at least some connection addressing (host/port/user/db) if no positional arg / --db-url is provided.
   const hasConnDetails = !!(opts.host || opts.port || opts.username || opts.dbname);
@@ -213,11 +260,28 @@ export function resolveAdminConnection(opts: {
   if (conn || dbUrlFlag) {
     const v = conn || dbUrlFlag;
     if (isLikelyUri(v)) {
-      return { clientConfig: { connectionString: v }, display: maskConnectionString(v) };
+      const urlSslMode = extractSslModeFromUri(v);
+      const urlHost = extractHostFromUri(v);
+      // SSL priority: PGSSLMODE env > URL param > auto (remote hosts get SSL)
+      const sslConfig = explicitSsl
+        ? sslModeToConfig(explicitSsl)
+        : urlSslMode
+          ? sslModeToConfig(urlSslMode)
+          : !isLocalHost(urlHost)
+            ? { rejectUnauthorized: false }
+            : undefined;
+      return {
+        clientConfig: { connectionString: v, ssl: sslConfig },
+        display: maskConnectionString(v),
+      };
     }
     // libpq conninfo (dbname=... host=...)
     const cfg = parseLibpqConninfo(v);
     if (opts.envPassword && !cfg.password) cfg.password = opts.envPassword;
+    if (cfg.ssl === undefined) {
+      if (explicitSsl) cfg.ssl = sslModeToConfig(explicitSsl);
+      else if (!isLocalHost(cfg.host)) cfg.ssl = { rejectUnauthorized: false };
+    }
     return { clientConfig: cfg, display: describePgConfig(cfg) };
   }
 
@@ -239,6 +303,8 @@ export function resolveAdminConnection(opts: {
   if (opts.dbname) cfg.database = opts.dbname;
   if (opts.adminPassword) cfg.password = opts.adminPassword;
   if (opts.envPassword && !cfg.password) cfg.password = opts.envPassword;
+  if (explicitSsl) cfg.ssl = sslModeToConfig(explicitSsl);
+  else if (!isLocalHost(cfg.host)) cfg.ssl = { rejectUnauthorized: false };
   return { clientConfig: cfg, display: describePgConfig(cfg) };
 }
 
