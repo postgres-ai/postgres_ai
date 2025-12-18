@@ -5,7 +5,7 @@ RUN test -n "${VERSION}" || (echo "VERSION build arg is required" && exit 1)
 ARG BUILD_TS
 RUN test -n "${BUILD_TS}" || (echo "BUILD_TS build arg is required" && exit 1)
 
-LABEL org.opencontainers.image.title="PostgresAI сonfigs: YAML&JSON files for pgwatch, VictoriaMetrics, etc."
+LABEL org.opencontainers.image.title="PostgresAI configs: YAML&JSON files for pgwatch, VictoriaMetrics, etc."
 LABEL org.opencontainers.image.description="Configuration files for PostgresAI monitoring stack"
 LABEL org.opencontainers.image.vendor="PostgresAI"
 LABEL org.opencontainers.image.source="https://gitlab.com/postgres-ai/postgres_ai"
@@ -17,16 +17,16 @@ RUN printf '%s' "${VERSION}" > /VERSION \
   && printf '%s' "${BUILD_TS}" > /BUILD_TS
 
 # Create config directories
-RUN mkdir -p /configs
+RUN mkdir -p /postgres_ai_configs
 
 # Copy all configuration files
-COPY grafana/ /configs/grafana/
-COPY pgwatch-postgres/metrics.yml /configs/pgwatch/metrics.yml
-COPY pgwatch-prometheus/metrics.yml /configs/pgwatch-prometheus/metrics.yml
-COPY prometheus/ /configs/prometheus/
-COPY sink-postgres/ /configs/sink-postgres/
+COPY grafana/ /postgres_ai_configs/grafana/
+COPY pgwatch-postgres/metrics.yml /postgres_ai_configs/pgwatch/metrics.yml
+COPY pgwatch-prometheus/metrics.yml /postgres_ai_configs/pgwatch-prometheus/metrics.yml
+COPY prometheus/ /postgres_ai_configs/prometheus/
+COPY sink-postgres/ /postgres_ai_configs/sink-postgres/
 # Demo DB – used only for `quickstart --demo`
-COPY target-db/ /configs/target-db/
+COPY target-db/ /postgres_ai_configs/target-db/
 
 # Copy script that initializes volumes
 COPY --chmod=755 init-configs.sh /init-configs.sh

@@ -1,10 +1,10 @@
 services:
   # Config Initializer - Copies static configs from image to volume
   config-init:
-    image: postgresai/monitoring-config:0.14.0-dev.21
-    container_name: config-init
+    image: postgresai/postgres_ai_configs:0.14.0-dev.22
+    container_name: postgres-ai-config-init
     volumes:
-      - monitoring_config:/target
+      - postgres_ai_configs:/target
     environment:
       - TARGET_DIR=/target
 
@@ -15,16 +15,16 @@ services:
     working_dir: /app
     volumes:
       - ./instances.yml:/app/instances.yaml:ro
-      - monitoring_config:/app/config
+      - postgres_ai_configs:/postgres_ai_configs
     depends_on:
       config-init:
         condition: service_completed_successfully
     command: >
       sh -c "
-      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch/sources.yml &&
-      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch/sources.yml &&
-      echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
-      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
+      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /postgres_ai_configs/pgwatch/sources.yml &&
+      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /postgres_ai_configs/pgwatch/sources.yml &&
+      echo '# PGWatch Sources Configuration - Prometheus Instance' > /postgres_ai_configs/pgwatch-prometheus/sources.yml &&
+      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /postgres_ai_configs/pgwatch-prometheus/sources.yml &&
       echo 'Generated sources.yml files for both pgwatch instances'
       "
 
@@ -38,14 +38,14 @@ services:
       POSTGRES_PASSWORD: postgres
     entrypoint: >
       sh -c "
-      cp /monitoring_config/target-db/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
+      cp /postgres_ai_configs/target-db/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
       exec docker-entrypoint.sh postgres
       -c shared_preload_libraries=pg_stat_statements
       -c pg_stat_statements.track=all
       "
     volumes:
       - target_db_data:/var/lib/postgresql/data
-      - monitoring_config:/monitoring_config:ro
+      - postgres_ai_configs:/postgres_ai_configs:ro
     depends_on:
       config-init:
         condition: service_completed_successfully
@@ -65,13 +65,13 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     entrypoint: >
       sh -c "
-      cp /monitoring_config/sink-postgres/*.sh /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
-      cp /monitoring_config/sink-postgres/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
+      cp /postgres_ai_configs/sink-postgres/*.sh /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
+      cp /postgres_ai_configs/sink-postgres/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
       exec docker-entrypoint.sh postgres
       "
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
-      - monitoring_config:/monitoring_config:ro
+      - postgres_ai_configs:/postgres_ai_configs:ro
     depends_on:
       config-init:
         condition: service_completed_successfully
@@ -84,12 +84,12 @@ services:
       - "${BIND_HOST:-}59090:9090"
     volumes:
       - victoria_metrics_data:/victoria-metrics-data
-      - monitoring_config:/monitoring_config:ro
+      - postgres_ai_configs:/postgres_ai_configs:ro
     command:
       - "-storageDataPath=/victoria-metrics-data"
       - "-retentionPeriod=336h"
       - "-httpListenAddr=:9090"
-      - "-promscrape.config=/monitoring_config/prometheus/prometheus.yml"
+      - "-promscrape.config=/postgres_ai_configs/prometheus/prometheus.yml"
       - "-promscrape.config.strictParse=false"
       - "-promscrape.maxScrapeSize=128000000"
     depends_on:
@@ -102,8 +102,8 @@ services:
     container_name: pgwatch-postgres
     command:
       [
-        "--sources=/monitoring_config/pgwatch/sources.yml",
-        "--metrics=/monitoring_config/pgwatch/metrics.yml",
+        "--sources=/postgres_ai_configs/pgwatch/sources.yml",
+        "--metrics=/postgres_ai_configs/pgwatch/metrics.yml",
         "--sink=postgresql://pgwatch@sink-postgres:5432/measurements?sslmode=disable",
         "--web-addr=:8080",
       ]
@@ -113,7 +113,7 @@ services:
       sink-postgres:
         condition: service_started
     volumes:
-      - monitoring_config:/monitoring_config:ro
+      - postgres_ai_configs:/postgres_ai_configs:ro
     restart: unless-stopped
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
@@ -122,8 +122,8 @@ services:
     container_name: pgwatch-prometheus
     command:
       [
-        "--sources=/monitoring_config/pgwatch-prometheus/sources.yml",
-        "--metrics=/monitoring_config/pgwatch-prometheus/metrics.yml",
+        "--sources=/postgres_ai_configs/pgwatch-prometheus/sources.yml",
+        "--metrics=/postgres_ai_configs/pgwatch-prometheus/metrics.yml",
         "--sink=prometheus://0.0.0.0:9091/pgwatch",
         "--web-addr=:8089",
       ]
@@ -133,7 +133,7 @@ services:
       sink-prometheus:
         condition: service_started
     volumes:
-      - monitoring_config:/monitoring_config:ro
+      - postgres_ai_configs:/postgres_ai_configs:ro
     restart: unless-stopped
 
   # Grafana with datasources - Visualization layer
@@ -144,6 +144,8 @@ services:
       GF_SECURITY_ADMIN_USER: monitor
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-demo}
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+      GF_PATHS_PROVISIONING: /postgres_ai_configs/grafana/provisioning
+      GF_PATHS_CONFIG: /postgres_ai_configs/grafana/provisioning/grafana.ini
       # OAuth configuration (disabled by default, enabled via Ansible)
       GF_AUTH_GENERIC_OAUTH_ENABLED: ${GRAFANA_OAUTH_ENABLED:-false}
       GF_AUTH_GENERIC_OAUTH_NAME: ${GRAFANA_OAUTH_NAME:-PostgresAI}
@@ -161,15 +163,7 @@ services:
       - "${GRAFANA_BIND_HOST:-}3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - monitoring_config:/monitoring_config:ro
-    entrypoint: >
-      sh -c "
-      rm -rf /etc/grafana/provisioning &&
-      ln -s /monitoring_config/grafana/provisioning /etc/grafana/provisioning &&
-      rm -rf /var/lib/grafana/dashboards &&
-      ln -s /monitoring_config/grafana/dashboards /var/lib/grafana/dashboards &&
-      exec /run.sh
-      "
+      - postgres_ai_configs:/postgres_ai_configs:ro
     depends_on:
       config-init:
         condition: service_completed_successfully
@@ -179,7 +173,7 @@ services:
         condition: service_started
     restart: unless-stopped
   monitoring_flask_backend:
-    image: postgresai/monitoring_flask_backend:0.14.0-dev.21
+    image: postgresai/monitoring_flask_backend:0.14.0-dev.22
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
@@ -190,7 +184,7 @@ services:
 
   # PostgreSQL Reports Generator - Runs reports after 30 minutes
   postgres-reports:
-    image: postgresai/reporter:0.14.0-dev.21
+    image: postgresai/reporter:0.14.0-dev.22
     container_name: postgres-reports
     working_dir: /app
     volumes:
@@ -262,7 +256,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  monitoring_config:
+  postgres_ai_configs:
   target_db_data:
   sink_postgres_data:
   victoria_metrics_data:
