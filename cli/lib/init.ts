@@ -36,6 +36,21 @@ function extractSslModeFromUri(uri: string): string | undefined {
   }
 }
 
+/** Remove sslmode parameter from a PostgreSQL connection URI. */
+function stripSslModeFromUri(uri: string): string {
+  try {
+    const u = new URL(uri);
+    u.searchParams.delete("sslmode");
+    return u.toString();
+  } catch {
+    // Fallback regex for malformed URIs
+    return uri
+      .replace(/[?&]sslmode=[^&]*/gi, "")
+      .replace(/\?&/, "?")
+      .replace(/\?$/, "");
+  }
+}
+
 export type AdminConnection = {
   clientConfig: PgClientConfig;
   display: string;
@@ -332,8 +347,10 @@ export function resolveAdminConnection(opts: {
       const shouldFallback = !effectiveSslMode || 
         effectiveSslMode.toLowerCase() === "prefer" || 
         effectiveSslMode.toLowerCase() === "allow";
+      // Strip sslmode from URI so pg uses our ssl config object instead
+      const cleanUri = stripSslModeFromUri(v);
       return {
-        clientConfig: { connectionString: v, ssl: sslConfig },
+        clientConfig: { connectionString: cleanUri, ssl: sslConfig },
         display: maskConnectionString(v),
         sslAutoDetected: shouldFallback,
       };
