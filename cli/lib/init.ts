@@ -36,26 +36,88 @@ function extractSslModeFromUri(uri: string): string | undefined {
   }
 }
 
-/** Check if a host is local (localhost, 127.x.x.x, ::1, or Unix socket). */
-function isLocalHost(host: string | undefined): boolean {
-  if (!host) return true;
-  const h = host.toLowerCase();
-  return h === "localhost" || h.startsWith("127.") || h === "::1" || h.startsWith("/");
-}
-
-/** Extract host from a PostgreSQL connection URI. */
-function extractHostFromUri(uri: string): string | undefined {
-  try {
-    return new URL(uri).hostname || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export type AdminConnection = {
   clientConfig: PgClientConfig;
   display: string;
+  /** True if SSL was auto-detected (not explicitly set), enabling fallback. */
+  sslAutoDetected?: boolean;
 };
+
+/**
+ * Check if an error is SSL-related and fallback should be attempted.
+ * This mimics libpq's sslmode=prefer behavior.
+ */
+function isSslNegotiationError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as any;
+  // Common SSL negotiation failure patterns:
+  // - "SSL connection is required" / "SSL required" (server wants SSL but we didn't try)
+  // - "The server does not support SSL connections" (server doesn't support SSL)
+  // - SSL handshake errors, TLS errors
+  // - PostgreSQL error code 08P01 can be SSL-related
+  const msg = typeof e.message === "string" ? e.message.toLowerCase() : "";
+  const code = typeof e.code === "string" ? e.code : "";
+  
+  if (msg.includes("ssl") || msg.includes("tls")) return true;
+  if (msg.includes("the server does not support")) return true;
+  if (code === "08P01") return true; // Protocol violation (often SSL-related)
+  return false;
+}
+
+/**
+ * Connect to PostgreSQL with sslmode=prefer-like behavior.
+ * If sslAutoDetected is true, tries SSL first, then falls back to non-SSL on failure.
+ */
+export async function connectWithSslFallback(
+  ClientClass: new (config: PgClientConfig) => PgClient,
+  adminConn: AdminConnection,
+  verbose?: boolean
+): Promise<{ client: PgClient; usedSsl: boolean }> {
+  const tryConnect = async (config: PgClientConfig): Promise<PgClient> => {
+    const client = new ClientClass(config);
+    await client.connect();
+    return client;
+  };
+
+  // If SSL was explicitly set or no SSL configured, just try once
+  if (!adminConn.sslAutoDetected) {
+    const client = await tryConnect(adminConn.clientConfig);
+    return { client, usedSsl: !!adminConn.clientConfig.ssl };
+  }
+
+  // sslmode=prefer behavior: try SSL first, fallback to non-SSL
+  try {
+    const client = await tryConnect(adminConn.clientConfig);
+    return { client, usedSsl: true };
+  } catch (sslErr) {
+    if (!isSslNegotiationError(sslErr)) {
+      // Not an SSL error, don't retry
+      throw sslErr;
+    }
+
+    if (verbose) {
+      console.log("SSL connection failed, retrying without SSL...");
+    }
+
+    // Retry without SSL
+    const noSslConfig: PgClientConfig = { ...adminConn.clientConfig, ssl: false };
+    try {
+      const client = await tryConnect(noSslConfig);
+      return { client, usedSsl: false };
+    } catch (noSslErr) {
+      // If non-SSL also fails, check if it's "SSL required" - throw that instead
+      if (isSslNegotiationError(noSslErr)) {
+        const msg = (noSslErr as any)?.message || "";
+        if (msg.toLowerCase().includes("ssl") && msg.toLowerCase().includes("required")) {
+          // Server requires SSL but SSL attempt failed - throw original SSL error
+          throw sslErr;
+        }
+      }
+      // Throw the non-SSL error (it's more relevant since SSL attempt also failed)
+      throw noSslErr;
+    }
+  }
+}
 
 export type InitStep = {
   name: string;
@@ -261,28 +323,37 @@ export function resolveAdminConnection(opts: {
     const v = conn || dbUrlFlag;
     if (isLikelyUri(v)) {
       const urlSslMode = extractSslModeFromUri(v);
-      const urlHost = extractHostFromUri(v);
-      // SSL priority: PGSSLMODE env > URL param > auto (remote hosts get SSL)
-      const sslConfig = explicitSsl
-        ? sslModeToConfig(explicitSsl)
-        : urlSslMode
-          ? sslModeToConfig(urlSslMode)
-          : !isLocalHost(urlHost)
-            ? { rejectUnauthorized: false }
-            : undefined;
+      const effectiveSslMode = explicitSsl || urlSslMode;
+      // SSL priority: PGSSLMODE env > URL param > auto (sslmode=prefer behavior)
+      const sslConfig = effectiveSslMode
+        ? sslModeToConfig(effectiveSslMode)
+        : { rejectUnauthorized: false }; // Default: try SSL (with fallback)
+      // Enable fallback for: no explicit mode OR explicit "prefer"/"allow"
+      const shouldFallback = !effectiveSslMode || 
+        effectiveSslMode.toLowerCase() === "prefer" || 
+        effectiveSslMode.toLowerCase() === "allow";
       return {
         clientConfig: { connectionString: v, ssl: sslConfig },
         display: maskConnectionString(v),
+        sslAutoDetected: shouldFallback,
       };
     }
     // libpq conninfo (dbname=... host=...)
     const cfg = parseLibpqConninfo(v);
     if (opts.envPassword && !cfg.password) cfg.password = opts.envPassword;
+    const cfgHadSsl = cfg.ssl !== undefined;
     if (cfg.ssl === undefined) {
       if (explicitSsl) cfg.ssl = sslModeToConfig(explicitSsl);
-      else if (!isLocalHost(cfg.host)) cfg.ssl = { rejectUnauthorized: false };
+      else cfg.ssl = { rejectUnauthorized: false }; // Default: try SSL (with fallback)
     }
-    return { clientConfig: cfg, display: describePgConfig(cfg) };
+    // Enable fallback for: no explicit mode OR explicit "prefer"/"allow"
+    const shouldFallback = (!explicitSsl && !cfgHadSsl) || 
+      (!!explicitSsl && (explicitSsl.toLowerCase() === "prefer" || explicitSsl.toLowerCase() === "allow"));
+    return {
+      clientConfig: cfg,
+      display: describePgConfig(cfg),
+      sslAutoDetected: shouldFallback,
+    };
   }
 
   if (!hasConnDetails) {
@@ -303,9 +374,15 @@ export function resolveAdminConnection(opts: {
   if (opts.dbname) cfg.database = opts.dbname;
   if (opts.adminPassword) cfg.password = opts.adminPassword;
   if (opts.envPassword && !cfg.password) cfg.password = opts.envPassword;
-  if (explicitSsl) cfg.ssl = sslModeToConfig(explicitSsl);
-  else if (!isLocalHost(cfg.host)) cfg.ssl = { rejectUnauthorized: false };
-  return { clientConfig: cfg, display: describePgConfig(cfg) };
+  if (explicitSsl) {
+    cfg.ssl = sslModeToConfig(explicitSsl);
+    // Enable fallback for explicit "prefer"/"allow"
+    const shouldFallback = explicitSsl.toLowerCase() === "prefer" || explicitSsl.toLowerCase() === "allow";
+    return { clientConfig: cfg, display: describePgConfig(cfg), sslAutoDetected: shouldFallback };
+  }
+  // Default: try SSL with fallback (sslmode=prefer behavior)
+  cfg.ssl = { rejectUnauthorized: false };
+  return { clientConfig: cfg, display: describePgConfig(cfg), sslAutoDetected: true };
 }
 
 function generateMonitoringPassword(): string {
