@@ -59,23 +59,35 @@ export type AdminConnection = {
 };
 
 /**
- * Check if an error is SSL-related and fallback should be attempted.
+ * Check if an error indicates SSL negotiation failed and fallback to non-SSL should be attempted.
  * This mimics libpq's sslmode=prefer behavior.
+ * 
+ * IMPORTANT: This should NOT match certificate errors (expired, invalid, self-signed)
+ * as those are real errors the user needs to fix, not negotiation failures.
  */
 function isSslNegotiationError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as any;
-  // Common SSL negotiation failure patterns:
-  // - "SSL connection is required" / "SSL required" (server wants SSL but we didn't try)
-  // - "The server does not support SSL connections" (server doesn't support SSL)
-  // - SSL handshake errors, TLS errors
-  // - PostgreSQL error code 08P01 can be SSL-related
   const msg = typeof e.message === "string" ? e.message.toLowerCase() : "";
   const code = typeof e.code === "string" ? e.code : "";
   
-  if (msg.includes("ssl") || msg.includes("tls")) return true;
-  if (msg.includes("the server does not support")) return true;
-  if (code === "08P01") return true; // Protocol violation (often SSL-related)
+  // Specific patterns that indicate server doesn't support SSL (should fallback)
+  const fallbackPatterns = [
+    "the server does not support ssl",
+    "ssl off",
+    "server does not support ssl connections",
+  ];
+  
+  for (const pattern of fallbackPatterns) {
+    if (msg.includes(pattern)) return true;
+  }
+  
+  // PostgreSQL error code 08P01 (protocol violation) during initial connection
+  // often indicates SSL negotiation mismatch, but only if the message suggests it
+  if (code === "08P01" && (msg.includes("ssl") || msg.includes("unsupported"))) {
+    return true;
+  }
+  
   return false;
 }
 
