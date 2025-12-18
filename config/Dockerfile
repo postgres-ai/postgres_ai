@@ -5,7 +5,7 @@ RUN test -n "${VERSION}" || (echo "VERSION build arg is required" && exit 1)
 ARG BUILD_TS
 RUN test -n "${BUILD_TS}" || (echo "BUILD_TS build arg is required" && exit 1)
 
-LABEL org.opencontainers.image.title="PostgresAI Monitoring Config"
+LABEL org.opencontainers.image.title="PostgresAI сonfigs: YAML&JSON files for pgwatch, VictoriaMetrics, etc."
 LABEL org.opencontainers.image.description="Configuration files for PostgresAI monitoring stack"
 LABEL org.opencontainers.image.vendor="PostgresAI"
 LABEL org.opencontainers.image.source="https://gitlab.com/postgres-ai/postgres_ai"
@@ -25,6 +25,7 @@ COPY pgwatch-postgres/metrics.yml /configs/pgwatch/metrics.yml
 COPY pgwatch-prometheus/metrics.yml /configs/pgwatch-prometheus/metrics.yml
 COPY prometheus/ /configs/prometheus/
 COPY sink-postgres/ /configs/sink-postgres/
+# Demo DB – used only for `quickstart --demo`
 COPY target-db/ /configs/target-db/
 
 # Copy script that initializes volumes

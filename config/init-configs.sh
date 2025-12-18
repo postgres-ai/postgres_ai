@@ -4,7 +4,7 @@ set -e
 # PostgresAI Monitoring Config Initializer
 # Copies configuration files to mounted volumes
 
-echo "PostgresAI Monitoring Config v$(cat /VERSION)"
+echo "PostgresAI configs v$(cat /VERSION)"
 echo "Build: $(cat /BUILD_TS)"
 echo ""
 
