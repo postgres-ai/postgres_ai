@@ -63,77 +63,85 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 - Supports Postgres versions 14-18
 - **pg_stat_statements extension must be created** for the DB used for connection
 
-## ⚠️ Security Notice
-
-**WARNING: Security is your responsibility!**
-
-This monitoring solution exposes several ports that **MUST** be properly firewalled:
-- **Port 3000** (Grafana) - Contains sensitive database metrics and dashboards
-- **Port 58080** (PGWatch Postgres) - Database monitoring interface  
-- **Port 58089** (PGWatch Prometheus) - Database monitoring interface
-- **Port 59090** (Victoria Metrics) - Metrics storage and queries
-- **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
-- **Port 55000** (Flask API) - Backend API service
-- **Port 55432** (Demo DB) - When using `--demo` option
-- **Port 55433** (Metrics DB) - Postgres metrics storage
-
-**Configure your firewall to:**
-- Block public access to all monitoring ports
-- Allow access only from trusted networks/IPs
-- Use VPN or SSH tunnels for remote access
-
-Failure to secure these ports may expose sensitive database information!
-
 ## 🚀 Quick start
 
-Create a new DB user in the database to be monitored (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database):
-```sql
--- Create a user for postgres_ai monitoring
-begin;
-create user postgres_ai_mon with password '<password>';
+Create a database user for monitoring (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database).
 
-grant connect on database <database_name> to postgres_ai_mon;
+Use the CLI to create/update the monitoring role and grant all required permissions (idempotent):
 
-grant pg_monitor to postgres_ai_mon;
-grant select on pg_index to postgres_ai_mon;
-
--- Create a public view for pg_statistic access (optional, for bloat analysis)
-create view public.pg_statistic as
-select 
-    n.nspname as schemaname,
-    c.relname as tablename,
-    a.attname,
-    s.stanullfrac as null_frac,
-    s.stawidth as avg_width,
-    false as inherited
-from pg_statistic s
-join pg_class c on c.oid = s.starelid
-join pg_namespace n on n.oid = c.relnamespace  
-join pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
-where a.attnum > 0 and not a.attisdropped;
-
-grant select on public.pg_statistic to postgres_ai_mon;
-alter user postgres_ai_mon set search_path = "$user", public, pg_catalog;
-commit;
+```bash
+# Connect as an admin/superuser and run the idempotent setup:
+# - create/update the monitoring role
+# - create required view(s)
+# - apply required grants (and optional extensions where supported)
+# Admin password comes from PGPASSWORD (libpq standard) unless you pass --admin-password.
+#
+# Monitoring password:
+# - by default, postgresai generates a strong password automatically
+# - it is printed only in interactive (TTY) mode, or if you opt in via --print-password
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname
 ```
 
-### Optional permissions to analyze risks of certain performance cliffs
+Optional permissions (RDS/self-managed extras) are enabled by default. To skip them:
 
-For RDS Postgres and Aurora:
-
-```sql
-create extension if not exists rds_tools;
-grant execute on function rds_tools.pg_ls_multixactdir() to postgres_ai_mon;
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
 ```
 
-For self-managed Postgres:
+Verify everything is in place (no changes):
 
-```sql
-grant execute on function pg_stat_file(text) to postgres_ai_mon;
-grant execute on function pg_stat_file(text, boolean) to postgres_ai_mon;
-grant execute on function pg_ls_dir(text) to postgres_ai_mon;
-grant execute on function pg_ls_dir(text, boolean, boolean) to postgres_ai_mon;
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --verify
 ```
+
+If you want to reset the monitoring password only (no other changes), you can rely on auto-generation:
+
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password
+```
+
+By default, `postgresai init` auto-generates a strong password (see above).
+
+If you want to set a specific password instead:
+
+```bash
+PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+```
+
+If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default). This can be done without a DB connection:
+
+```bash
+npx postgresai init --print-sql
+```
+
+Optionally, to render the plan for a specific database:
+
+```bash
+# Pick database (default is PGDATABASE or "postgres"):
+npx postgresai init --print-sql -d dbname
+
+# Provide an explicit monitoring password (still redacted in output):
+npx postgresai init --print-sql -d dbname --password '...'
+```
+
+### Troubleshooting
+
+**Permission denied errors**
+
+If you see errors like `permission denied` / `insufficient_privilege` / code `42501`, you are not connected with enough privileges to create roles, grant permissions, or create extensions/views.
+
+- **How to fix**:
+  - Connect as a **superuser**, or a role with **CREATEROLE** and sufficient **GRANT/DDL** privileges
+  - On RDS/Aurora: use a user with the `rds_superuser` role (typically `postgres`, the most highly privileged user on RDS for PostgreSQL)
+  - On Cloud SQL: use a user with the `cloudsqlsuperuser` role (often `postgres`)
+  - On Supabase: use the `postgres` user (default administrator with elevated privileges for role/permission management)
+  - On managed providers: use the provider’s **admin** role/user
+
+- **Review SQL before running** (audit-friendly):
+
+    ```bash
+    npx postgresai init --print-sql -d mydb
+    ```
 
 **One command setup:**
 
@@ -161,6 +169,27 @@ Or if you want to just check out how it works:
 ```
 
 That's it! Everything is installed, configured, and running.
+
+## ⚠️ Security Notice
+
+**WARNING: Security is your responsibility!**
+
+This monitoring solution exposes several ports that **MUST** be properly firewalled:
+- **Port 3000** (Grafana) - Contains sensitive database metrics and dashboards
+- **Port 58080** (PGWatch Postgres) - Database monitoring interface  
+- **Port 58089** (PGWatch Prometheus) - Database monitoring interface
+- **Port 59090** (Victoria Metrics) - Metrics storage and queries
+- **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
+- **Port 55000** (Flask API) - Backend API service
+- **Port 55432** (Demo DB) - When using `--demo` option
+- **Port 55433** (Metrics DB) - Postgres metrics storage
+
+**Configure your firewall to:**
+- Block public access to all monitoring ports
+- Allow access only from trusted networks/IPs
+- Use VPN or SSH tunnels for remote access
+
+Failure to secure these ports may expose sensitive database information!
 
 ## 📊 What you get
 
@@ -275,12 +304,12 @@ node ./cli/bin/postgres-ai.js --help
 npm --prefix cli install --no-audit --no-fund
 npm link ./cli
 postgres-ai --help
-pgai --help
+postgresai --help
 
 # or install globally after publish (planned)
 # npm i -g @postgresai/cli
 # postgres-ai --help
-# pgai --help
+# postgresai --help
 ```
 
 ## 🔑 PostgresAI access token

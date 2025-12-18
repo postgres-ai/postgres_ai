@@ -222,30 +222,44 @@ class PostgresReportGenerator:
           (tests may stub query responses broadly by metric name substring).
         - Uses a single query with a regex on setting_name to reduce roundtrips.
         """
-        query = (
-            f'last_over_time(pgwatch_settings_configured{{'
-            f'cluster="{cluster}", node_name="{node_name}", '
-            f'setting_name=~"server_version|server_version_num"}}[3h])'
-        )
+        # Support both label schemas:
+        # - newer/expected-by-tests: setting_name/setting_value
+        # - older/pgwatch-tagged:    tag_setting_name/tag_setting_value
+        queries = [
+            (
+                "setting_name",
+                f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", '
+                f'setting_name=~"server_version|server_version_num"}}[3h])',
+            ),
+            (
+                "tag_setting_name",
+                f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", '
+                f'tag_setting_name=~"server_version|server_version_num"}}[3h])',
+            ),
+        ]
 
-        result = self.query_instant(query)
         version_str = None
         version_num = None
 
-        if result.get("status") == "success":
-            if result.get("data", {}).get("result"):
-                for item in result["data"]["result"]:
-                    metric = item.get("metric", {}) or {}
-                    setting_name = metric.get("setting_name", "")
-                    setting_value = metric.get("setting_value", "")
-                    if setting_name == "server_version" and setting_value:
-                        version_str = setting_value
-                    elif setting_name == "server_version_num" and setting_value:
-                        version_num = setting_value
-            else:
-                print(f"Warning: No version data found (cluster={cluster}, node_name={node_name})")
-        else:
-            print(f"Warning: Version query failed (cluster={cluster}, node_name={node_name}): status={result.get('status')}")
+        for label_name, query in queries:
+            result = self.query_instant(query)
+            if result.get("status") != "success":
+                continue
+            for item in (result.get("data", {}) or {}).get("result", []) or []:
+                metric = item.get("metric", {}) or {}
+                setting_name = metric.get("setting_name") or metric.get("tag_setting_name") or ""
+                setting_value = metric.get("setting_value") or metric.get("tag_setting_value") or ""
+
+                if setting_name == "server_version" and setting_value and not version_str:
+                    version_str = setting_value
+                elif setting_name == "server_version_num" and setting_value and not version_num:
+                    version_num = setting_value
+
+            if version_str or version_num:
+                break
+
+        if not (version_str or version_num):
+            print(f"Warning: No version data found (cluster={cluster}, node_name={node_name})")
 
         server_version = version_str or "Unknown"
         version_info: Dict[str, str] = {

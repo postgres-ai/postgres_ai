@@ -1,5 +1,9 @@
+include:
+  - local: 'components/index_pilot/.gitlab-ci.yml'
+
 stages:
   - test
+  - publish
 
 reporter:tests:
   stage: test
@@ -95,7 +99,7 @@ cli:node:smoke:
     - npm install -g ./cli
     - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
     - command -v postgres-ai && postgres-ai --help
-    - command -v pgai && pgai --help
+    - command -v postgresai && postgresai --help
     - rm -f .pgwatch-config
     - node ./cli/dist/bin/postgres-ai.js add-key "test_key_1234567890"
     - node ./cli/dist/bin/postgres-ai.js show-key | grep -E "\*{2,}|[0-9]{4}$"
@@ -108,6 +112,104 @@ cli:node:smoke:
     - node ./cli/dist/bin/postgres-ai.js mon targets remove ci-test || true
   rules:
     - if: '$CI_COMMIT_BRANCH'
+
+cli:node:tests:
+  stage: test
+  image: node:20-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    - apt-get update
+    - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
+    # initdb refuses to run as root; run CLI tests as an unprivileged user
+    - useradd -m -s /bin/bash pgtest || true
+    - chown -R pgtest:pgtest "$CI_PROJECT_DIR"
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && node -v && npm -v && npm --prefix cli ci"
+  script:
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && npm --prefix cli test"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+cli:npm:publish:
+  stage: publish
+  image: node:20-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    - node -v && npm -v
+  script:
+    - |
+      set -euo pipefail
+      : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
+
+      # Supported tag formats (examples):
+      # - v0.14.0-dev.1
+      # - 0.14.0-dev.1
+      # - 0.14-dev.1          (normalized to 0.14.0-dev.1)
+      # - 0.14.0-rc.1
+      # - v0.14.0            (stable, published to latest)
+      RAW_TAG="${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME:-}}"
+      if [ -z "$RAW_TAG" ]; then
+        echo "CI_COMMIT_TAG is empty"
+        exit 1
+      fi
+
+      TAG_VERSION="$RAW_TAG"
+      TAG_VERSION="${TAG_VERSION#v}"
+
+      # Normalize 0.14-dev.1 -> 0.14.0-dev.1 (also for beta/rc)
+      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\.[0-9]+)-((dev|beta|rc)\.[0-9]+)$/\1.0-\2/')"
+      fi
+
+      DIST_TAG=""
+      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+        DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta|rc)\.[0-9]+$/\1/')"
+      elif printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        DIST_TAG="latest"
+      fi
+
+      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ] && [ "$DIST_TAG" != "rc" ] && [ "$DIST_TAG" != "latest" ]; then
+        echo "Unsupported tag/version: $TAG_VERSION (expected X.Y.Z, X.Y.Z-dev.N, X.Y.Z-beta.N, or X.Y.Z-rc.N)"
+        exit 1
+      fi
+
+      # Configure npm auth without committing credentials
+      printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
+
+      echo "Publishing postgresai@${TAG_VERSION} to dist-tag ${DIST_TAG}"
+      cd cli
+      npm ci --no-audit --no-fund
+      # Make the git tag the source of truth without committing version bumps.
+      npm version --no-git-tag-version "$TAG_VERSION"
+      npm run build
+      npm publish --tag "$DIST_TAG" --access public
+
+      echo "Publishing pgai@${TAG_VERSION} (wrapper) to dist-tag ${DIST_TAG}"
+      cd ../pgai
+      # Update version + dependency so `npx pgai@<tag>` pulls the matching postgresai version.
+      npm pkg set "dependencies.postgresai=$TAG_VERSION"
+      npm version --no-git-tag-version "$TAG_VERSION"
+      # No lockfile: use npm install here.
+      npm install --no-audit --no-fund
+      npm publish --tag "$DIST_TAG" --access public
+  after_script:
+    - rm -f ~/.npmrc
+  rules:
+    # prereleases (also allow patchless X.Y-dev.N, normalized in script)
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+(\.\d+)?-(dev|beta|rc)\.\d+$/'
+    # stable releases
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+    # GitLab "Run pipeline" UI ("web" pipelines) often doesn't populate tag vars consistently.
+    # Keep this job available manually so the pipeline is never empty; the script validates the ref name.
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
 
 cli:node:e2e:dind:
   stage: test

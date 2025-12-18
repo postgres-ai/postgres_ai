@@ -1816,6 +1816,7 @@ metrics:
         )
         select
           'Never Used Indexes' as tag_reason,
+          current_database() as tag_datname,
           index_id,
           schema_name as tag_schema_name,
           table_name as tag_table_name,
