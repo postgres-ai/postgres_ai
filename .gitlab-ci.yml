@@ -183,22 +183,54 @@ cli:npm:publish:
       # Configure npm auth without committing credentials
       printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
 
+      # Helper: check if package version exists on npm
+      pkg_exists() {
+        npm view "$1@$2" version >/dev/null 2>&1
+      }
+
+      # Helper: wait for package to be available on npm (max 60s)
+      wait_for_pkg() {
+        local pkg="$1" ver="$2" i=0
+        while [ $i -lt 12 ]; do
+          if pkg_exists "$pkg" "$ver"; then
+            echo "✓ $pkg@$ver is available on npm"
+            return 0
+          fi
+          echo "Waiting for $pkg@$ver to be available on npm..."
+          sleep 5
+          i=$((i + 1))
+        done
+        echo "✗ Timeout waiting for $pkg@$ver"
+        return 1
+      }
+
       echo "Publishing postgresai@${TAG_VERSION} to dist-tag ${DIST_TAG}"
       cd cli
       npm ci --no-audit --no-fund
       # Make the git tag the source of truth without committing version bumps.
       npm version --no-git-tag-version "$TAG_VERSION"
       npm run build
-      npm publish --tag "$DIST_TAG" --access public
+      if pkg_exists "postgresai" "$TAG_VERSION"; then
+        echo "postgresai@${TAG_VERSION} already published, skipping"
+      else
+        npm publish --tag "$DIST_TAG" --access public
+      fi
+
+      # Wait for postgresai to be available before publishing wrapper
+      wait_for_pkg "postgresai" "$TAG_VERSION"
 
       echo "Publishing pgai@${TAG_VERSION} (wrapper) to dist-tag ${DIST_TAG}"
       cd ../pgai
       # Update version + dependency so `npx pgai@<tag>` pulls the matching postgresai version.
       npm pkg set "dependencies.postgresai=$TAG_VERSION"
       npm version --no-git-tag-version "$TAG_VERSION"
-      # No lockfile: use npm install here.
-      npm install --no-audit --no-fund
-      npm publish --tag "$DIST_TAG" --access public
+      if pkg_exists "pgai" "$TAG_VERSION"; then
+        echo "pgai@${TAG_VERSION} already published, skipping"
+      else
+        # No lockfile: use npm install here.
+        npm install --no-audit --no-fund
+        npm publish --tag "$DIST_TAG" --access public
+      fi
   after_script:
     - rm -f ~/.npmrc
   rules:
