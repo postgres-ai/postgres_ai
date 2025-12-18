@@ -67,7 +67,7 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Bloat %"
+                  "options": "Estimated bloat %"
                 },
                 "properties": [
                   {
@@ -236,8 +236,8 @@
                 },
                 "renameByName": {
                   "Schema": "",
-                  "bloat_pct": "Bloat %",
-                  "bloat_size": "Bloat size",
+                  "bloat_pct": "Estimated bloat %",
+                  "bloat_size": "Estimated bloat size",
                   "fillfactor": "Fillfactor",
                   "idxname": "Index",
                   "real_size_mib": "",

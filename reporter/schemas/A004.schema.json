@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A004 report schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "checkId": { "const": "A004" },
+    "checkTitle": { "const": "Cluster information" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "clusterMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit", "description"],
+      "properties": {
+        "value": { "type": "string" },
+        "unit": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["general_info", "database_sizes"],
+      "properties": {
+        "general_info": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/clusterMetric" }
+        },
+        "database_sizes": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}
+
+
