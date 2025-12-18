@@ -133,6 +133,62 @@ cli:node:tests:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+# Shared script for version parsing (used by both publish jobs)
+.cli_npm_version_script: &cli_npm_version_script |
+  set -euo pipefail
+  : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
+
+  # Supported tag formats (examples):
+  # - v0.14.0-dev.1
+  # - 0.14.0-dev.1
+  # - 0.14-dev.1          (normalized to 0.14.0-dev.1)
+  # - 0.14.0-rc.1
+  # - v0.14.0            (stable, published to latest)
+  RAW_TAG="${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME:-}}"
+  if [ -z "$RAW_TAG" ]; then
+    echo "CI_COMMIT_TAG is empty"
+    exit 1
+  fi
+
+  TAG_VERSION="$RAW_TAG"
+  TAG_VERSION="${TAG_VERSION#v}"
+
+  # Normalize 0.14-dev.1 -> 0.14.0-dev.1 (also for beta/rc)
+  if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+    TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\.[0-9]+)-((dev|beta|rc)\.[0-9]+)$/\1.0-\2/')"
+  fi
+
+  DIST_TAG=""
+  if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+    DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta|rc)\.[0-9]+$/\1/')"
+  elif printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    DIST_TAG="latest"
+  fi
+
+  if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ] && [ "$DIST_TAG" != "rc" ] && [ "$DIST_TAG" != "latest" ]; then
+    echo "Unsupported tag/version: $TAG_VERSION (expected X.Y.Z, X.Y.Z-dev.N, X.Y.Z-beta.N, or X.Y.Z-rc.N)"
+    exit 1
+  fi
+
+  # Configure npm auth without committing credentials
+  printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
+
+  # Helper: check if package version exists on npm
+  pkg_exists() {
+    npm view "$1@$2" version >/dev/null 2>&1
+  }
+
+.cli_npm_publish_rules:
+  rules:
+    # prereleases (also allow patchless X.Y-dev.N, normalized in script)
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+(\.\d+)?-(dev|beta|rc)\.\d+$/'
+    # stable releases
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+    # GitLab "Run pipeline" UI ("web" pipelines) often doesn't populate tag vars consistently.
+    # Keep this job available manually so the pipeline is never empty; the script validates the ref name.
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+
 cli:npm:publish:
   stage: publish
   image: node:20-bullseye
@@ -144,51 +200,37 @@ cli:npm:publish:
     - corepack enable || true
     - node -v && npm -v
   script:
+    - *cli_npm_version_script
     - |
-      set -euo pipefail
-      : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
-
-      # Supported tag formats (examples):
-      # - v0.14.0-dev.1
-      # - 0.14.0-dev.1
-      # - 0.14-dev.1          (normalized to 0.14.0-dev.1)
-      # - 0.14.0-rc.1
-      # - v0.14.0            (stable, published to latest)
-      RAW_TAG="${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME:-}}"
-      if [ -z "$RAW_TAG" ]; then
-        echo "CI_COMMIT_TAG is empty"
-        exit 1
+      echo "Publishing postgresai@${TAG_VERSION} to dist-tag ${DIST_TAG}"
+      cd cli
+      npm ci --no-audit --no-fund
+      npm version --no-git-tag-version "$TAG_VERSION"
+      npm run build
+      if pkg_exists "postgresai" "$TAG_VERSION"; then
+        echo "postgresai@${TAG_VERSION} already published, skipping"
+      else
+        npm publish --tag "$DIST_TAG" --access public
       fi
+  after_script:
+    - rm -f ~/.npmrc
+  extends: .cli_npm_publish_rules
 
-      TAG_VERSION="$RAW_TAG"
-      TAG_VERSION="${TAG_VERSION#v}"
-
-      # Normalize 0.14-dev.1 -> 0.14.0-dev.1 (also for beta/rc)
-      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
-        TAG_VERSION="$(printf '%s' "$TAG_VERSION" | sed -E 's/^([0-9]+\.[0-9]+)-((dev|beta|rc)\.[0-9]+)$/\1.0-\2/')"
-      fi
-
-      DIST_TAG=""
-      if printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
-        DIST_TAG="$(printf '%s' "$TAG_VERSION" | sed -E 's/^.*-(dev|beta|rc)\.[0-9]+$/\1/')"
-      elif printf '%s' "$TAG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        DIST_TAG="latest"
-      fi
-
-      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ] && [ "$DIST_TAG" != "rc" ] && [ "$DIST_TAG" != "latest" ]; then
-        echo "Unsupported tag/version: $TAG_VERSION (expected X.Y.Z, X.Y.Z-dev.N, X.Y.Z-beta.N, or X.Y.Z-rc.N)"
-        exit 1
-      fi
-
-      # Configure npm auth without committing credentials
-      printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
-
-      # Helper: check if package version exists on npm
-      pkg_exists() {
-        npm view "$1@$2" version >/dev/null 2>&1
-      }
-
-      # Helper: wait for package to be available on npm (max 60s)
+cli:npm:publish-wrapper:
+  stage: publish
+  image: node:20-bullseye
+  needs: [cli:npm:publish]
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    - node -v && npm -v
+  script:
+    - *cli_npm_version_script
+    - |
+      # Wait for postgresai to be available on npm (max 60s)
       wait_for_pkg() {
         local pkg="$1" ver="$2" i=0
         while [ $i -lt 12 ]; do
@@ -204,44 +246,21 @@ cli:npm:publish:
         return 1
       }
 
-      echo "Publishing postgresai@${TAG_VERSION} to dist-tag ${DIST_TAG}"
-      cd cli
-      npm ci --no-audit --no-fund
-      # Make the git tag the source of truth without committing version bumps.
-      npm version --no-git-tag-version "$TAG_VERSION"
-      npm run build
-      if pkg_exists "postgresai" "$TAG_VERSION"; then
-        echo "postgresai@${TAG_VERSION} already published, skipping"
-      else
-        npm publish --tag "$DIST_TAG" --access public
-      fi
-
-      # Wait for postgresai to be available before publishing wrapper
       wait_for_pkg "postgresai" "$TAG_VERSION"
 
       echo "Publishing pgai@${TAG_VERSION} (wrapper) to dist-tag ${DIST_TAG}"
-      cd ../pgai
-      # Update version + dependency so `npx pgai@<tag>` pulls the matching postgresai version.
+      cd pgai
       npm pkg set "dependencies.postgresai=$TAG_VERSION"
       npm version --no-git-tag-version "$TAG_VERSION"
       if pkg_exists "pgai" "$TAG_VERSION"; then
         echo "pgai@${TAG_VERSION} already published, skipping"
       else
-        # No lockfile: use npm install here.
         npm install --no-audit --no-fund
         npm publish --tag "$DIST_TAG" --access public
       fi
   after_script:
     - rm -f ~/.npmrc
-  rules:
-    # prereleases (also allow patchless X.Y-dev.N, normalized in script)
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+(\.\d+)?-(dev|beta|rc)\.\d+$/'
-    # stable releases
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
-    # GitLab "Run pipeline" UI ("web" pipelines) often doesn't populate tag vars consistently.
-    # Keep this job available manually so the pipeline is never empty; the script validates the ref name.
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
+  extends: .cli_npm_publish_rules
 
 cli:node:e2e:dind:
   stage: test
