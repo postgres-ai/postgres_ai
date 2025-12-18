@@ -308,7 +308,7 @@ def test_generate_a003_settings_report(monkeypatch: pytest.MonkeyPatch, generato
     report = generator.generate_a003_settings_report("local", "node-1")
     data = report["results"]["node-1"]["data"]
 
-    assert data["shared_buffers"]["pretty_value"] == "1 MB"
+    assert data["shared_buffers"]["pretty_value"] == "1 MiB"
     assert data["work_mem"]["unit"] == ""
     assert data["work_mem"]["category"] == "Memory"
 
@@ -360,7 +360,7 @@ def test_generate_a007_altered_settings_report(monkeypatch: pytest.MonkeyPatch, 
 
     assert set(data.keys()) == {"work_mem", "autovacuum"}
     assert "postgres_version" in payload["results"]["node-1"]  # postgres_version is at node level
-    assert data["work_mem"]["pretty_value"] == "1 MB"
+    assert data["work_mem"]["pretty_value"] == "1 MiB"
     assert data["autovacuum"]["pretty_value"] == "off"
 
 
@@ -492,7 +492,7 @@ def test_generate_h001_invalid_indexes_report(
     assert db_data["total_size_bytes"] == 2048.0
     entry = db_data["invalid_indexes"][0]
     assert entry["index_name"] == "idx_invalid"
-    assert entry["index_size_pretty"].endswith("KB")
+    assert entry["index_size_pretty"].endswith("KiB")
     assert entry["supports_fk"] is True
 
 
@@ -534,7 +534,7 @@ def test_generate_h002_unused_indexes_report(
     unused = db_data["unused_indexes"][0]
     assert unused["index_definition"].startswith("CREATE INDEX")
     assert unused["idx_scan"] == 0
-    assert unused["index_size_pretty"].endswith("KB")
+    assert unused["index_size_pretty"].endswith("KiB")
     stats_reset = db_data["stats_reset"]
     assert stats_reset["stats_reset_epoch"] == 1700000000.0
     assert stats_reset["postmaster_startup_epoch"] is not None
@@ -578,7 +578,7 @@ def test_generate_h004_redundant_indexes_report(
     redundant = db_data["redundant_indexes"][0]
     assert redundant["index_definition"].startswith("CREATE INDEX")
     assert redundant["index_usage"] == 2.0
-    assert redundant["index_size_pretty"].endswith("KB")
+    assert redundant["index_size_pretty"].endswith("KiB")
     assert redundant["supports_fk"] is True
 
 
@@ -655,6 +655,30 @@ def test_generate_f005_btree_bloat_report(
     monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])
 
     responses = {
+        "pgwatch_pg_stat_all_tables_last_vacuum": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "relname": "t"},
+                    "value": [0, "1700000000"],
+                }
+            ]
+        ),
+        "pgwatch_pg_btree_bloat_real_size_mib": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "2"],
+                }
+            ]
+        ),
+        "pgwatch_pg_btree_bloat_table_size_mib": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "10"],
+                }
+            ]
+        ),
         "pgwatch_pg_btree_bloat_extra_size": prom_result(
             [
                 {
@@ -668,6 +692,14 @@ def test_generate_f005_btree_bloat_report(
                 {
                     "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
                     "value": [0, "20"],
+                }
+            ]
+        ),
+        "pgwatch_pg_btree_bloat_fillfactor": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t", "idxname": "idx"},
+                    "value": [0, "90"],
                 }
             ]
         ),
@@ -694,9 +726,109 @@ def test_generate_f005_btree_bloat_report(
     db_data = payload["results"]["node-1"]["data"]["db1"]
     entry = db_data["bloated_indexes"][0]
 
+    assert entry["real_size"] == 2 * 1024 * 1024
+    assert entry["real_size_pretty"] == "2.00 MiB"
+    assert entry["table_size"] == 10 * 1024 * 1024
+    assert entry["table_size_pretty"] == "10.0 MiB"
+    # Prometheus provides *_mib metrics, but the report output should expose bytes-only fields.
+    assert "real_size_mib" not in entry
+    assert "table_size_mib" not in entry
     assert entry["extra_size"] == 1024.0
     assert entry["bloat_pct"] == 50.0
-    assert entry["bloat_size_pretty"].endswith("KB")
+    assert entry["fillfactor"] == 90.0
+    assert entry["last_vacuum_epoch"] == 1700000000.0
+    assert entry["last_vacuum"] == "2023-11-14T22:13:20+00:00"
+    assert entry["bloat_size_pretty"].endswith("KiB")
+
+
+@pytest.mark.unit
+def test_generate_f004_heap_bloat_report_real_size_uses_real_size_mib(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])
+
+    responses = {
+        "pgwatch_db_size_size_b": prom_result(
+            [
+                {
+                    "metric": {"datname": "db1"},
+                    "value": [0, "1048576"],
+                }
+            ]
+        ),
+        "pgwatch_pg_stat_all_tables_last_vacuum": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "relname": "t"},
+                    "value": [0, "1700000000"],
+                }
+            ]
+        ),
+        "pgwatch_pg_table_bloat_real_size_mib": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t"},
+                    "value": [0, "128"],
+                }
+            ]
+        ),
+        "pgwatch_pg_table_bloat_extra_size": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t"},
+                    "value": [0, "1024"],
+                }
+            ]
+        ),
+        "pgwatch_pg_table_bloat_extra_pct": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t"},
+                    "value": [0, "10"],
+                }
+            ]
+        ),
+        "pgwatch_pg_table_bloat_fillfactor": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t"},
+                    "value": [0, "100"],
+                }
+            ]
+        ),
+        "pgwatch_pg_table_bloat_bloat_size": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t"},
+                    "value": [0, "2048"],
+                }
+            ]
+        ),
+        "pgwatch_pg_table_bloat_bloat_pct": prom_result(
+            [
+                {
+                    "metric": {"schemaname": "public", "tblname": "t"},
+                    "value": [0, "20"],
+                }
+            ]
+        ),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_f004_heap_bloat_report("local", "node-1")
+    db_data = payload["results"]["node-1"]["data"]["db1"]
+    entry = db_data["bloated_tables"][0]
+
+    # Prometheus provides real_size_mib, but the report should expose real_size in bytes.
+    assert entry["real_size"] == 128 * 1024 * 1024
+    assert entry["real_size_pretty"] == "128 MiB"
+    assert entry["fillfactor"] == 100.0
+    assert entry["last_vacuum_epoch"] == 1700000000.0
+    assert entry["last_vacuum"] == "2023-11-14T22:13:20+00:00"
+    assert "real_size_mib" not in entry
+    assert "real_size_bytes" not in entry
 
 
 @pytest.mark.unit
