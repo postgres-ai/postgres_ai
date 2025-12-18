@@ -263,7 +263,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "07. Autovacuum and bloat  -- \"Metrics are collected (part of health check); dashboard – TODO\"",
+  "title": "07. Autovacuum and estimated bloat  -- \"Metrics are collected (part of health check); dashboard – TODO\"",
   "uid": "caffad19-4605-41fe-87f7-484ab67200e8",
   "version": 5
 }

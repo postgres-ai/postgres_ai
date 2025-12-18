@@ -1247,8 +1247,8 @@ metrics:
     statement_timeout_seconds: 15
   pg_btree_bloat:
     description: >
-      This metric analyzes index bloat by calculating the estimated vs actual index pages and sizes.
-      It provides insights into index bloat percentage, real size, extra size due to bloat, and bloat size considering fill factor.
+      This metric analyzes estimated index bloat by calculating the estimated vs actual index pages and sizes.
+      It provides insights into estimated bloat percentage, real size, extra size due to estimated bloat, and estimated bloat size considering fill factor.
       This metric helps administrators identify indexes that may need maintenance like VACUUM FULL or index reorganization.
     sqls:
       11: | 
@@ -1348,6 +1348,7 @@ metrics:
               ) as rows_data_stats
           ) as rows_hdr_pdg_stats
         ) as relation_stats
+        where (bs * relpages::float / (1024 * 1024)) > 1 /* exclude indexes below 1 MiB */
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
@@ -1362,8 +1363,8 @@ metrics:
     statement_timeout_seconds: 15
   pg_table_bloat:
     description: >
-      This metric analyzes table bloat by calculating the estimated vs actual table pages and sizes.
-      It provides insights into table bloat percentage, real size, extra size due to bloat, and bloat size considering fill factor.
+      This metric analyzes estimated table bloat by calculating the estimated vs actual table pages and sizes.
+      It provides insights into estimated bloat percentage, real size, extra size due to estimated bloat, and estimated bloat size considering fill factor.
       This metric helps administrators identify tables that may need maintenance like VACUUM FULL or table reorganization.
     sqls:
       11: |
@@ -1426,6 +1427,7 @@ metrics:
         ) as s3
         -- where not is_na
         --   and tblpages*((pst).free_percent + (pst).dead_tuple_percent)::float4/100 >= 1
+        where (bs * tblpages::float / (1024 * 1024)) > 1 /* exclude tables below 1 MiB */
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
