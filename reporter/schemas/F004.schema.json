@@ -47,6 +47,9 @@
         "extra_pct",
         "bloat_size",
         "bloat_pct",
+        "fillfactor",
+        "last_vacuum",
+        "last_vacuum_epoch",
         "real_size_pretty",
         "extra_size_pretty",
         "bloat_size_pretty"
@@ -59,6 +62,9 @@
         "extra_pct": { "type": "number" },
         "bloat_size": { "type": "number" },
         "bloat_pct": { "type": "number" },
+        "fillfactor": { "type": "number" },
+        "last_vacuum": { "type": ["string", "null"] },
+        "last_vacuum_epoch": { "type": "number" },
         "real_size_pretty": { "type": "string" },
         "extra_size_pretty": { "type": "string" },
         "bloat_size_pretty": { "type": "string" }
