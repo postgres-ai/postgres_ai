@@ -3345,9 +3345,19 @@
             "selected": false,
             "text": "20",
             "value": "20"
+          },
+          {
+            "selected": false,
+            "text": "50",
+            "value": "50"
+          },
+          {
+            "selected": false,
+            "text": "100",
+            "value": "100"
           }
         ],
-        "query": "5,10,15,20",
+        "query": "5,10,15,20,50,100",
         "type": "custom"
       }
     ]
