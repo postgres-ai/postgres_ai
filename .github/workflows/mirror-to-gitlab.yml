@@ -20,7 +20,7 @@ jobs:
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           GITLAB_URL: ${{ vars.GITLAB_URL || 'https://gitlab.com' }}
-          GITLAB_REPO: ${{ vars.GITLAB_REPO || 'postgres-ai/platform-ui' }}
+          GITLAB_REPO: ${{ vars.GITLAB_REPO || 'postgres-ai/postgres_ai' }}
         run: |
           # Configure git
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
