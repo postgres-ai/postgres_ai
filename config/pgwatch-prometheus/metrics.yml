@@ -1079,13 +1079,11 @@ metrics:
   pg_stat_all_indexes:
     sqls:
       11: |
-        select /* pgwatch_generated */
-          current_database() as tag_datname,
-          schemaname as tag_schemaname,
-          relname as tag_relname,
-          indexrelname as tag_indexrelname,
-          idx_scan,
-          idx_tup_read,
+        select schemaname as tag_schemaname, /* pgwatch_generated */
+          relname as tag_relname, 
+          indexrelname as tag_indexrelname, 
+          idx_scan, 
+          idx_tup_read, 
           idx_tup_fetch
         from pg_stat_all_indexes
         order by idx_scan desc
