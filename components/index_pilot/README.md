@@ -1,8 +1,8 @@
 # pg_index_pilot – autonomous index lifecycle management for Postgres
 
-The purpose of `pg_index_pilot` is to provide all tools needed to manage indexes in Postgres in most automated fashion.
+The purpose of `pg_index_pilot` is to provide all tools needed to manage indexes in Postgres in the most automated fashion.
 
-This project is in its very early stage. We start with most boring yet extremely important task: automatic reindexing ("AR") to mitigate index bloat, supporting any types of indexes, and then expand to other areas of index health. And then expand to two other big areas – automated index removal ("AIR") and, finally, automated index creation and optimization ("AIC&O"). It is a part of the Self‑driving Postgres, but can be used independently as a standalone tool.
+This project is in its very early stage. We start with the most boring yet extremely important task: automatic reindexing ("AR") to mitigate index bloat, supporting any types of indexes, and then expand to other areas of index health. And then expand to two other big areas – automated index removal ("AIR") and, finally, automated index creation and optimization ("AIC&O"). It is a part of the Self‑driving Postgres, but can be used independently as a standalone tool.
 
 Docs: [Installation](docs/installation.md) | [Runbook](docs/runbook.md) | [FAQ](docs/faq.md) | [Function reference](docs/function_reference.md) | [Architecture](docs/architecture.md)
 
@@ -87,7 +87,7 @@ The roadmap covers three big areas:
 
 The framework of reindexing is implemented entirely inside Postgres, using:
 - PL/pgSQL functions and stored procedures with transaction control
-- [dblink](https://www.postgresql.org/docs/current/contrib-dblink-function.html) to execute `REINDEX CONCURRENTLY` – because it cannot be inside a transaction block)
+- [dblink](https://www.postgresql.org/docs/current/contrib-dblink-function.html) to execute `REINDEX CONCURRENTLY` (because it cannot be inside a transaction block)
 - [pg_cron](https://github.com/citusdata/pg_cron) for scheduling
 
 ---
@@ -104,9 +104,9 @@ The framework of reindexing is implemented entirely inside Postgres, using:
 - Manages multiple target databases from single control database
 - Uses REINDEX CONCURRENTLY from control database (avoids deadlocks)
 
-## Recommendations 
-- If server resources allow set non-zero `max_parallel_maintenance_workers` (exact amount depends on server parameters).
-- To set `wal_keep_segments` to at least `5000`, unless the WAL archive is used to support streaming replication.
+## Recommendations
+- If server resources allow, set non-zero `max_parallel_maintenance_workers` (exact amount depends on server parameters).
+- Set `wal_keep_segments` to at least `5000`, unless the WAL archive is used to support streaming replication.
 
 ## Installation
 
@@ -371,7 +371,7 @@ Add to crontab:
 - Schedule during low-traffic periods
 - Avoid overlapping with backup or other IO-intensive operations
 - Consider hourly runs for high-write workloads
-- Monitor resource usage during initial runs (first of all, both disk IO and CPU usage)
+- Monitor resource usage during initial runs (especially disk IO and CPU usage)
 
 ## Uninstalling pg_index_pilot
 
