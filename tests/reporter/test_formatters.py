@@ -14,10 +14,10 @@ def fixture_generator() -> PostgresReportGenerator:
     [
         (0, "0 B"),
         (1, "1.00 B"),
-        (1024, "1.00 KB"),
-        (10 * 1024, "10.0 KB"),
-        (1048576, "1.00 MB"),
-        (5 * 1024 ** 3, "5.00 GB"),
+        (1024, "1.00 KiB"),
+        (10 * 1024, "10.0 KiB"),
+        (1048576, "1.00 MiB"),
+        (5 * 1024 ** 3, "5.00 GiB"),
     ],
 )
 def test_format_bytes(generator: PostgresReportGenerator, value: int, expected: str) -> None:
@@ -28,8 +28,8 @@ def test_format_bytes(generator: PostgresReportGenerator, value: int, expected: 
 @pytest.mark.parametrize(
     "name,value,unit,expected",
     [
-        ("shared_buffers", "128", "8kB", "1 MB"),
-        ("work_mem", "512", "", "512 kB"),
+        ("shared_buffers", "128", "8kB", "1 MiB"),
+        ("work_mem", "512", "", "512 KiB"),
         ("log_min_duration_statement", "2000", "ms", "2 s"),
         ("log_min_duration_statement", "500", "ms", "500 ms"),
         ("autovacuum_naptime", "120", "", "2 min"),

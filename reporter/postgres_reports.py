@@ -10,7 +10,6 @@ __version__ = "1.0.2"
 
 import requests
 import json
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
 import argparse
@@ -1006,10 +1005,73 @@ class PostgresReportGenerator:
 
         bloated_indexes_by_db = {}
         for db_name in databases:
+            # Fetch last vacuum timestamp per table (from pg_stat_all_tables) so we can attach it to indexes.
+            last_vacuum_query = (
+                f'last_over_time(pgwatch_pg_stat_all_tables_last_vacuum'
+                f'{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
+            )
+            last_vacuum_result = self.query_instant(last_vacuum_query)
+            last_vacuum_by_table: Dict[str, float] = {}
+            if last_vacuum_result.get('status') == 'success' and last_vacuum_result.get('data', {}).get('result'):
+                for item in last_vacuum_result['data']['result']:
+                    metric = item.get('metric', {})
+                    schema_name = (
+                        metric.get('schemaname')
+                        or metric.get('tag_schemaname')
+                        or 'unknown'
+                    )
+                    # pg_stat_all_tables uses relname, but be defensive in case of label differences.
+                    relname = (
+                        metric.get('relname')
+                        or metric.get('tag_relname')
+                        or metric.get('tblname')
+                        or metric.get('tag_tblname')
+                        or metric.get('table_name')
+                        or 'unknown'
+                    )
+                    key = f"{schema_name}.{relname}"
+                    value = float(item['value'][1]) if item.get('value') else 0
+                    last_vacuum_by_table[key] = value
+
+            # Fetch table sizes from pg_class as a fallback if pg_btree_bloat_table_size_mib is unavailable.
+            table_sizes_query = (
+                f'last_over_time(pgwatch_pg_class_relation_size_bytes'
+                f'{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", relkind="r"}}[3h])'
+            )
+            table_sizes_result = self.query_instant(table_sizes_query)
+            table_size_by_table: Dict[str, float] = {}
+            if table_sizes_result.get('status') == 'success' and table_sizes_result.get('data', {}).get('result'):
+                for item in table_sizes_result['data']['result']:
+                    metric = item.get('metric', {}) or {}
+                    schema_name = (
+                        metric.get('schemaname')
+                        or metric.get('tag_schemaname')
+                        or 'unknown'
+                    )
+                    relname = (
+                        metric.get('relname')
+                        or metric.get('tag_relname')
+                        or metric.get('tblname')
+                        or metric.get('tag_tblname')
+                        or metric.get('table_name')
+                        or 'unknown'
+                    )
+                    key = f"{schema_name}.{relname}"
+                    value = float(item['value'][1]) if item.get('value') else 0
+                    table_size_by_table[key] = value
+
             # Query btree bloat using multiple metrics for each database with last_over_time [1d]
             bloat_queries = {
+                # Backward/forward compatible:
+                # - Older pgwatch configs may expose bytes gauges (real_size, table_size)
+                # - Newer configs expose MiB gauges (real_size_mib, table_size_mib)
+                'real_size_mib': f'last_over_time(pgwatch_pg_btree_bloat_real_size_mib{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'real_size': f'last_over_time(pgwatch_pg_btree_bloat_real_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'table_size_mib': f'last_over_time(pgwatch_pg_btree_bloat_table_size_mib{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'table_size': f'last_over_time(pgwatch_pg_btree_bloat_table_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_size': f'last_over_time(pgwatch_pg_btree_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_pct': f'last_over_time(pgwatch_pg_btree_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'fillfactor': f'last_over_time(pgwatch_pg_btree_bloat_fillfactor{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_size': f'last_over_time(pgwatch_pg_btree_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_pct': f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
             }
@@ -1020,9 +1082,26 @@ class PostgresReportGenerator:
                 result = self.query_instant(query)
                 if result.get('status') == 'success' and result.get('data', {}).get('result'):
                     for item in result['data']['result']:
-                        schema_name = item['metric'].get('schemaname', 'unknown')
-                        table_name = item['metric'].get('tblname', 'unknown')
-                        index_name = item['metric'].get('idxname', 'unknown')
+                        metric = item.get('metric', {}) or {}
+                        schema_name = (
+                            metric.get('schemaname')
+                            or metric.get('tag_schemaname')
+                            or 'unknown'
+                        )
+                        table_name = (
+                            metric.get('tblname')
+                            or metric.get('tag_tblname')
+                            or metric.get('relname')
+                            or metric.get('tag_relname')
+                            or metric.get('table_name')
+                            or 'unknown'
+                        )
+                        index_name = (
+                            metric.get('idxname')
+                            or metric.get('tag_idxname')
+                            or metric.get('index_name')
+                            or 'unknown'
+                        )
 
                         index_key = f"{schema_name}.{table_name}.{index_name}"
 
@@ -1031,10 +1110,16 @@ class PostgresReportGenerator:
                                 "schema_name": schema_name,
                                 "table_name": table_name,
                                 "index_name": index_name,
+                                "real_size_mib": 0,
+                                "table_size_mib": 0,
+                                "real_size": 0,   # bytes (from bytes gauge or derived from MiB)
+                                "table_size": 0,  # bytes (from bytes gauge or derived from MiB or fallback)
                                 "extra_size": 0,
                                 "extra_pct": 0,
+                                "fillfactor": 0,
                                 "bloat_size": 0,
                                 "bloat_pct": 0,
+                                "last_vacuum": 0,
                             }
 
                         value = float(item['value'][1]) if item.get('value') else 0
@@ -1045,6 +1130,30 @@ class PostgresReportGenerator:
             total_bloat_size = 0
 
             for index_data in bloated_indexes.values():
+                key = f"{index_data.get('schema_name', 'unknown')}.{index_data.get('table_name', 'unknown')}"
+                last_vacuum_epoch = float(last_vacuum_by_table.get(key, 0) or 0)
+                index_data['last_vacuum_epoch'] = last_vacuum_epoch
+                index_data['last_vacuum'] = self.format_epoch_timestamp(last_vacuum_epoch)
+                # Sizes are bytes in the report output.
+                # Prefer bytes gauges if present, otherwise convert from MiB.
+                real_size = float(index_data.get('real_size', 0) or 0)
+                if real_size <= 0:
+                    real_size_mib = float(index_data.get('real_size_mib', 0) or 0)
+                    real_size = real_size_mib * 1024 * 1024 if real_size_mib > 0 else 0
+                index_data['real_size'] = int(real_size)
+                index_data.pop('real_size_mib', None)
+
+                table_size = float(index_data.get('table_size', 0) or 0)
+                if table_size <= 0:
+                    table_size_mib = float(index_data.get('table_size_mib', 0) or 0)
+                    table_size = table_size_mib * 1024 * 1024 if table_size_mib > 0 else 0
+                if table_size <= 0:
+                    table_size = float(table_size_by_table.get(key, 0) or 0)
+                index_data['table_size'] = int(table_size)
+                index_data.pop('table_size_mib', None)
+
+                index_data['real_size_pretty'] = self.format_bytes(index_data['real_size'])
+                index_data['table_size_pretty'] = self.format_bytes(index_data['table_size'])
                 index_data['extra_size_pretty'] = self.format_bytes(index_data['extra_size'])
                 index_data['bloat_size_pretty'] = self.format_bytes(index_data['bloat_size'])
 
@@ -1204,7 +1313,7 @@ class PostgresReportGenerator:
             }
 
             # Generate recommendations                            
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             # If parsing fails, return empty analysis
             analysis["estimated_total_memory_usage"] = {}
 
@@ -1278,12 +1387,44 @@ class PostgresReportGenerator:
 
         bloated_tables_by_db = {}
         for db_name in databases:
+            # Fetch last vacuum timestamp per table (from pg_stat_all_tables).
+            # Note: prefer `relname`, but be defensive since other parts of the codebase / configs
+            # sometimes use `tblname`.
+            last_vacuum_query = (
+                f'last_over_time(pgwatch_pg_stat_all_tables_last_vacuum'
+                f'{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
+            )
+            last_vacuum_result = self.query_instant(last_vacuum_query)
+            last_vacuum_by_table: Dict[str, float] = {}
+            if last_vacuum_result.get('status') == 'success' and last_vacuum_result.get('data', {}).get('result'):
+                for item in last_vacuum_result['data']['result']:
+                    metric = item.get('metric', {})
+                    schema_name = (
+                        metric.get('schemaname')
+                        or metric.get('tag_schemaname')
+                        or 'unknown'
+                    )
+                    relname = (
+                        metric.get('relname')
+                        or metric.get('tag_relname')
+                        or metric.get('tblname')
+                        or metric.get('tag_tblname')
+                        or metric.get('table_name')
+                        or 'unknown'
+                    )
+                    key = f"{schema_name}.{relname}"
+                    value = float(item['value'][1]) if item.get('value') else 0
+                    last_vacuum_by_table[key] = value
+
             # Query table bloat using multiple metrics for each database
             # Try with 10h window first, then fall back to instant query
             bloat_queries = {
-                'real_size': f'last_over_time(pgwatch_pg_table_bloat_real_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                # pgwatch publishes "real size" in MiB (real_size_mib). We keep 'real_size' in the
+                # output as a backwards-compatible alias but it is based on MiB.
+                'real_size_mib': f'last_over_time(pgwatch_pg_table_bloat_real_size_mib{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_size': f'last_over_time(pgwatch_pg_table_bloat_extra_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'extra_pct': f'last_over_time(pgwatch_pg_table_bloat_extra_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
+                'fillfactor': f'last_over_time(pgwatch_pg_table_bloat_fillfactor{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_size': f'last_over_time(pgwatch_pg_table_bloat_bloat_size{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
                 'bloat_pct': f'last_over_time(pgwatch_pg_table_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])',
             }
@@ -1302,17 +1443,21 @@ class PostgresReportGenerator:
                             bloated_tables[table_key] = {
                                 "schema_name": schema_name,
                                 "table_name": table_name,
+                                # Stored temporarily as MiB because pgwatch publishes real_size_mib.
+                                # We'll convert it to bytes for report output.
                                 "real_size": 0,
                                 "extra_size": 0,
                                 "extra_pct": 0,
+                                "fillfactor": 0,
                                 "bloat_size": 0,
                                 "bloat_pct": 0,
+                                "last_vacuum": 0,
                             }
 
                         value = float(item['value'][1]) if item.get('value') else 0
                         bloated_tables[table_key][metric_type] = value
                 else:
-                    if metric_type == 'real_size':  # Only log once per database
+                    if metric_type == 'real_size_mib':  # Only log once per database
                         print(f"Warning: F004 - No bloat data for database {db_name}, metric {metric_type}")
 
             # Convert to list and add pretty formatting
@@ -1320,6 +1465,17 @@ class PostgresReportGenerator:
             total_bloat_size = 0
 
             for table_data in bloated_tables.values():
+                # Normalize real size: Prometheus provides it in MiB (real_size_mib), but the report
+                # should expose real_size in bytes.
+                real_size_mib = float(table_data.get('real_size_mib', 0) or 0)
+                table_data['real_size'] = int(real_size_mib * 1024 * 1024)
+                # Remove intermediate field so it's not part of the report payload.
+                table_data.pop('real_size_mib', None)
+                # Attach last vacuum timestamp (epoch seconds) from pg_stat_all_tables.
+                key = f"{table_data.get('schema_name', 'unknown')}.{table_data.get('table_name', 'unknown')}"
+                last_vacuum_epoch = float(last_vacuum_by_table.get(key, 0) or 0)
+                table_data['last_vacuum_epoch'] = last_vacuum_epoch
+                table_data['last_vacuum'] = self.format_epoch_timestamp(last_vacuum_epoch)
                 table_data['real_size_pretty'] = self.format_bytes(table_data['real_size'])
                 table_data['extra_size_pretty'] = self.format_bytes(table_data['extra_size'])
                 table_data['bloat_size_pretty'] = self.format_bytes(table_data['bloat_size'])
@@ -1714,7 +1870,8 @@ class PostgresReportGenerator:
         if bytes_value == 0:
             return "0 B"
 
-        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        # Use IEC binary prefixes because we divide by 1024.
+        units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
         unit_index = 0
         value = float(bytes_value)
 
@@ -1728,6 +1885,21 @@ class PostgresReportGenerator:
             return f"{value:.1f} {units[unit_index]}"
         else:
             return f"{value:.2f} {units[unit_index]}"
+
+    def format_epoch_timestamp(self, epoch_value: float) -> str | None:
+        """Format epoch seconds as a UTC timestamptz string (ISO-8601, like `timestamptz` in reports)."""
+        try:
+            v = float(epoch_value or 0)
+        except (TypeError, ValueError):
+            return None
+
+        if v <= 0:
+            return None
+
+        try:
+            return datetime.fromtimestamp(v, tz=timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
 
     def format_report_data(self, check_id: str, data: Dict[str, Any], host: str = "target-database", 
                           all_hosts: Dict[str, List[str]] = None,
@@ -1909,9 +2081,9 @@ class PostgresReportGenerator:
                 if unit == "8kB":
                     val = int(value) * 8
                     if val >= 1024 and val % 1024 == 0:
-                        return f"{val // 1024} MB"
+                        return f"{val // 1024} MiB"
                     else:
-                        return f"{val} kB"
+                        return f"{val} KiB"
                 elif unit == "ms":
                     val = int(value)
                     if val >= 1000 and val % 1000 == 0:
@@ -1934,9 +2106,9 @@ class PostgresReportGenerator:
                                 'autovacuum_work_mem', 'logical_decoding_work_mem', 'temp_buffers', 'wal_buffers']:
                 val = int(value)
                 if val >= 1024:
-                    return f"{val // 1024} MB"
+                    return f"{val // 1024} MiB"
                 else:
-                    return f"{val} kB"
+                    return f"{val} KiB"
             elif setting_name in ['log_min_duration_statement', 'idle_in_transaction_session_timeout', 'lock_timeout',
                                   'statement_timeout', 'autovacuum_vacuum_cost_delay', 'vacuum_cost_delay']:
                 val = int(value)
@@ -1957,9 +2129,9 @@ class PostgresReportGenerator:
             elif setting_name in ['max_wal_size', 'min_wal_size']:
                 val = int(value)
                 if val >= 1024:
-                    return f"{val // 1024} GB"
+                    return f"{val // 1024} GiB"
                 else:
-                    return f"{val} MB"
+                    return f"{val} MiB"
             elif setting_name in ['checkpoint_completion_target']:
                 return f"{float(value):.2f}"
             elif setting_name in ['hash_mem_multiplier']:
@@ -1971,9 +2143,9 @@ class PostgresReportGenerator:
             elif setting_name in ['max_stack_depth']:
                 val = int(value)
                 if val >= 1024:
-                    return f"{val // 1024} MB"
+                    return f"{val // 1024} MiB"
                 else:
-                    return f"{val} kB"
+                    return f"{val} KiB"
             elif setting_name in ['autovacuum_analyze_scale_factor', 'autovacuum_vacuum_scale_factor',
                                   'autovacuum_vacuum_insert_scale_factor']:
                 return f"{float(value) * 100:.1f}%"

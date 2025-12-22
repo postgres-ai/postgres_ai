@@ -16,7 +16,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -151,9 +151,15 @@ program
       "  If auto-generated, it is printed only on TTY by default.",
       "  To print it in non-interactive mode: --print-password",
       "",
+      "SSL connection (sslmode=prefer behavior):",
+      "  Tries SSL first, falls back to non-SSL if server doesn't support it.",
+      "  To force SSL: PGSSLMODE=require or ?sslmode=require in URL",
+      "  To disable SSL: PGSSLMODE=disable or ?sslmode=disable in URL",
+      "",
       "Environment variables (libpq standard):",
       "  PGHOST, PGPORT, PGUSER, PGDATABASE  — connection defaults",
       "  PGPASSWORD                          — admin password",
+      "  PGSSLMODE                           — SSL mode (disable, require, verify-full)",
       "  PGAI_MON_PASSWORD                   — monitoring password",
       "",
       "Inspect SQL without applying changes:",
@@ -265,8 +271,8 @@ program
     // Use native pg client instead of requiring psql to be installed
     let client: Client | undefined;
     try {
-      client = new Client(adminConn.clientConfig);
-      await client.connect();
+      const connResult = await connectWithSslFallback(Client, adminConn);
+      client = connResult.client;
 
       const dbRes = await client.query("select current_database() as db");
       const database = dbRes.rows?.[0]?.db;

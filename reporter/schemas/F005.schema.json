@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "F005 report schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "checkId": { "const": "F005" },
+    "checkTitle": { "const": "Autovacuum: index bloat (estimated)" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "bloatedIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "table_name",
+        "index_name",
+        "real_size",
+        "table_size",
+        "extra_size",
+        "extra_pct",
+        "bloat_size",
+        "bloat_pct",
+        "fillfactor",
+        "last_vacuum",
+        "last_vacuum_epoch",
+        "real_size_pretty",
+        "table_size_pretty",
+        "extra_size_pretty",
+        "bloat_size_pretty"
+      ],
+      "properties": {
+        "schema_name": { "type": "string" },
+        "table_name": { "type": "string" },
+        "index_name": { "type": "string" },
+        "real_size": { "type": "number" },
+        "table_size": { "type": "number" },
+        "extra_size": { "type": "number" },
+        "extra_pct": { "type": "number" },
+        "bloat_size": { "type": "number" },
+        "bloat_pct": { "type": "number" },
+        "fillfactor": { "type": "number" },
+        "last_vacuum": { "type": ["string", "null"] },
+        "last_vacuum_epoch": { "type": "number" },
+        "real_size_pretty": { "type": "string" },
+        "table_size_pretty": { "type": "string" },
+        "extra_size_pretty": { "type": "string" },
+        "bloat_size_pretty": { "type": "string" }
+      }
+    },
+    "dbEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bloated_indexes",
+        "total_count",
+        "total_bloat_size_bytes",
+        "total_bloat_size_pretty",
+        "database_size_bytes",
+        "database_size_pretty"
+      ],
+      "properties": {
+        "bloated_indexes": { "type": "array", "items": { "$ref": "#/$defs/bloatedIndex" } },
+        "total_count": { "type": "integer" },
+        "total_bloat_size_bytes": { "type": "number" },
+        "total_bloat_size_pretty": { "type": "string" },
+        "database_size_bytes": { "type": "number" },
+        "database_size_pretty": { "type": "string" }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/dbEntry" }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}
+
+

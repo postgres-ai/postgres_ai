@@ -1110,8 +1110,9 @@ metrics:
           n_tup_hot_upd,
           n_live_tup,
           n_dead_tup,
-          greatest(last_autovacuum, last_vacuum, '1970-01-01Z') as last_vacuum,
-          greatest(last_autoanalyze, last_analyze, '1970-01-01Z') as last_analyze,
+          -- Prometheus gauges must be numeric. Export timestamps as epoch seconds.
+          extract(epoch from greatest(last_autovacuum, last_vacuum, '1970-01-01Z'))::int8 as last_vacuum,
+          extract(epoch from greatest(last_autoanalyze, last_analyze, '1970-01-01Z'))::int8 as last_analyze,
           (vacuum_count + autovacuum_count) as vacuum_count,
           (analyze_count + autoanalyze_count) as analyze_count
         from
@@ -1247,12 +1248,15 @@ metrics:
     statement_timeout_seconds: 15
   pg_btree_bloat:
     description: >
-      This metric analyzes index bloat by calculating the estimated vs actual index pages and sizes.
-      It provides insights into index bloat percentage, real size, extra size due to bloat, and bloat size considering fill factor.
+      This metric analyzes estimated index bloat by calculating the estimated vs actual index pages and sizes.
+      It provides insights into estimated bloat percentage, real size, extra size due to estimated bloat, and estimated bloat size considering fill factor.
       This metric helps administrators identify indexes that may need maintenance like VACUUM FULL or index reorganization.
     sqls:
       11: | 
-        select current_database() as tag_datname, nspname as tag_schemaname, tblname as tag_tblname, idxname as tag_idxname, (bs*(relpages)/(1024*1024))::float as real_size_mib, /* pgwatch_generated */
+        select /* pgwatch_generated */
+          current_database() as tag_datname, nspname as tag_schemaname, tblname as tag_tblname, idxname as tag_idxname,
+          (bs*(relpages)/(1024*1024))::float as real_size_mib,
+          (pg_relation_size(tbloid)/(1024*1024))::float as table_size_mib,
           (bs*(relpages-est_pages))::float as extra_size,
           100 * (relpages-est_pages)::float / relpages as extra_pct,
           fillfactor,
@@ -1270,10 +1274,10 @@ metrics:
               coalesce(1 +
                 ceil(reltuples/floor((bs-pageopqdata-pagehdr)*fillfactor/(100*(4+nulldatahdrwidth)::float))), 0
               ) as est_pages_ff,
-              bs, nspname, tblname, idxname, relpages, fillfactor, is_na
+              bs, nspname, tblname, idxname, relpages, fillfactor, is_na, tbloid
               -- , pgstatindex(idxoid) as pst, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples -- (DEBUG INFO)
           from (
-              select maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor,
+              select maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor, tbloid,
                     ( index_tuple_hdr_bm +
                         maxalign - case -- Add padding to the index tuple header to align on MAXALIGN
                           when index_tuple_hdr_bm%maxalign = 0 then maxalign
@@ -1287,7 +1291,7 @@ metrics:
                     )::numeric as nulldatahdrwidth, pagehdr, pageopqdata, is_na
                     -- , index_tuple_hdr_bm, nulldatawidth -- (DEBUG INFO)
               from (
-                  select n.nspname, i.tblname, i.idxname, i.reltuples, i.relpages,
+                  select n.nspname, i.tblname, i.idxname, i.reltuples, i.relpages, i.tbloid,
                       i.idxoid, i.fillfactor, current_setting('block_size')::numeric as bs,
                       case -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
                         when version() ~ 'mingw32' or version() ~ '64-bit|x86_64|ppc64|ia64|amd64' then 8
@@ -1306,7 +1310,8 @@ metrics:
                       sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 1024)) as nulldatawidth,
                       (max( case when i.atttypid = 'pg_catalog.name'::regtype then 1 else 0 end ) > 0)::int as is_na
                   from (
-                      select ct.relname as tblname, ct.relnamespace, ic.idxname, ic.attpos, ic.indkey, ic.indkey[ic.attpos], ic.reltuples, ic.relpages, ic.tbloid, ic.idxoid, ic.fillfactor,
+                      select ct.relname as tblname, ct.relnamespace,
+                          ic.idxname, ic.attpos, ic.indkey, ic.indkey[ic.attpos], ic.reltuples, ic.relpages, ic.tbloid, ic.idxoid, ic.fillfactor,
                           coalesce(a1.attnum, a2.attnum) as attnum, coalesce(a1.attname, a2.attname) as attname, coalesce(a1.atttypid, a2.atttypid) as atttypid,
                           case when a1.attnum is null
                           then ic.idxname
@@ -1344,14 +1349,16 @@ metrics:
                                 join public.pg_statistic s on s.schemaname = n.nspname
                                       and s.tablename = i.attrelname
                                       and s.attname = i.attname
-                    group by 1,2,3,4,5,6,7,8,9,10,11
+                    group by 1,2,3,4,5,6,7,8,9,10,11,12
               ) as rows_data_stats
           ) as rows_hdr_pdg_stats
         ) as relation_stats
+        where (bs * relpages::float / (1024 * 1024)) > 1 /* exclude indexes below 1 MiB */
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
       - real_size_mib
+      - table_size_mib
       - extra_size
       - extra_pct
       - fillfactor
@@ -1362,8 +1369,8 @@ metrics:
     statement_timeout_seconds: 15
   pg_table_bloat:
     description: >
-      This metric analyzes table bloat by calculating the estimated vs actual table pages and sizes.
-      It provides insights into table bloat percentage, real size, extra size due to bloat, and bloat size considering fill factor.
+      This metric analyzes estimated table bloat by calculating the estimated vs actual table pages and sizes.
+      It provides insights into estimated bloat percentage, real size, extra size due to estimated bloat, and estimated bloat size considering fill factor.
       This metric helps administrators identify tables that may need maintenance like VACUUM FULL or table reorganization.
     sqls:
       11: |
@@ -1426,6 +1433,7 @@ metrics:
         ) as s3
         -- where not is_na
         --   and tblpages*((pst).free_percent + (pst).dead_tuple_percent)::float4/100 >= 1
+        where (bs * tblpages::float / (1024 * 1024)) > 1 /* exclude tables below 1 MiB */
         order by is_na = 0 desc, bloat_pct desc
         limit 1000
     gauges:
