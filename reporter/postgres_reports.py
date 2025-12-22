@@ -133,12 +133,12 @@ class PostgresReportGenerator:
         
         return index_definitions
 
-    def get_queryid_queries_from_sink(self, query_text_limit: int = 5000) -> Dict[str, Dict[str, str]]:
+    def get_queryid_queries_from_sink(self, query_text_limit: int = 1000) -> Dict[str, Dict[str, str]]:
         """
         Get queryid-to-query text mappings from the Postgres sink database.
-        
+
         Args:
-            query_text_limit: Maximum number of characters for each query text (default: 5000)
+            query_text_limit: Maximum number of characters for each query text (default: 1000)
         
         Returns:
             Dictionary with database names as keys, containing queryid->query mappings
@@ -3505,19 +3505,28 @@ class PostgresReportGenerator:
 
         return reports
 
-    def generate_queries_json(self, query_text_limit: int = 5000) -> Dict[str, Dict[str, str]]:
+    def generate_queries_json(self, query_text_limit: int = 1000) -> Dict[str, List[str]]:
         """
-        Generate JSON with queryid-to-query text mappings.
-        This is not a letter-report, it's a supplementary file with query texts.
+        DEPRECATED: This method is no longer used.
+        Query information is now only included in individual query_{queryid}.json files.
         
+        Generate JSON with queryid lists per database.
+
         Args:
-            query_text_limit: Maximum number of characters for each query text (default: 5000)
+            query_text_limit: Not used anymore, kept for backward compatibility
         
         Returns:
-            Dictionary with database names as keys, containing queryid->query mappings
+            Dictionary with database names as keys, containing lists of queryids
         """
-        print("Generating queries JSON (queryid to query text mappings)...")
-        return self.get_queryid_queries_from_sink(query_text_limit)
+        print("DEPRECATED: generate_queries_json is no longer used")
+        queries_with_text = self.get_queryid_queries_from_sink(query_text_limit)
+        
+        # Convert from {db: {queryid: text}} to {db: [queryid, ...]}
+        queries_only = {}
+        for db_name, queries in queries_with_text.items():
+            queries_only[db_name] = list(queries.keys())
+        
+        return queries_only
 
     def extract_queryids_from_reports(self, reports: Dict[str, Any]) -> Dict[str, set]:
         """
@@ -3702,12 +3711,12 @@ class PostgresReportGenerator:
 
     def generate_per_query_jsons(self, reports: Dict[str, Any], cluster: str,
                                  node_name: str = None,
-                                 query_text_limit: int = 5000,
+                                 query_text_limit: int = 1000,
                                  hours: int = 24) -> List[Dict[str, Any]]:
         """
         Generate individual JSON files for each query mentioned in hourly reports.
         Fetches all metrics directly from Prometheus (matching Dashboard 3).
-        
+
         Args:
             reports: Dictionary of generated reports keyed by check_id
             cluster: Cluster name
@@ -4155,22 +4164,10 @@ def main():
                     if not args.no_upload:
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
                 
-                # Generate queries JSON (queryid to query text mappings)
-                # This is not a letter-report, named as <project_name>_queries.json
-                queries_data = generator.generate_queries_json(query_text_limit=5000)
-                if queries_data:
-                    project_name = args.project_name if args.project_name != 'project-name' else cluster
-                    queries_filename = f"{project_name}_queries.json"
-                    with open(queries_filename, "w") as f:
-                        json.dump(queries_data, f, indent=2)
-                    print(f"Generated queries file: {queries_filename}")
-                    if not args.no_upload:
-                        generator.upload_report_file(args.api_url, args.token, report_id, queries_filename)
-                
                 # Generate per-query JSON files for queries mentioned in hourly reports
                 # Each queryid gets its own file with all metrics from pg_stat_statements
                 query_files = generator.generate_per_query_jsons(
-                    reports, cluster, node_name=args.node_name, query_text_limit=5000, hours=24
+                    reports, cluster, node_name=args.node_name, query_text_limit=1000, hours=24
                 )
                 for query_file in query_files:
                     filename = query_file['filename']
