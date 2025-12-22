@@ -355,35 +355,27 @@ class GrafanaMetricsTest:
             self.errors.append(f"Grafana dashboards check failed: {e}")
             return False
 
-    def verify_dashboard_query(self) -> bool:
-        """Test that a dashboard panel query returns data via Grafana."""
-        self.log("Testing dashboard query execution via Grafana...")
-
-        # Query the prometheus datasource through Grafana's proxy
+    def get_prometheus_datasource_uid(self) -> str | None:
+        """Get the UID of the Prometheus datasource."""
         try:
-            # First, get the prometheus datasource ID
             response = requests.get(
                 f"{self.grafana_url}/api/datasources",
                 auth=self.grafana_auth,
                 timeout=10,
             )
             response.raise_for_status()
-            datasources = response.json()
-
-            prometheus_ds = None
-            for ds in datasources:
+            for ds in response.json():
                 if ds.get("type") == "prometheus":
-                    prometheus_ds = ds
-                    break
+                    return ds.get("uid")
+        except Exception:
+            pass
+        return None
 
-            if not prometheus_ds:
-                self.log("No Prometheus datasource for query test", "warn")
-                return True  # Not a hard failure
-
-            ds_uid = prometheus_ds.get("uid")
-
-            # Query through Grafana's datasource proxy
-            query = f'pgwatch_db_size_size_b{{datname="{self.test_dbname}"}}'
+    def execute_grafana_query(
+        self, expr: str, ds_uid: str, instant: bool = True
+    ) -> list[dict] | None:
+        """Execute a PromQL query through Grafana and return results."""
+        try:
             response = requests.post(
                 f"{self.grafana_url}/api/ds/query",
                 auth=self.grafana_auth,
@@ -392,8 +384,11 @@ class GrafanaMetricsTest:
                         {
                             "refId": "A",
                             "datasource": {"uid": ds_uid, "type": "prometheus"},
-                            "expr": query,
-                            "instant": True,
+                            "expr": expr,
+                            "instant": instant,
+                            "range": not instant,
+                            "intervalMs": 15000,
+                            "maxDataPoints": 100,
                         }
                     ],
                     "from": "now-5m",
@@ -403,21 +398,158 @@ class GrafanaMetricsTest:
             )
             response.raise_for_status()
             result = response.json()
-
-            # Check if we got results
             frames = result.get("results", {}).get("A", {}).get("frames", [])
-            if frames:
-                self.log("Grafana datasource proxy query returned data", "ok")
-                return True
-            else:
-                self.log("Grafana query returned no data", "warn")
-                self.warnings.append("Grafana proxy query returned empty results")
-                return True
-
+            return frames
         except Exception as e:
-            self.log(f"Dashboard query test failed: {e}", "warn")
-            self.warnings.append(f"Dashboard query test failed: {e}")
+            self.log(f"Query execution failed: {e}", "warn")
+            return None
+
+    def extract_numeric_values_from_frames(self, frames: list[dict]) -> list[float]:
+        """Extract numeric values from Grafana response frames."""
+        values = []
+        for frame in frames:
+            schema = frame.get("schema", {})
+            data = frame.get("data", {})
+
+            # Get field values
+            field_values = data.get("values", [])
+            fields = schema.get("fields", [])
+
+            for i, field in enumerate(fields):
+                field_type = field.get("type", "")
+                if field_type == "number" and i < len(field_values):
+                    for v in field_values[i]:
+                        if v is not None:
+                            try:
+                                values.append(float(v))
+                            except (ValueError, TypeError):
+                                pass
+        return values
+
+    def verify_dashboard_panels_data(self) -> bool:
+        """
+        Verify actual dashboard panels return non-empty, non-zero data.
+
+        This fetches real dashboard panel queries and executes them through
+        Grafana to ensure the visualizations would show actual data.
+        """
+        self.log("Verifying dashboard panels display real data...")
+
+        ds_uid = self.get_prometheus_datasource_uid()
+        if not ds_uid:
+            self.log("No Prometheus datasource found", "error")
+            self.errors.append("Cannot verify panels: no Prometheus datasource")
+            return False
+
+        # Define panel queries that should return non-zero data
+        # These are actual queries used in the dashboards with variables substituted
+        panel_queries = [
+            {
+                "name": "Database Size",
+                "expr": f'pgwatch_db_size_size_b{{cluster="{self.cluster_name}", node_name="{self.node_name}", datname="{self.test_dbname}"}}',
+                "min_value": 1_000_000,  # At least 1MB
+                "description": "Database size in bytes",
+            },
+            {
+                "name": "Transaction Commits",
+                "expr": f'pgwatch_db_stats_xact_commit{{cluster="{self.cluster_name}", node_name="{self.node_name}", datname="{self.test_dbname}"}}',
+                "min_value": 1,  # At least 1 commit
+                "description": "Total transaction commits",
+            },
+            {
+                "name": "Tuples Returned",
+                "expr": f'pgwatch_db_stats_tup_returned{{cluster="{self.cluster_name}", node_name="{self.node_name}", datname="{self.test_dbname}"}}',
+                "min_value": 1,  # At least 1 tuple
+                "description": "Total tuples returned by queries",
+            },
+            {
+                "name": "Tuples Inserted",
+                "expr": f'pgwatch_db_stats_tup_inserted{{cluster="{self.cluster_name}", node_name="{self.node_name}", datname="{self.test_dbname}"}}',
+                "min_value": 1,  # At least 1 insert
+                "description": "Total tuples inserted",
+            },
+        ]
+
+        panels_ok = 0
+        panels_failed = 0
+
+        for panel in panel_queries:
+            name = panel["name"]
+            expr = panel["expr"]
+            min_value = panel["min_value"]
+
+            frames = self.execute_grafana_query(expr, ds_uid, instant=True)
+
+            if frames is None:
+                self.log(f"Panel '{name}': query failed", "error")
+                panels_failed += 1
+                continue
+
+            if not frames:
+                self.log(f"Panel '{name}': no data returned (empty)", "error")
+                self.errors.append(f"Panel '{name}' returned no data")
+                panels_failed += 1
+                continue
+
+            # Extract numeric values
+            values = self.extract_numeric_values_from_frames(frames)
+
+            if not values:
+                self.log(f"Panel '{name}': no numeric values found", "error")
+                self.errors.append(f"Panel '{name}' has no numeric values")
+                panels_failed += 1
+                continue
+
+            max_value = max(values)
+            if max_value < min_value:
+                self.log(
+                    f"Panel '{name}': value {max_value} below minimum {min_value}",
+                    "error",
+                )
+                self.errors.append(
+                    f"Panel '{name}' value too low: {max_value} < {min_value}"
+                )
+                panels_failed += 1
+                continue
+
+            # Format value for display
+            if max_value >= 1_000_000:
+                display_value = f"{max_value / 1_000_000:.2f} MB"
+            elif max_value >= 1_000:
+                display_value = f"{max_value / 1_000:.1f} K"
+            else:
+                display_value = f"{max_value:.0f}"
+
+            self.log(f"Panel '{name}': {display_value}", "ok")
+            panels_ok += 1
+
+        self.log(f"Panel verification: {panels_ok} OK, {panels_failed} failed")
+
+        if panels_failed > 0:
+            return False
+
+        return True
+
+    def verify_dashboard_query(self) -> bool:
+        """Test that a dashboard panel query returns data via Grafana."""
+        self.log("Testing dashboard query execution via Grafana...")
+
+        ds_uid = self.get_prometheus_datasource_uid()
+        if not ds_uid:
+            self.log("No Prometheus datasource for query test", "warn")
             return True  # Not a hard failure
+
+        # Query through Grafana's datasource proxy
+        query = f'pgwatch_db_size_size_b{{datname="{self.test_dbname}"}}'
+        frames = self.execute_grafana_query(query, ds_uid, instant=True)
+
+        if frames:
+            self.log("Grafana datasource proxy query returned data", "ok")
+            return True
+        else:
+            self.log("Grafana query returned no data", "warn")
+            self.warnings.append("Grafana proxy query returned empty results")
+            return True
 
     def cleanup(self):
         """Clean up test resources."""
@@ -463,12 +595,16 @@ class GrafanaMetricsTest:
             dash_ok = self.verify_grafana_dashboards()
             query_ok = self.verify_dashboard_query()
 
+            # Verify dashboard panels show real data (not zeros/empty)
+            print("\n--- Dashboard Panel Data Verification ---")
+            panels_ok = self.verify_dashboard_panels_data()
+
             # Summary
             print("\n" + "=" * 60)
             print("Test Summary")
             print("=" * 60)
 
-            all_passed = all([db_size_ok, tx_ok, tuple_ok, ds_ok, dash_ok, query_ok])
+            all_passed = all([db_size_ok, tx_ok, tuple_ok, ds_ok, dash_ok, query_ok, panels_ok])
 
             if self.warnings:
                 print(f"\nWarnings ({len(self.warnings)}):")
