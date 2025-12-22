@@ -326,6 +326,81 @@ cli:node:full:dind:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
   allow_failure: false
 
+grafana:e2e:dind:
+  stage: test
+  image: python:3.11-alpine
+  services:
+    - name: docker:24-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.43"
+    GIT_STRATEGY: fetch
+    # Test configuration
+    TARGET_DB_URL: "postgresql://postgres:postgres@localhost:55432/target_database"
+    PROMETHEUS_URL: "http://localhost:59090"
+    GRAFANA_URL: "http://localhost:3000"
+    GRAFANA_USER: "monitor"
+    GRAFANA_PASSWORD: "demo"
+    COLLECTION_WAIT_SECONDS: "120"
+  before_script:
+    - apk add --no-cache bash curl docker-cli docker-compose postgresql-client
+    - pip install --quiet psycopg requests
+    - docker version
+  script:
+    - |
+      set -euo pipefail
+      echo "=== Starting monitoring stack ==="
+
+      # Use docker compose
+      if command -v docker compose >/dev/null 2>&1; then
+        COMPOSE_CMD="docker compose"
+      else
+        COMPOSE_CMD="docker-compose"
+      fi
+
+      # Start core services
+      $COMPOSE_CMD up -d target-db sink-postgres sink-prometheus pgwatch-prometheus grafana
+      sleep 15
+
+      # Wait for services
+      echo "Waiting for services to be ready..."
+      timeout=120
+      elapsed=0
+      while [ $elapsed -lt $timeout ]; do
+        if curl -sf http://localhost:59090/api/v1/status/config >/dev/null 2>&1 && \
+           curl -sf -u monitor:demo http://localhost:3000/api/health >/dev/null 2>&1; then
+          echo "Services are ready"
+          break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+        echo "  Waiting... ($elapsed/${timeout}s)"
+      done
+
+      # Wait for initial metric collection
+      echo "Waiting 90s for initial metric collection..."
+      sleep 90
+
+      # Run the e2e tests
+      echo ""
+      echo "=== Running Grafana e2e tests ==="
+      python3 tests/grafana/test_grafana_metrics.py \
+        --target-db-url "$TARGET_DB_URL" \
+        --prometheus-url "$PROMETHEUS_URL" \
+        --grafana-url "$GRAFANA_URL" \
+        --grafana-user "$GRAFANA_USER" \
+        --grafana-password "$GRAFANA_PASSWORD" \
+        --collection-wait 60
+  after_script:
+    - docker ps -a || true
+    - docker compose logs pgwatch-prometheus 2>/dev/null | tail -50 || true
+    - docker compose down -v || true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
+  allow_failure: false
+
 cli:node:integration:
   stage: test
   image: node:20-alpine
