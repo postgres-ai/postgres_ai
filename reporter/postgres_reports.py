@@ -12,6 +12,7 @@ import requests
 import json
 import time
 import re
+import gc
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Tuple
 import argparse
@@ -90,9 +91,8 @@ class PostgresReportGenerator:
         index_definitions = {}
         
         try:
-            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                # Query the index_definitions table for the most recent data
-                # 
+            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor, name='index_defs_cursor') as cursor:
+                # Use server-side cursor for memory efficiency with large result sets
                 # PERFORMANCE NOTE: This query will use a Seq Scan on index_definitions table.
                 # This is acceptable because:
                 # 1. This method is called VERY rarely (only during report generation)
@@ -108,6 +108,7 @@ class PostgresReportGenerator:
                             data->>'index_definition' as index_definition,
                             dbname
                         from public.index_definitions
+                        where dbname = %s
                         order by data->>'indexrelname', time desc
                     """
                     cursor.execute(query, (db_name,))
@@ -122,7 +123,8 @@ class PostgresReportGenerator:
                     """
                     cursor.execute(query)
                 
-                for row in cursor.fetchall():
+                # Use iterator to fetch rows in batches instead of loading all at once
+                for row in cursor:
                     if row['indexrelname']:
                         # Include database name in the key to avoid collisions across databases
                         key = f"{row['dbname']}.{row['indexrelname']}" if not db_name else row['indexrelname']
@@ -133,12 +135,13 @@ class PostgresReportGenerator:
         
         return index_definitions
 
-    def get_queryid_queries_from_sink(self, query_text_limit: int = 1000) -> Dict[str, Dict[str, str]]:
+    def get_queryid_queries_from_sink(self, query_text_limit: int = 1000, db_names: List[str] = None) -> Dict[str, Dict[str, str]]:
         """
         Get queryid-to-query text mappings from the Postgres sink database.
 
         Args:
             query_text_limit: Maximum number of characters for each query text (default: 1000)
+            db_names: Optional list of database names to filter results (default: fetch all)
         
         Returns:
             Dictionary with database names as keys, containing queryid->query mappings
@@ -150,23 +153,40 @@ class PostgresReportGenerator:
         queries_by_db: Dict[str, Dict[str, str]] = {}
         
         try:
-            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            # Use server-side cursor for memory efficiency with large result sets
+            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor, name='queryid_cursor') as cursor:
                 # Query unique queryid-to-query mappings
                 # The pgss_queryid_queries table stores deduplicated queryid->query mappings
-                query = """
-                    select distinct on (dbname, data->>'queryid')
-                        dbname,
-                        data->>'queryid' as queryid,
-                        data->>'query' as query
-                    from public.pgss_queryid_queries
-                    where
-                        data->>'queryid' is not null
-                        and data->>'query' is not null
-                    order by dbname, data->>'queryid', time desc
-                """
-                cursor.execute(query)
+                if db_names:
+                    query = """
+                        select distinct on (dbname, data->>'queryid')
+                            dbname,
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        from public.pgss_queryid_queries
+                        where
+                            dbname = ANY(%s)
+                            and data->>'queryid' is not null
+                            and data->>'query' is not null
+                        order by dbname, data->>'queryid', time desc
+                    """
+                    cursor.execute(query, (db_names,))
+                else:
+                    query = """
+                        select distinct on (dbname, data->>'queryid')
+                            dbname,
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        from public.pgss_queryid_queries
+                        where
+                            data->>'queryid' is not null
+                            and data->>'query' is not null
+                        order by dbname, data->>'queryid', time desc
+                    """
+                    cursor.execute(query)
                 
-                for row in cursor.fetchall():
+                # Use iterator to fetch rows in batches instead of loading all at once
+                for row in cursor:
                     db_name = row['dbname']
                     queryid = row['queryid']
                     query_text = row['query']
@@ -3741,8 +3761,10 @@ class PostgresReportGenerator:
             nodes = self.get_all_nodes(cluster)
             node_name = nodes.get('primary') or 'node-01'
         
-        # Get query texts from sink
-        query_texts = self.get_queryid_queries_from_sink(query_text_limit)
+        # Get query texts from sink - only for databases found in reports (memory optimization)
+        db_names_list = list(queryids_by_db.keys())
+        print(f"Fetching query texts for {len(db_names_list)} database(s): {db_names_list}")
+        query_texts = self.get_queryid_queries_from_sink(query_text_limit, db_names=db_names_list)
         
         query_files = []
         total_queries = sum(len(qids) for qids in queryids_by_db.values())
@@ -3780,6 +3802,14 @@ class PostgresReportGenerator:
                     "filename": filename,
                     "data": query_data
                 })
+                
+                # Free memory after each query to reduce peak memory usage
+                if processed % 10 == 0:
+                    gc.collect()
+        
+        # Final cleanup
+        del query_texts
+        gc.collect()
         
         print(f"Generated {len(query_files)} per-query JSON files")
         return query_files
@@ -4164,6 +4194,9 @@ def main():
                     if not args.no_upload:
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
                 
+                # Free memory after writing reports to disk
+                gc.collect()
+                
                 # Generate per-query JSON files for queries mentioned in hourly reports
                 # Each queryid gets its own file with all metrics from pg_stat_statements
                 query_files = generator.generate_per_query_jsons(
@@ -4176,6 +4209,10 @@ def main():
                     print(f"Generated query file: {filename}")
                     if not args.no_upload:
                         generator.upload_report_file(args.api_url, args.token, report_id, filename)
+                
+                # Free memory after writing per-query files
+                del query_files
+                gc.collect()
                 
                 if args.output == '-':
                     pass
@@ -4252,6 +4289,11 @@ def main():
                         project_name = args.project_name if args.project_name != 'project-name' else cluster
                         report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+            
+            # Free memory after processing each cluster
+            print(f"Freeing memory after processing cluster {cluster}...")
+            gc.collect()
+            
     except Exception as e:
         print(f"Error generating reports: {e}")
         raise e
