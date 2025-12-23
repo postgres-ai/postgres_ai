@@ -4118,11 +4118,15 @@ class PostgresReportGenerator:
             print(f"Created report ID: {report_id}")
             return int(report_id)
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
+            status = e.response.status_code if hasattr(e, 'response') else 'unknown'
+            if status == 404:
                 print(f"Warning: API endpoint not available (404). Reports will be saved locally only.")
-                print(f"Use --no-upload flag to suppress this warning.")
+            elif status == 400:
+                print(f"Request data: {len(json.dumps(request_data))} chars")
+                print(f"Warning: API rejected request (400 Bad Request). Reports will be saved locally only.")
+                print(f"This may indicate authentication issues or API format changes.")
             else:
-                print(f"Warning: Failed to create report: {e}")
+                print(f"Warning: Failed to create report (HTTP {status}): {e}")
             return None
         except Exception as e:
             print(f"Warning: Failed to create report: {e}")
@@ -4159,12 +4163,15 @@ class PostgresReportGenerator:
                 raise Exception(response["message"])
             print(f"  Uploaded: {file_name}")
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
+            status = e.response.status_code if hasattr(e, 'response') else 'unknown'
+            if status == 404:
                 print(f"  Warning: Upload endpoint not available (404). File saved locally: {path}")
-                print(f"  Use --no-upload flag to skip API uploads.")
+            elif status == 400:
+                print(f"  Warning: Upload rejected by API (400 Bad Request). File saved locally: {path}")
+                print(f"  This may indicate the API endpoint format has changed or authentication issue.")
             else:
-                print(f"  Warning: Upload failed for {file_name}: {e}")
-                print(f"  File saved locally: {path}")
+                print(f"  Warning: Upload failed for {file_name} (HTTP {status}). File saved locally: {path}")
+            print(f"  Use --no-upload flag to skip API uploads and suppress these warnings.")
         except Exception as e:
             print(f"  Warning: Upload failed for {file_name}: {e}")
             print(f"  File saved locally: {path}")
