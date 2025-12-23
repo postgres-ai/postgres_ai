@@ -238,7 +238,7 @@ cli:npm:publish:
       # but the raw git tag is still treated as the canonical version string elsewhere (e.g. in container /VERSION).
       TAG_VERSION="$RAW_TAG"
       NPM_VERSION="${RAW_TAG#v}"
-      if ! printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([\-+][0-9A-Za-z.-]+)?$'; then
+      if ! printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][-0-9A-Za-z.]+)?$'; then
         echo "Invalid npm version derived from git tag: RAW_TAG='$RAW_TAG' -> NPM_VERSION='$NPM_VERSION' (must be SemVer)"
         exit 1
       fi
@@ -371,8 +371,8 @@ docker:publish:images:
         exit 1
       fi
 
-      if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'; then
-        echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$)"
+      if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$'; then
+        echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$)"
         exit 1
       fi
 
@@ -532,12 +532,12 @@ release:verify:
 
       # Enforce your policy: use git tag as version, and fail if incompatible.
       NPM_VERSION="${RAW_TAG#v}"
-      if ! printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([\-+][0-9A-Za-z.-]+)?$'; then
+      if ! printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][-0-9A-Za-z.]+)?$'; then
         echo "Invalid npm version derived from git tag: RAW_TAG='$RAW_TAG' -> NPM_VERSION='$NPM_VERSION' (must be SemVer)"
         exit 1
       fi
-      if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'; then
-        echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$)"
+      if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$'; then
+        echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$)"
         exit 1
       fi
 
