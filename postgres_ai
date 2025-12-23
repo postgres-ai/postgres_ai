@@ -25,14 +25,6 @@ ensure_pgai_config() {
         set +a
     fi
 
-    # Default self-monitoring profile on Linux unless user explicitly set it.
-    # If COMPOSE_PROFILES is defined (even empty), do not override.
-    if [ -z "${COMPOSE_PROFILES+x}" ]; then
-        if [ "$(uname -s)" = "Linux" ]; then
-            export COMPOSE_PROFILES="self-monitoring"
-        fi
-    fi
-    
     # Check required PGAI_TAG
     if [ -z "${PGAI_TAG:-}" ]; then
         log_error "PGAI_TAG is not set"
