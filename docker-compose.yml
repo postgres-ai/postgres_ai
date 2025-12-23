@@ -1,7 +1,7 @@
 services:
   # Config Initializer - Copies static configs from image to volume
   config-init:
-    image: postgresai/postgres_ai_configs:${PGAI_VERSION}
+    image: ${PGAI_REGISTRY:-postgresai}/postgres_ai_configs:${PGAI_TAG:?PGAI_TAG is required}
     container_name: postgres-ai-config-init
     volumes:
       - postgres_ai_configs:/target
@@ -170,7 +170,7 @@ services:
         condition: service_started
     restart: unless-stopped
   monitoring_flask_backend:
-    image: postgresai/monitoring_flask_backend:${PGAI_VERSION}
+    image: ${PGAI_REGISTRY:-postgresai}/monitoring_flask_backend:${PGAI_TAG:?PGAI_TAG is required}
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
@@ -181,7 +181,7 @@ services:
 
   # PostgreSQL Reports Generator - Runs reports after 30 minutes
   postgres-reports:
-    image: postgresai/reporter:${PGAI_VERSION}
+    image: ${PGAI_REGISTRY:-postgresai}/reporter:${PGAI_TAG:?PGAI_TAG is required}
     container_name: postgres-reports
     working_dir: /app
     volumes:

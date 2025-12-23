@@ -19,7 +19,7 @@ build:test:images:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.45"
     GIT_STRATEGY: fetch
-    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - docker version
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
@@ -27,41 +27,41 @@ build:test:images:
     - |
       set -euo pipefail
       BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-      echo "Building images with tag: $PGAI_VERSION"
+      echo "Building images with tag: $PGAI_TAG"
       echo "Registry: $CI_REGISTRY_IMAGE"
 
       # Build and push postgres_ai_configs
       docker build \
-        --build-arg "VERSION=$PGAI_VERSION" \
+        --build-arg "VERSION=$PGAI_TAG" \
         --build-arg "BUILD_TS=$BUILD_TS" \
         -f config/Dockerfile \
-        -t "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" \
+        -t "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG" \
         config
-      docker push "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
+      docker push "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
 
       # Build and push reporter
       docker build \
-        --build-arg "VERSION=$PGAI_VERSION" \
+        --build-arg "VERSION=$PGAI_TAG" \
         --build-arg "BUILD_TS=$BUILD_TS" \
         -f reporter/Dockerfile \
-        -t "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" \
+        -t "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG" \
         reporter
-      docker push "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
+      docker push "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
 
       # Build and push monitoring_flask_backend
       docker build \
-        --build-arg "VERSION=$PGAI_VERSION" \
+        --build-arg "VERSION=$PGAI_TAG" \
         --build-arg "BUILD_TS=$BUILD_TS" \
         -f monitoring_flask_backend/Dockerfile \
-        -t "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" \
+        -t "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG" \
         monitoring_flask_backend
-      docker push "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+      docker push "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
 
       echo ""
       echo "Images pushed to GitLab Container Registry:"
-      echo "  $CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
-      echo "  $CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
-      echo "  $CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+      echo "  $CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      echo "  $CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      echo "  $CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
@@ -115,27 +115,25 @@ cli:e2e:dind:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
-    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
     - docker version
-    # Pull images from GitLab Container Registry and re-tag for docker-compose
+    # Pull images from GitLab Container Registry
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
-      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
-
-      echo "Re-tagging for docker-compose compatibility..."
-      docker tag "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" "postgresai/postgres_ai_configs:$PGAI_VERSION"
-      docker tag "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" "postgresai/reporter:$PGAI_VERSION"
-      docker tag "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" "postgresai/monitoring_flask_backend:$PGAI_VERSION"
-
+      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
       echo "Images ready:"
-      docker images | grep postgresai
-    # Create .env file with the version
-    - echo "PGAI_VERSION=$PGAI_VERSION" > .env
+      docker images | grep "$CI_REGISTRY_IMAGE"
+    # Create .env file with registry and tag
+    - |
+      cat > .env << EOF
+      PGAI_REGISTRY=$CI_REGISTRY_IMAGE
+      PGAI_TAG=$PGAI_TAG
+      EOF
   script:
     - set -euo pipefail
     - bash -n ./postgres_ai
@@ -398,29 +396,27 @@ cli:node:e2e:dind:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
-    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
     - apk add --no-cache bash docker-cli docker-compose openssl postgresql-client
     - node -v && npm -v && docker version
     - npm --prefix cli install --no-audit --no-fund
-    # Pull images from GitLab Container Registry and re-tag for docker-compose
+    # Pull images from GitLab Container Registry
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
-      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
-
-      echo "Re-tagging for docker-compose compatibility..."
-      docker tag "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" "postgresai/postgres_ai_configs:$PGAI_VERSION"
-      docker tag "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" "postgresai/reporter:$PGAI_VERSION"
-      docker tag "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" "postgresai/monitoring_flask_backend:$PGAI_VERSION"
-
+      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
       echo "Images ready:"
-      docker images | grep postgresai
-    # Create .env file with the version
-    - echo "PGAI_VERSION=$PGAI_VERSION" > .env
+      docker images | grep "$CI_REGISTRY_IMAGE"
+    # Create .env file with registry and tag
+    - |
+      cat > .env << EOF
+      PGAI_REGISTRY=$CI_REGISTRY_IMAGE
+      PGAI_TAG=$PGAI_TAG
+      EOF
   script:
     - ./tests/e2e.cli.sh
   after_script:
@@ -441,29 +437,27 @@ cli:node:full:dind:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
-    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
     - apk add --no-cache bash git docker-cli docker-compose openssl postgresql-client
     - node -v && npm -v && docker version
     - npm --prefix cli install --no-audit --no-fund
-    # Pull images from GitLab Container Registry and re-tag for docker-compose
+    # Pull images from GitLab Container Registry
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
-      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
-
-      echo "Re-tagging for docker-compose compatibility..."
-      docker tag "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" "postgresai/postgres_ai_configs:$PGAI_VERSION"
-      docker tag "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" "postgresai/reporter:$PGAI_VERSION"
-      docker tag "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" "postgresai/monitoring_flask_backend:$PGAI_VERSION"
-
+      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
       echo "Images ready:"
-      docker images | grep postgresai
-    # Create .env file with the version
-    - echo "PGAI_VERSION=$PGAI_VERSION" > .env
+      docker images | grep "$CI_REGISTRY_IMAGE"
+    # Create .env file with registry and tag
+    - |
+      cat > .env << EOF
+      PGAI_REGISTRY=$CI_REGISTRY_IMAGE
+      PGAI_TAG=$PGAI_TAG
+      EOF
   script:
     - echo "=== Testing quickstart (demo mode) ==="
     - node ./cli/dist/bin/postgres-ai.js mon quickstart --demo
