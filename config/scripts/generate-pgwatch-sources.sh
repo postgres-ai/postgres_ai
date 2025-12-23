@@ -15,26 +15,47 @@ IFS=$'\n\t'
 INSTANCES_PATH="${INSTANCES_PATH:-/app/instances.yaml}"
 CONFIGS_DIR="${CONFIGS_DIR:-/postgres_ai_configs}"
 
+write_default_instances() {
+  cat <<'YAML'
+- name: target-database
+  conn_str: postgresql://monitor:monitor_pass@target-db:5432/target_database
+  preset_metrics: full
+  custom_metrics:
+  is_enabled: true
+  group: default
+  custom_tags:
+    env: demo
+    cluster: local
+    node_name: node-01
+    sink_type: ~sink_type~
+YAML
+}
+
 write_sources() {
   local sink_type="$1"
   local out_path="$2"
+  local instances_path="$3"
 
   {
     echo "# PGWatch Sources Configuration - ${sink_type} Instance"
-    sed "s/~sink_type~/${sink_type}/g" "${INSTANCES_PATH}"
+    sed "s/~sink_type~/${sink_type}/g" "${instances_path}"
   } > "${out_path}"
 }
 
 main() {
-  if [[ ! -f "${INSTANCES_PATH}" ]]; then
-    echo "generate-pgwatch-sources: instances file not found: ${INSTANCES_PATH}" >&2
-    exit 1
+  local instances_path
+  instances_path="${INSTANCES_PATH}"
+
+  if [[ ! -f "${instances_path}" ]]; then
+    echo "generate-pgwatch-sources: instances file not found: ${instances_path}; using demo default" >&2
+    instances_path="$(mktemp)"
+    write_default_instances > "${instances_path}"
   fi
 
   mkdir -p -- "${CONFIGS_DIR}/pgwatch" "${CONFIGS_DIR}/pgwatch-prometheus"
 
-  write_sources "postgresql" "${CONFIGS_DIR}/pgwatch/sources.yml"
-  write_sources "prometheus" "${CONFIGS_DIR}/pgwatch-prometheus/sources.yml"
+  write_sources "postgresql" "${CONFIGS_DIR}/pgwatch/sources.yml" "${instances_path}"
+  write_sources "prometheus" "${CONFIGS_DIR}/pgwatch-prometheus/sources.yml" "${instances_path}"
 
   echo "generate-pgwatch-sources: generated sources.yml files"
 }
