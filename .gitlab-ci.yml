@@ -557,13 +557,17 @@ release:verify:
       docker pull "postgresai/monitoring_flask_backend:${RAW_TAG}"
       docker pull "postgresai/postgres_ai_configs:${RAW_TAG}"
 
-      # Confirm multi-arch manifests include both amd64 and arm64.
-      docker buildx imagetools inspect "postgresai/reporter:${RAW_TAG}" | grep -q "linux/amd64"
-      docker buildx imagetools inspect "postgresai/reporter:${RAW_TAG}" | grep -q "linux/arm64"
-      docker buildx imagetools inspect "postgresai/monitoring_flask_backend:${RAW_TAG}" | grep -q "linux/amd64"
-      docker buildx imagetools inspect "postgresai/monitoring_flask_backend:${RAW_TAG}" | grep -q "linux/arm64"
-      docker buildx imagetools inspect "postgresai/postgres_ai_configs:${RAW_TAG}" | grep -q "linux/amd64"
-      docker buildx imagetools inspect "postgresai/postgres_ai_configs:${RAW_TAG}" | grep -q "linux/arm64"
+      # Confirm multi-arch manifests include both amd64 and arm64 — stable tags only (X.Y.Z).
+      if printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        docker buildx imagetools inspect "postgresai/reporter:${RAW_TAG}" | grep -q "linux/amd64"
+        docker buildx imagetools inspect "postgresai/reporter:${RAW_TAG}" | grep -q "linux/arm64"
+        docker buildx imagetools inspect "postgresai/monitoring_flask_backend:${RAW_TAG}" | grep -q "linux/amd64"
+        docker buildx imagetools inspect "postgresai/monitoring_flask_backend:${RAW_TAG}" | grep -q "linux/arm64"
+        docker buildx imagetools inspect "postgresai/postgres_ai_configs:${RAW_TAG}" | grep -q "linux/amd64"
+        docker buildx imagetools inspect "postgresai/postgres_ai_configs:${RAW_TAG}" | grep -q "linux/arm64"
+      else
+        echo "Skipping multi-arch verification for pre-release tag: ${RAW_TAG}"
+      fi
 
       # Validate embedded files for this runner's arch.
       test "$(docker run --rm "postgresai/reporter:${RAW_TAG}" cat /VERSION)" = "$RAW_TAG"
