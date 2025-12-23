@@ -11,6 +11,49 @@ PROJECT_NAME="postgres-ai-mon"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 PYTHON_REQUIREMENTS="$SCRIPT_DIR/requirements.txt"
 INSTANCES_FILE="$SCRIPT_DIR/instances.yml"
+ENV_FILE="$SCRIPT_DIR/.env"
+
+# Ensure PGAI_VERSION is set for docker compose
+# Priority: 1) Already exported env var, 2) .env file, 3) Error with instructions
+ensure_pgai_version() {
+    # If PGAI_VERSION is already set in environment, use it
+    if [ -n "${PGAI_VERSION:-}" ]; then
+        export PGAI_VERSION
+        return 0
+    fi
+    
+    # Try to load from .env file
+    if [ -f "$ENV_FILE" ]; then
+        local version_from_env
+        version_from_env=$(grep -E '^PGAI_VERSION=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+        if [ -n "$version_from_env" ]; then
+            export PGAI_VERSION="$version_from_env"
+            return 0
+        fi
+    fi
+    
+    # No version found — show error with instructions
+    log_error "PGAI_VERSION is not set"
+    echo
+    echo "The docker-compose.yml requires PGAI_VERSION to specify which image tags to use."
+    echo
+    echo "Options:"
+    echo "  1. Create .env file with a specific version:"
+    echo "     echo 'PGAI_VERSION=0.14.0' > $ENV_FILE"
+    echo
+    echo "  2. Set environment variable:"
+    echo "     export PGAI_VERSION=0.14.0"
+    echo "     $0 start"
+    echo
+    echo "  3. For development, build images locally and set version:"
+    echo "     docker build -t postgresai/postgres_ai_configs:dev config/"
+    echo "     docker build -t postgresai/reporter:dev reporter/"
+    echo "     docker build -t postgresai/monitoring_flask_backend:dev monitoring_flask_backend/"
+    echo "     echo 'PGAI_VERSION=dev' > $ENV_FILE"
+    echo
+    echo "Available stable versions: https://hub.docker.com/r/postgresai/postgres_ai_configs/tags"
+    exit 1
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -408,6 +451,7 @@ precheck_for_services() {
     check_prerequisites
     check_docker_running
     check_project_setup
+    ensure_pgai_version
 }
 
 # Precheck for commands that need running services
@@ -415,6 +459,7 @@ precheck_for_running_services() {
     check_prerequisites
     check_docker_running
     check_project_setup
+    ensure_pgai_version
     check_services_running
 }
 
@@ -1712,6 +1757,7 @@ update_project() {
 # Update configuration
 update_config() {
     check_project_setup
+    ensure_pgai_version
     
     log_info "Updating configuration files..."
     
