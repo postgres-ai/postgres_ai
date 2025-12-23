@@ -61,6 +61,90 @@ interface PathResolution {
   instancesFile: string;
 }
 
+function getDefaultMonitoringProjectDir(): string {
+  const override = process.env.PGAI_PROJECT_DIR;
+  if (override && override.trim()) return override.trim();
+  // Keep monitoring project next to user-level config (~/.config/postgresai)
+  return path.join(config.getConfigDir(), "monitoring");
+}
+
+async function downloadText(url: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const req = http.get(new URL(url), (res) => {
+      if (!res.statusCode || res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode || "?"} for ${url}`));
+        res.resume();
+        return;
+      }
+      res.setEncoding("utf8");
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => resolve(data));
+    });
+    req.on("error", reject);
+    req.setTimeout(15_000, () => req.destroy(new Error(`Timeout fetching ${url}`)));
+  });
+}
+
+async function ensureDefaultMonitoringProject(): Promise<PathResolution> {
+  const projectDir = getDefaultMonitoringProjectDir();
+  const composeFile = path.resolve(projectDir, "docker-compose.yml");
+  const instancesFile = path.resolve(projectDir, "instances.yml");
+
+  if (!fs.existsSync(projectDir)) {
+    fs.mkdirSync(projectDir, { recursive: true, mode: 0o700 });
+  }
+
+  if (!fs.existsSync(composeFile)) {
+    const refs = [
+      process.env.PGAI_PROJECT_REF,
+      pkg.version,
+      `v${pkg.version}`,
+      "main",
+    ].filter((v): v is string => Boolean(v && v.trim()));
+
+    let lastErr: unknown;
+    for (const ref of refs) {
+      const url = `https://gitlab.com/postgres-ai/postgres_ai/-/raw/${encodeURIComponent(ref)}/docker-compose.yml`;
+      try {
+        const text = await downloadText(url);
+        fs.writeFileSync(composeFile, text, { encoding: "utf8", mode: 0o600 });
+        break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    if (!fs.existsSync(composeFile)) {
+      const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+      throw new Error(`Failed to bootstrap docker-compose.yml: ${msg}`);
+    }
+  }
+
+  // Ensure instances.yml exists as a FILE (avoid Docker creating a directory)
+  if (!fs.existsSync(instancesFile)) {
+    const header =
+      "# PostgreSQL instances to monitor\n" +
+      "# Add your instances using: pgai mon targets add <connection-string> <name>\n\n";
+    fs.writeFileSync(instancesFile, header, { encoding: "utf8", mode: 0o600 });
+  }
+
+  // Ensure .pgwatch-config exists as a FILE for reporter (may remain empty)
+  const pgwatchConfig = path.resolve(projectDir, ".pgwatch-config");
+  if (!fs.existsSync(pgwatchConfig)) {
+    fs.writeFileSync(pgwatchConfig, "", { encoding: "utf8", mode: 0o600 });
+  }
+
+  // Ensure .env exists and has PGAI_TAG (compose requires it)
+  const envFile = path.resolve(projectDir, ".env");
+  if (!fs.existsSync(envFile)) {
+    const envText = `PGAI_TAG=${pkg.version}\n# PGAI_REGISTRY=registry.gitlab.com/postgres-ai/postgres_ai\n`;
+    fs.writeFileSync(envFile, envText, { encoding: "utf8", mode: 0o600 });
+  }
+
+  return { fs, path, projectDir, composeFile, instancesFile };
+}
+
 /**
  * Get configuration from various sources
  * @param opts - Command line options
@@ -478,6 +562,14 @@ function resolvePaths(): PathResolution {
   );
 }
 
+async function resolveOrInitPaths(): Promise<PathResolution> {
+  try {
+    return resolvePaths();
+  } catch {
+    return ensureDefaultMonitoringProject();
+  }
+}
+
 /**
  * Check if Docker daemon is running
  */
@@ -529,7 +621,7 @@ async function runCompose(args: string[]): Promise<number> {
   let composeFile: string;
   let projectDir: string;
   try {
-    ({ composeFile, projectDir } = resolvePaths());
+    ({ composeFile, projectDir } = await resolveOrInitPaths());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
@@ -572,7 +664,8 @@ async function runCompose(args: string[]): Promise<number> {
   return new Promise<number>((resolve) => {
     const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], {
       stdio: "inherit",
-      env: env
+      env: env,
+      cwd: projectDir
     });
     child.on("close", (code) => resolve(code || 0));
   });
@@ -597,6 +690,10 @@ mon
     console.log("  PostgresAI Monitoring Quickstart");
     console.log("=================================\n");
     console.log("This will install, configure, and start the monitoring system\n");
+
+    // Ensure we have a project directory with docker-compose.yml even if running from elsewhere
+    const { projectDir } = await resolveOrInitPaths();
+    console.log(`Project directory: ${projectDir}\n`);
 
     // Validate conflicting options
     if (opts.demo && opts.dbUrl) {
@@ -630,6 +727,11 @@ mon
       if (opts.apiKey) {
         console.log("Using API key provided via --api-key parameter");
         config.writeConfig({ apiKey: opts.apiKey });
+        // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+        fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${opts.apiKey}\n`, {
+          encoding: "utf8",
+          mode: 0o600
+        });
         console.log("✓ API key saved\n");
       } else if (opts.yes) {
         // Auto-yes mode without API key - skip API key setup
@@ -656,6 +758,11 @@ mon
 
               if (trimmedKey) {
                 config.writeConfig({ apiKey: trimmedKey });
+                // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+                fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${trimmedKey}\n`, {
+                  encoding: "utf8",
+                  mode: 0o600
+                });
                 console.log("✓ API key saved\n");
                 break;
               }
@@ -686,9 +793,11 @@ mon
       console.log("Step 2: Add PostgreSQL Instance to Monitor\n");
 
       // Clear instances.yml in production mode (start fresh)
-      const instancesPath = path.resolve(process.cwd(), "instances.yml");
+      const { instancesFile: instancesPath, projectDir } = await resolveOrInitPaths();
       const emptyInstancesContent = "# PostgreSQL instances to monitor\n# Add your instances using: postgres-ai mon targets add\n\n";
       fs.writeFileSync(instancesPath, emptyInstancesContent, "utf8");
+      console.log(`Instances file: ${instancesPath}`);
+      console.log(`Project directory: ${projectDir}\n`);
 
       if (opts.dbUrl) {
         console.log("Using database URL provided via --db-url parameter");
@@ -1015,7 +1124,7 @@ mon
     let composeFile: string;
     let instancesFile: string;
     try {
-      ({ projectDir, composeFile, instancesFile } = resolvePaths());
+      ({ projectDir, composeFile, instancesFile } = await resolveOrInitPaths());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(message);
@@ -1215,9 +1324,9 @@ targets
   .command("list")
   .description("list monitoring target databases")
   .action(async () => {
-    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: instancesPath, projectDir } = await resolveOrInitPaths();
     if (!fs.existsSync(instancesPath)) {
-      console.error(`instances.yml not found in ${process.cwd()}`);
+      console.error(`instances.yml not found in ${projectDir}`);
       process.exitCode = 1;
       return;
     }
@@ -1264,7 +1373,7 @@ targets
   .command("add [connStr] [name]")
   .description("add monitoring target database")
   .action(async (connStr?: string, name?: string) => {
-    const file = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: file } = await resolveOrInitPaths();
     if (!connStr) {
       console.error("Connection string required: postgresql://user:pass@host:port/db");
       process.exitCode = 1;
@@ -1314,7 +1423,7 @@ targets
   .command("remove <name>")
   .description("remove monitoring target database")
   .action(async (name: string) => {
-    const file = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: file } = await resolveOrInitPaths();
     if (!fs.existsSync(file)) {
       console.error("instances.yml not found");
       process.exitCode = 1;
@@ -1351,7 +1460,7 @@ targets
   .command("test <name>")
   .description("test monitoring target database connectivity")
   .action(async (name: string) => {
-    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: instancesPath } = await resolveOrInitPaths();
     if (!fs.existsSync(instancesPath)) {
       console.error("instances.yml not found");
       process.exitCode = 1;

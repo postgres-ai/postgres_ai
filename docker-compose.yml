@@ -14,6 +14,7 @@ services:
     container_name: sources-generator
     working_dir: /app
     volumes:
+      - ./instances.yml:/app/instances.yaml:ro
       - postgres_ai_configs:/postgres_ai_configs
     depends_on:
       config-init:
@@ -184,6 +185,7 @@ services:
     container_name: postgres-reports
     working_dir: /app
     volumes:
+      - ./.pgwatch-config:/app/.pgwatch-config:ro
       - postgres_ai_configs:/postgres_ai_configs:ro
     environment:
       - PROMETHEUS_URL=http://sink-prometheus:9090
