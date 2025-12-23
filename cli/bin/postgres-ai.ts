@@ -917,7 +917,7 @@ mon
 
     // Step 4: Ensure Grafana password is configured
     console.log(opts.demo ? "Step 4: Configuring Grafana security..." : "Step 4: Configuring Grafana security...");
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     let grafanaPassword = "";
 
     try {
@@ -1775,7 +1775,13 @@ program
     // Check both new config and legacy config
     const newConfigPath = config.getConfigPath();
     const hasNewConfig = fs.existsSync(newConfigPath);
-    const legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    let legacyPath: string;
+    try {
+      const { projectDir } = await resolveOrInitPaths();
+      legacyPath = path.resolve(projectDir, ".pgwatch-config");
+    } catch {
+      legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    }
     const hasLegacyConfig = fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile();
 
     if (!hasNewConfig && !hasLegacyConfig) {
@@ -1811,7 +1817,8 @@ mon
   .command("generate-grafana-password")
   .description("generate Grafana password for monitoring services")
   .action(async () => {
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const { projectDir } = await resolveOrInitPaths();
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
 
     try {
       // Generate secure password using openssl
@@ -1862,7 +1869,8 @@ mon
   .command("show-grafana-credentials")
   .description("show Grafana credentials for monitoring services")
   .action(async () => {
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const { projectDir } = await resolveOrInitPaths();
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     if (!fs.existsSync(cfgPath)) {
       console.error("Configuration file not found. Run 'postgres-ai mon quickstart' first.");
       process.exitCode = 1;
