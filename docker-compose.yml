@@ -1,7 +1,7 @@
 services:
   # Config Initializer - Copies static configs from image to volume
   config-init:
-    image: postgresai/postgres_ai_configs:0.14.0-dev.22
+    image: postgresai/postgres_ai_configs:${PGAI_VERSION}
     container_name: postgres-ai-config-init
     volumes:
       - postgres_ai_configs:/target
@@ -170,7 +170,7 @@ services:
         condition: service_started
     restart: unless-stopped
   monitoring_flask_backend:
-    image: postgresai/monitoring_flask_backend:0.14.0-dev.22
+    image: postgresai/monitoring_flask_backend:${PGAI_VERSION}
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
