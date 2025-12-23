@@ -108,14 +108,34 @@ cli:e2e:dind:
   services:
     - name: docker:24-dind
       command: ["--tls=false"]
+  needs:
+    - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
+    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
   before_script:
     - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
     - docker version
+    # Pull images from GitLab Container Registry and re-tag for docker-compose
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - |
+      echo "Pulling images from GitLab Container Registry..."
+      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo "Re-tagging for docker-compose compatibility..."
+      docker tag "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" "postgresai/postgres_ai_configs:$PGAI_VERSION"
+      docker tag "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" "postgresai/reporter:$PGAI_VERSION"
+      docker tag "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" "postgresai/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo "Images ready:"
+      docker images | grep postgresai
+    # Create .env file with the version
+    - echo "PGAI_VERSION=$PGAI_VERSION" > .env
   script:
     - set -euo pipefail
     - bash -n ./postgres_ai
@@ -395,16 +415,36 @@ cli:node:e2e:dind:
   services:
     - name: docker:24-dind
       command: ["--tls=false"]
+  needs:
+    - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
+    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
     - apk add --no-cache bash docker-cli docker-compose openssl postgresql-client
     - node -v && npm -v && docker version
     - npm --prefix cli install --no-audit --no-fund
+    # Pull images from GitLab Container Registry and re-tag for docker-compose
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - |
+      echo "Pulling images from GitLab Container Registry..."
+      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo "Re-tagging for docker-compose compatibility..."
+      docker tag "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" "postgresai/postgres_ai_configs:$PGAI_VERSION"
+      docker tag "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" "postgresai/reporter:$PGAI_VERSION"
+      docker tag "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" "postgresai/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo "Images ready:"
+      docker images | grep postgresai
+    # Create .env file with the version
+    - echo "PGAI_VERSION=$PGAI_VERSION" > .env
   script:
     - ./tests/e2e.cli.sh
   after_script:
@@ -418,16 +458,36 @@ cli:node:full:dind:
   services:
     - name: docker:24-dind
       command: ["--tls=false"]
+  needs:
+    - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
+    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
     - apk add --no-cache bash git docker-cli docker-compose openssl postgresql-client
     - node -v && npm -v && docker version
     - npm --prefix cli install --no-audit --no-fund
+    # Pull images from GitLab Container Registry and re-tag for docker-compose
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - |
+      echo "Pulling images from GitLab Container Registry..."
+      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo "Re-tagging for docker-compose compatibility..."
+      docker tag "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" "postgresai/postgres_ai_configs:$PGAI_VERSION"
+      docker tag "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" "postgresai/reporter:$PGAI_VERSION"
+      docker tag "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" "postgresai/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo "Images ready:"
+      docker images | grep postgresai
+    # Create .env file with the version
+    - echo "PGAI_VERSION=$PGAI_VERSION" > .env
   script:
     - echo "=== Testing quickstart (demo mode) ==="
     - node ./cli/dist/bin/postgres-ai.js mon quickstart --demo
