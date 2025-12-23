@@ -10,7 +10,7 @@ services:
 
   # Sources Generator - Generates sources.yml files from instances.yaml template
   sources-generator:
-    image: alpine:3.22.0
+    image: bash:5.2
     container_name: sources-generator
     working_dir: /app
     volumes:
@@ -19,14 +19,8 @@ services:
     depends_on:
       config-init:
         condition: service_completed_successfully
-    command: >
-      sh -c "
-      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /postgres_ai_configs/pgwatch/sources.yml &&
-      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /postgres_ai_configs/pgwatch/sources.yml &&
-      echo '# PGWatch Sources Configuration - Prometheus Instance' > /postgres_ai_configs/pgwatch-prometheus/sources.yml &&
-      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /postgres_ai_configs/pgwatch-prometheus/sources.yml &&
-      echo 'Generated sources.yml files for both pgwatch instances'
-      "
+    command:
+      ["bash", "/postgres_ai_configs/scripts/generate-pgwatch-sources.sh"]
 
   # Target Database - The PostgreSQL database being monitored (demo only)
   target-db:
@@ -36,13 +30,16 @@ services:
       POSTGRES_DB: target_database
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    entrypoint: >
-      sh -c "
-      cp /postgres_ai_configs/target-db/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
-      exec docker-entrypoint.sh postgres
-      -c shared_preload_libraries=pg_stat_statements
-      -c pg_stat_statements.track=all
-      "
+    entrypoint:
+      [
+        "bash",
+        "/postgres_ai_configs/scripts/postgres-entrypoint.sh",
+        "target-db",
+        "-c",
+        "shared_preload_libraries=pg_stat_statements",
+        "-c",
+        "pg_stat_statements.track=all",
+      ]
     volumes:
       - target_db_data:/var/lib/postgresql/data
       - postgres_ai_configs:/postgres_ai_configs:ro
@@ -63,12 +60,12 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
-    entrypoint: >
-      sh -c "
-      cp /postgres_ai_configs/sink-postgres/*.sh /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
-      cp /postgres_ai_configs/sink-postgres/*.sql /docker-entrypoint-initdb.d/ 2>/dev/null || true &&
-      exec docker-entrypoint.sh postgres
-      "
+    entrypoint:
+      [
+        "bash",
+        "/postgres_ai_configs/scripts/postgres-entrypoint.sh",
+        "sink-postgres",
+      ]
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
       - postgres_ai_configs:/postgres_ai_configs:ro
@@ -184,36 +181,30 @@ services:
 
   # PostgreSQL Reports Generator - Runs reports after 30 minutes
   postgres-reports:
-    image: postgresai/reporter:0.14.0-dev.22
+    image: postgresai/reporter:${PGAI_VERSION}
     container_name: postgres-reports
     working_dir: /app
     volumes:
       - ./.pgwatch-config:/app/.pgwatch-config
       - ./instances.yml:/app/instances.yml
+      - postgres_ai_configs:/postgres_ai_configs:ro
     environment:
       - PROMETHEUS_URL=http://sink-prometheus:9090
+      # Optional overrides:
+      # - REPORTER_INITIAL_DELAY_SECONDS=1800
+      # - REPORTER_INTERVAL_SECONDS=86400
+      # - REPORTER_OUTPUT_TEMPLATE=/app/all_reports_%Y%m%d_%H%M%S.json
+      # - REPORTER_API_URL=https://postgres.ai/api/general
+      # - REPORTER_PROJECT_NAME=postgres-ai-monitoring
+      # - REPORTER_PGWATCH_CONFIG_PATH=/app/.pgwatch-config
     depends_on:
-      - sink-prometheus
-      - pgwatch-prometheus
-    command: >
-      sh -c "
-      echo 'Waiting 30 minutes before generating reports...' &&
-      sleep 1800 &&
-      echo 'Starting PostgreSQL reports generation...' &&
-      while true; do
-        echo 'Extracting cluster and node name from instances.yml...' &&
-        echo 'Generating PostgreSQL reports...' &&
-        if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
-          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
-          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY --project postgres-ai-monitoring
-        else
-          echo 'No API key configured, generating reports without upload...' &&
-          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
-        fi &&
-        echo 'Reports generated. Sleeping for 24 hours...' &&
-        sleep 86400
-      done
-      "
+      config-init:
+        condition: service_completed_successfully
+      sink-prometheus:
+        condition: service_started
+      pgwatch-prometheus:
+        condition: service_started
+    command: ["bash", "/postgres_ai_configs/scripts/postgres-reports.sh"]
 
   # Self-monitoring components
 
