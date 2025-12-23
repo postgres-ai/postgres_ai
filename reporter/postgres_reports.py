@@ -3514,6 +3514,9 @@ class PostgresReportGenerator:
                     # Extract the data from the node report
                     if 'results' in node_report and node in node_report['results']:
                         combined_results[node] = node_report['results'][node]
+                    
+                    # Free node report memory immediately
+                    del node_report
                 
                 # Create combined report with all nodes
                 reports[check_id] = self.format_report_data(
@@ -3522,6 +3525,13 @@ class PostgresReportGenerator:
                     all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
                     all_nodes
                 )
+                
+                # Free combined results after creating report
+                del combined_results
+            
+            # Periodic garbage collection during report generation
+            if len(reports) % 5 == 0:
+                gc.collect()
 
         return reports
 
@@ -3732,7 +3742,11 @@ class PostgresReportGenerator:
     def generate_per_query_jsons(self, reports: Dict[str, Any], cluster: str,
                                  node_name: str = None,
                                  query_text_limit: int = 1000,
-                                 hours: int = 24) -> List[Dict[str, Any]]:
+                                 hours: int = 24,
+                                 write_immediately: bool = False,
+                                 api_url: str = None,
+                                 token: str = None,
+                                 report_id: str = None) -> List[Dict[str, Any]]:
         """
         Generate individual JSON files for each query mentioned in hourly reports.
         Fetches all metrics directly from Prometheus (matching Dashboard 3).
@@ -3743,9 +3757,13 @@ class PostgresReportGenerator:
             node_name: Node name (optional, will use primary if not specified)
             query_text_limit: Maximum number of characters for each query text
             hours: Number of hours for metric aggregation (default: 24)
+            write_immediately: If True, write files immediately to reduce memory usage
+            api_url: API URL for uploads (only used if write_immediately is True)
+            token: API token for uploads (only used if write_immediately is True)
+            report_id: Report ID for uploads (only used if write_immediately is True)
             
         Returns:
-            List of dictionaries with 'filename' and 'data' for each query
+            List of dictionaries with 'filename' (and optionally 'data' if not written immediately)
         """
         print("Generating per-query JSON files...")
         
@@ -3798,10 +3816,28 @@ class PostgresReportGenerator:
                 # Create filename: query_{queryid}.json
                 filename = f"query_{queryid}.json"
                 
-                query_files.append({
-                    "filename": filename,
-                    "data": query_data
-                })
+                if write_immediately:
+                    # Write to disk immediately to reduce memory usage
+                    with open(filename, "w") as f:
+                        json.dump(query_data, f, indent=2)
+                    print(f"  Generated query file: {filename}")
+                    
+                    # Upload if API credentials provided
+                    if api_url and token and report_id:
+                        self.upload_report_file(api_url, token, report_id, filename)
+                    
+                    # Only store filename, not data
+                    query_files.append({"filename": filename})
+                    
+                    # Free memory immediately after writing
+                    del query_data
+                    del metrics
+                else:
+                    # Store in memory (legacy behavior)
+                    query_files.append({
+                        "filename": filename,
+                        "data": query_data
+                    })
                 
                 # Free memory after each query to reduce peak memory usage
                 if processed % 10 == 0:
@@ -4178,6 +4214,7 @@ def main():
                 
             if args.check_id == 'ALL' or args.check_id is None:
                 # Generate all reports for this cluster
+                report_id = None
                 if not args.no_upload:
                     # Use cluster name as project name if not specified
                     project_name = args.project_name if args.project_name != 'project-name' else cluster
@@ -4185,33 +4222,38 @@ def main():
                 
                 reports = generator.generate_all_reports(cluster, args.node_name, combine_nodes)
                 
+                # Generate per-query JSON files BEFORE deleting reports (needs queryids from reports)
+                # Use write_immediately=True to avoid accumulating all data in memory
+                print("Generating per-query JSON files (streaming mode to reduce memory usage)...")
+                query_files = generator.generate_per_query_jsons(
+                    reports, cluster, node_name=args.node_name, 
+                    query_text_limit=1000, hours=24,
+                    write_immediately=True,
+                    api_url=args.api_url if not args.no_upload else None,
+                    token=args.token if not args.no_upload else None,
+                    report_id=report_id if not args.no_upload else None
+                )
+                
+                # Clean up query files list
+                del query_files
+                gc.collect()
+                
                 # Save reports with cluster name prefix
-                for report in reports:
-                    output_filename = f"{cluster}_{report}.json" if len(clusters_to_process) > 1 else f"{report}.json"
+                for report_key in list(reports.keys()):  # Use list() to avoid dict modification during iteration
+                    output_filename = f"{cluster}_{report_key}.json" if len(clusters_to_process) > 1 else f"{report_key}.json"
                     with open(output_filename, "w") as f:
-                        json.dump(reports[report], f, indent=2)
+                        json.dump(reports[report_key], f, indent=2)
                     print(f"Generated report: {output_filename}")
                     if not args.no_upload:
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                    
+                    # Free memory immediately after writing each report
+                    del reports[report_key]
+                    if len(reports) > 0 and len(reports) % 5 == 0:
+                        gc.collect()
                 
-                # Free memory after writing reports to disk
-                gc.collect()
-                
-                # Generate per-query JSON files for queries mentioned in hourly reports
-                # Each queryid gets its own file with all metrics from pg_stat_statements
-                query_files = generator.generate_per_query_jsons(
-                    reports, cluster, node_name=args.node_name, query_text_limit=1000, hours=24
-                )
-                for query_file in query_files:
-                    filename = query_file['filename']
-                    with open(filename, "w") as f:
-                        json.dump(query_file['data'], f, indent=2)
-                    print(f"Generated query file: {filename}")
-                    if not args.no_upload:
-                        generator.upload_report_file(args.api_url, args.token, report_id, filename)
-                
-                # Free memory after writing per-query files
-                del query_files
+                # Free memory after writing all reports to disk
+                del reports
                 gc.collect()
                 
                 if args.output == '-':
@@ -4292,6 +4334,13 @@ def main():
             
             # Free memory after processing each cluster
             print(f"Freeing memory after processing cluster {cluster}...")
+            
+            # Close and reconnect postgres to free any accumulated memory
+            if generator.pg_conn:
+                print(f"Reconnecting to Postgres sink to free memory...")
+                generator.close_postgres_sink()
+                # Connection will be recreated on next use
+            
             gc.collect()
             
     except Exception as e:
