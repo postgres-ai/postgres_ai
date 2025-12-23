@@ -4181,7 +4181,7 @@ class PostgresReportGenerator:
 def make_request(api_url, endpoint, request_data):
     response = requests.post(api_url + endpoint, json=request_data)
     if response.status_code != 200:
-        print(f"Warning: Request failed with status code {status_code}")
+        print(f"Warning: Request failed with status code {response.status_code}")
         print(f"Response: {response.text}")
         return None
     response.raise_for_status()
