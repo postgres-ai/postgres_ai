@@ -4167,6 +4167,7 @@ class PostgresReportGenerator:
             if status == 404:
                 print(f"  Warning: Upload endpoint not available (404). File saved locally: {path}")
             elif status == 400:
+                print(f"  Request data: {len(json.dumps(request_data))} chars")
                 print(f"  Warning: Upload rejected by API (400 Bad Request). File saved locally: {path}")
                 print(f"  This may indicate the API endpoint format has changed or authentication issue.")
             else:
@@ -4179,6 +4180,10 @@ class PostgresReportGenerator:
 
 def make_request(api_url, endpoint, request_data):
     response = requests.post(api_url + endpoint, json=request_data)
+    if status_code != 200:
+        print(f"Warning: Request failed with status code {status_code}")
+        print(f"Response: {response.text}")
+        return None
     response.raise_for_status()
     return response.json()
 
