@@ -212,6 +212,9 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.51.0
     container_name: cadvisor
+    # Linux-only (requires host filesystem mounts). Enable explicitly:
+    #   docker compose --profile self-monitoring up -d
+    profiles: ["self-monitoring"]
     privileged: true
     volumes:
       - /:/rootfs:ro
@@ -229,6 +232,9 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: node-exporter
+    # Linux-only (requires host filesystem mounts). Enable explicitly:
+    #   docker compose --profile self-monitoring up -d
+    profiles: ["self-monitoring"]
     command:
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"

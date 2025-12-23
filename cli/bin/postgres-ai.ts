@@ -553,6 +553,14 @@ async function runCompose(args: string[]): Promise<number> {
 
   // Read Grafana password from .pgwatch-config and pass to Docker Compose
   const env = { ...process.env };
+
+  // Enable self-monitoring by default on Linux hosts.
+  // Users can override (including disable) by explicitly setting COMPOSE_PROFILES
+  // (e.g., COMPOSE_PROFILES= on macOS development machines).
+  if (!("COMPOSE_PROFILES" in env) && process.platform === "linux") {
+    env.COMPOSE_PROFILES = "self-monitoring";
+  }
+
   const cfgPath = path.resolve(projectDir, ".pgwatch-config");
   if (fs.existsSync(cfgPath)) {
     try {
