@@ -305,11 +305,13 @@ npm --prefix cli install --no-audit --no-fund
 npm link ./cli
 postgres-ai --help
 postgresai --help
+pgai --help
 
 # or install globally after publish (planned)
 # npm i -g @postgresai/cli
 # postgres-ai --help
 # postgresai --help
+# pgai --help
 ```
 
 ## 🔑 PostgresAI access token
