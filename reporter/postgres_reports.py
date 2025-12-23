@@ -4141,7 +4141,15 @@ class PostgresReportGenerator:
         """
         file_type = os.path.splitext(path)[1].lower().lstrip(".")
         file_name = os.path.basename(path)
-        check_id = file_name[:4] if file_name[4:5] == "_" else ""
+        
+        # Extract check_id from filename (e.g., "A002_report.json" -> "A002")
+        # For query files (e.g., "query_12345.json"), use empty check_id
+        if file_name[4:5] == "_" and len(file_name) >= 4 and file_name[:4].isupper():
+            check_id = file_name[:4]
+            generate_issue = True  # Generate issues for report files with check_ids
+        else:
+            check_id = ""
+            generate_issue = False  # Don't generate issues for query files or files without check_ids
 
         with open(path, "r") as f:
             data = f.read()
@@ -4153,7 +4161,7 @@ class PostgresReportGenerator:
             "filename": file_name,
             "data": data,
             "type": file_type,
-            "generate_issue": True
+            "generate_issue": generate_issue
         }
 
         try:
@@ -4167,7 +4175,6 @@ class PostgresReportGenerator:
             if status == 404:
                 print(f"  Warning: Upload endpoint not available (404). File saved locally: {path}")
             elif status == 400:
-                print(f"  Request data: {len(json.dumps(request_data))} chars")
                 print(f"  Warning: Upload rejected by API (400 Bad Request). File saved locally: {path}")
                 print(f"  This may indicate the API endpoint format has changed or authentication issue.")
             else:
