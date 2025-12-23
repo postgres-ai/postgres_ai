@@ -570,11 +570,32 @@ release:verify:
       fi
 
       # Validate embedded files for this runner's arch.
-      test "$(docker run --rm "postgresai/reporter:${RAW_TAG}" cat /VERSION)" = "$RAW_TAG"
-      test "$(docker run --rm "postgresai/monitoring_flask_backend:${RAW_TAG}" cat /VERSION)" = "$RAW_TAG"
-      test "$(docker run --rm "postgresai/postgres_ai_configs:${RAW_TAG}" cat /VERSION)" = "$RAW_TAG"
-      docker run --rm "postgresai/reporter:${RAW_TAG}" cat /BUILD_TS | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$'
-      docker run --rm "postgresai/monitoring_flask_backend:${RAW_TAG}" cat /BUILD_TS | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$'
-      docker run --rm "postgresai/postgres_ai_configs:${RAW_TAG}" cat /BUILD_TS | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$'
+      echo "Validating VERSION and BUILD_TS in images..."
+      
+      REPORTER_VERSION="$(docker run --rm "postgresai/reporter:${RAW_TAG}" cat /VERSION 2>&1)" || true
+      echo "  reporter /VERSION: '$REPORTER_VERSION' (expected: '$RAW_TAG')"
+      test "$REPORTER_VERSION" = "$RAW_TAG"
+      
+      FLASK_VERSION="$(docker run --rm "postgresai/monitoring_flask_backend:${RAW_TAG}" cat /VERSION 2>&1)" || true
+      echo "  monitoring_flask_backend /VERSION: '$FLASK_VERSION' (expected: '$RAW_TAG')"
+      test "$FLASK_VERSION" = "$RAW_TAG"
+      
+      CONFIGS_VERSION="$(docker run --rm "postgresai/postgres_ai_configs:${RAW_TAG}" cat /VERSION 2>&1)" || true
+      echo "  postgres_ai_configs /VERSION: '$CONFIGS_VERSION' (expected: '$RAW_TAG')"
+      test "$CONFIGS_VERSION" = "$RAW_TAG"
+      
+      REPORTER_TS="$(docker run --rm "postgresai/reporter:${RAW_TAG}" cat /BUILD_TS 2>&1)" || true
+      echo "  reporter /BUILD_TS: '$REPORTER_TS'"
+      echo "$REPORTER_TS" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$'
+      
+      FLASK_TS="$(docker run --rm "postgresai/monitoring_flask_backend:${RAW_TAG}" cat /BUILD_TS 2>&1)" || true
+      echo "  monitoring_flask_backend /BUILD_TS: '$FLASK_TS'"
+      echo "$FLASK_TS" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$'
+      
+      CONFIGS_TS="$(docker run --rm "postgresai/postgres_ai_configs:${RAW_TAG}" cat /BUILD_TS 2>&1)" || true
+      echo "  postgres_ai_configs /BUILD_TS: '$CONFIGS_TS'"
+      echo "$CONFIGS_TS" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$'
+      
+      echo "All VERSION and BUILD_TS validations passed!"
   rules:
     - if: '$CI_COMMIT_TAG'
