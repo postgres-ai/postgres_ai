@@ -230,9 +230,7 @@ services:
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     volumes:
-      # Note: mount propagation (rslave) fails on Docker Desktop (macOS).
-      # It's optional for node-exporter — the exporter still works without it.
-      - /:/host:ro
+      - /:/host:ro,rslave
     restart: unless-stopped
 
   # Postgres Exporter - Metrics for sink-postgres database
