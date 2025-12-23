@@ -939,12 +939,56 @@ def test_upload_report_file_sends_contents(tmp_path, monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
+def test_upload_report_file_handles_404_gracefully(tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    generator = PostgresReportGenerator()
+    
+    def fake_make_request(api_url, endpoint, request_data):
+        import requests
+        response = requests.Response()
+        response.status_code = 404
+        raise requests.exceptions.HTTPError(response=response)
+
+    monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
+
+    report_file = tmp_path / "A002_report.json"
+    report_file.write_text('{"foo": "bar"}', encoding="utf-8")
+
+    # Should not raise exception
+    generator.upload_report_file("https://api", "tok", 100, str(report_file))
+    
+    captured = capsys.readouterr()
+    assert "Upload endpoint not available (404)" in captured.out
+    assert "--no-upload" in captured.out
+
+
+@pytest.mark.unit
+def test_create_report_handles_404_gracefully(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    generator = PostgresReportGenerator()
+    
+    def fake_make_request(api_url, endpoint, request_data):
+        import requests
+        response = requests.Response()
+        response.status_code = 404
+        raise requests.exceptions.HTTPError(response=response)
+
+    monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
+
+    # Should not raise exception, should return None
+    report_id = generator.create_report("https://api", "tok", "proj", "123")
+    
+    assert report_id is None
+    captured = capsys.readouterr()
+    assert "API endpoint not available (404)" in captured.out
+
+
+@pytest.mark.unit
 def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     class DummyGenerator:
         DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
 
         def __init__(self, *args, **kwargs):
             self.closed = False
+            self.pg_conn = None  # Add pg_conn attribute for memory cleanup check
 
         def get_all_clusters(self):
             # Match current reporter.main() behavior which always calls
@@ -959,6 +1003,7 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
 
         def close_postgres_sink(self):
             self.closed = True
+            self.pg_conn = None
 
     monkeypatch.setattr(postgres_reports_module, "PostgresReportGenerator", DummyGenerator)
     monkeypatch.setattr(sys, "argv", ["postgres_reports.py", "--check-id", "A002", "--output", "-", "--no-upload"])
@@ -969,14 +1014,27 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
 
     # main() prints progress banners along with the JSON payload.
     # Extract the JSON object from the captured stdout by finding the
-    # first line that looks like JSON and joining from there.
+    # first line that looks like JSON and ending before any trailing messages.
     lines = captured.splitlines()
     start_idx = 0
+    end_idx = len(lines)
+    
+    # Find start of JSON
     for i, line in enumerate(lines):
         if line.strip().startswith("{"):
             start_idx = i
             break
-    json_str = "\n".join(lines[start_idx:])
+    
+    # Find end of JSON (stop at first non-JSON line after JSON starts)
+    brace_count = 0
+    for i in range(start_idx, len(lines)):
+        line = lines[i].strip()
+        brace_count += line.count("{") - line.count("}")
+        if brace_count == 0 and line.endswith("}"):
+            end_idx = i + 1
+            break
+    
+    json_str = "\n".join(lines[start_idx:end_idx])
 
     output = json.loads(json_str)
     assert output["checkId"] == "A002"

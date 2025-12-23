@@ -4099,7 +4099,7 @@ class PostgresReportGenerator:
             epoch: Epoch identifier
             
         Returns:
-            Report ID
+            Report ID or None if creation fails
         """
         request_data = {
             "access_token": token,
@@ -4107,15 +4107,34 @@ class PostgresReportGenerator:
             "epoch": epoch,
         }
 
-        response = make_request(api_url, "/rpc/checkup_report_create", request_data)
-        report_id = response.get("report_id")
-        if not report_id:
-            message = response.get("message", "Cannot create report.")
-            raise Exception(message)
-
-        return int(report_id)
+        try:
+            response = make_request(api_url, "/rpc/checkup_report_create", request_data)
+            report_id = response.get("report_id")
+            if not report_id:
+                message = response.get("message", "Cannot create report.")
+                print(f"Warning: {message}")
+                return None
+            
+            print(f"Created report ID: {report_id}")
+            return int(report_id)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"Warning: API endpoint not available (404). Reports will be saved locally only.")
+                print(f"Use --no-upload flag to suppress this warning.")
+            else:
+                print(f"Warning: Failed to create report: {e}")
+            return None
+        except Exception as e:
+            print(f"Warning: Failed to create report: {e}")
+            return None
 
     def upload_report_file(self, api_url, token, report_id, path):
+        """
+        Upload a report file to the API.
+        
+        Note: The API endpoint may not be available in all deployments.
+        Use --no-upload flag to skip API uploads.
+        """
         file_type = os.path.splitext(path)[1].lower().lstrip(".")
         file_name = os.path.basename(path)
         check_id = file_name[:4] if file_name[4:5] == "_" else ""
@@ -4133,9 +4152,22 @@ class PostgresReportGenerator:
             "generate_issue": True
         }
 
-        response = make_request(api_url, "/rpc/checkup_report_file_post", request_data)
-        if "message" in response:
-            raise Exception(response["message"])
+        try:
+            # Try the primary endpoint
+            response = make_request(api_url, "/rpc/checkup_report_file_post", request_data)
+            if "message" in response:
+                raise Exception(response["message"])
+            print(f"  Uploaded: {file_name}")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"  Warning: Upload endpoint not available (404). File saved locally: {path}")
+                print(f"  Use --no-upload flag to skip API uploads.")
+            else:
+                print(f"  Warning: Upload failed for {file_name}: {e}")
+                print(f"  File saved locally: {path}")
+        except Exception as e:
+            print(f"  Warning: Upload failed for {file_name}: {e}")
+            print(f"  File saved locally: {path}")
 
 
 def make_request(api_url, endpoint, request_data):
@@ -4219,6 +4251,9 @@ def main():
                     # Use cluster name as project name if not specified
                     project_name = args.project_name if args.project_name != 'project-name' else cluster
                     report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
+                    # If report creation failed, disable uploads for this cluster
+                    if report_id is None:
+                        print(f"Skipping API uploads for cluster {cluster}")
                 
                 reports = generator.generate_all_reports(cluster, args.node_name, combine_nodes)
                 
@@ -4229,9 +4264,9 @@ def main():
                     reports, cluster, node_name=args.node_name, 
                     query_text_limit=1000, hours=24,
                     write_immediately=True,
-                    api_url=args.api_url if not args.no_upload else None,
-                    token=args.token if not args.no_upload else None,
-                    report_id=report_id if not args.no_upload else None
+                    api_url=args.api_url if (not args.no_upload and report_id) else None,
+                    token=args.token if (not args.no_upload and report_id) else None,
+                    report_id=report_id if (not args.no_upload and report_id) else None
                 )
                 
                 # Clean up query files list
@@ -4244,7 +4279,7 @@ def main():
                     with open(output_filename, "w") as f:
                         json.dump(reports[report_key], f, indent=2)
                     print(f"Generated report: {output_filename}")
-                    if not args.no_upload:
+                    if not args.no_upload and report_id:
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
                     
                     # Free memory immediately after writing each report
@@ -4330,7 +4365,8 @@ def main():
                     if not args.no_upload:
                         project_name = args.project_name if args.project_name != 'project-name' else cluster
                         report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
-                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                        if report_id:
+                            generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
             
             # Free memory after processing each cluster
             print(f"Freeing memory after processing cluster {cluster}...")
