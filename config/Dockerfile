@@ -28,6 +28,9 @@ COPY sink-postgres/ /postgres_ai_configs/sink-postgres/
 # Demo DB – used only for `quickstart --demo`
 COPY target-db/ /postgres_ai_configs/target-db/
 
+# Copy infrastructure scripts (entrypoints, generators, etc.)
+COPY scripts/ /postgres_ai_configs/scripts/
+
 # Copy script that initializes volumes
 COPY --chmod=755 init-configs.sh /init-configs.sh
 
