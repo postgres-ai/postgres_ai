@@ -30,14 +30,14 @@ build:test:images:
       echo "Building images with tag: $PGAI_TAG"
       echo "Registry: $CI_REGISTRY_IMAGE"
 
-      # Build and push postgres_ai_configs
+      # Build and push postgres-ai-configs
       docker build \
         --build-arg "VERSION=$PGAI_TAG" \
         --build-arg "BUILD_TS=$BUILD_TS" \
         -f config/Dockerfile \
-        -t "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG" \
+        -t "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG" \
         config
-      docker push "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker push "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
 
       # Build and push reporter
       docker build \
@@ -48,20 +48,20 @@ build:test:images:
         reporter
       docker push "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
 
-      # Build and push monitoring_flask_backend
+      # Build and push monitoring-flask-backend
       docker build \
         --build-arg "VERSION=$PGAI_TAG" \
         --build-arg "BUILD_TS=$BUILD_TS" \
         -f monitoring_flask_backend/Dockerfile \
-        -t "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG" \
+        -t "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG" \
         monitoring_flask_backend
-      docker push "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
+      docker push "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
 
       echo ""
       echo "Images pushed to GitLab Container Registry:"
-      echo "  $CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      echo "  $CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
       echo "  $CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
-      echo "  $CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
+      echo "  $CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
@@ -123,9 +123,9 @@ cli:e2e:dind:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
       docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
       echo "Images ready:"
       docker images | grep "$CI_REGISTRY_IMAGE"
     # Create .env file with registry and tag
@@ -335,7 +335,7 @@ cli:npm:publish:
     --build-arg "VERSION=$VERSION" \
     --build-arg "BUILD_TS=$BUILD_TS" \
     -f monitoring_flask_backend/Dockerfile \
-    -t "postgresai/monitoring_flask_backend:$VERSION" \
+    -t "postgresai/monitoring-flask-backend:$VERSION" \
     --push \
     monitoring_flask_backend
 
@@ -344,15 +344,15 @@ cli:npm:publish:
     --build-arg "VERSION=$VERSION" \
     --build-arg "BUILD_TS=$BUILD_TS" \
     -f config/Dockerfile \
-    -t "postgresai/postgres_ai_configs:$VERSION" \
+    -t "postgresai/postgres-ai-configs:$VERSION" \
     --push \
     config
 
   echo ""
   echo "Published images:"
   echo "  postgresai/reporter:$VERSION"
-  echo "  postgresai/monitoring_flask_backend:$VERSION"
-  echo "  postgresai/postgres_ai_configs:$VERSION"
+  echo "  postgresai/monitoring-flask-backend:$VERSION"
+  echo "  postgresai/postgres-ai-configs:$VERSION"
 
 docker:publish:images:
   <<: *docker-publish-base
@@ -406,9 +406,9 @@ cli:node:e2e:dind:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
       docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
       echo "Images ready:"
       docker images | grep "$CI_REGISTRY_IMAGE"
     # Create .env file with registry and tag
@@ -447,9 +447,9 @@ cli:node:full:dind:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
       docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
       echo "Images ready:"
       docker images | grep "$CI_REGISTRY_IMAGE"
     # Create .env file with registry and tag

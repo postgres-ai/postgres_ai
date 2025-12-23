@@ -45,7 +45,7 @@ ensure_pgai_config() {
         echo "Or copy from example:"
         echo "  cp $SCRIPT_DIR/.env.example $ENV_FILE"
         echo
-        echo "Available versions: https://hub.docker.com/r/postgresai/postgres_ai_configs/tags"
+        echo "Available versions: https://hub.docker.com/r/postgresai/postgres-ai-configs/tags"
         exit 1
     fi
     
