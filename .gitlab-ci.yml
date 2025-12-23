@@ -2,8 +2,69 @@ include:
   - local: 'components/index_pilot/.gitlab-ci.yml'
 
 stages:
+  - build
   - test
   - publish
+
+# Build images from current code for e2e tests
+# Images are pushed to GitLab Container Registry and pulled by test jobs
+build:test:images:
+  stage: build
+  image: docker:27.3
+  services:
+    - name: docker:27.3-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.45"
+    GIT_STRATEGY: fetch
+    PGAI_VERSION: ${CI_COMMIT_REF_SLUG}
+  before_script:
+    - docker version
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+  script:
+    - |
+      set -euo pipefail
+      BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      echo "Building images with tag: $PGAI_VERSION"
+      echo "Registry: $CI_REGISTRY_IMAGE"
+
+      # Build and push postgres_ai_configs
+      docker build \
+        --build-arg "VERSION=$PGAI_VERSION" \
+        --build-arg "BUILD_TS=$BUILD_TS" \
+        -f config/Dockerfile \
+        -t "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION" \
+        config
+      docker push "$CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
+
+      # Build and push reporter
+      docker build \
+        --build-arg "VERSION=$PGAI_VERSION" \
+        --build-arg "BUILD_TS=$BUILD_TS" \
+        -f reporter/Dockerfile \
+        -t "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION" \
+        reporter
+      docker push "$CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
+
+      # Build and push monitoring_flask_backend
+      docker build \
+        --build-arg "VERSION=$PGAI_VERSION" \
+        --build-arg "BUILD_TS=$BUILD_TS" \
+        -f monitoring_flask_backend/Dockerfile \
+        -t "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION" \
+        monitoring_flask_backend
+      docker push "$CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+
+      echo ""
+      echo "Images pushed to GitLab Container Registry:"
+      echo "  $CI_REGISTRY_IMAGE/postgres_ai_configs:$PGAI_VERSION"
+      echo "  $CI_REGISTRY_IMAGE/reporter:$PGAI_VERSION"
+      echo "  $CI_REGISTRY_IMAGE/monitoring_flask_backend:$PGAI_VERSION"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
 
 reporter:tests:
   stage: test
