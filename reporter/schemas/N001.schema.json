@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "N001 report schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "checkId": { "const": "N001" },
+    "checkTitle": { "const": "Wait events grouped by type and query" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "hourlyIntegers": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "waitEventEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["occurrences"],
+      "properties": {
+        "occurrences": { "type": "integer" }
+      }
+    },
+    "queryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query_id", "occurrences", "hourly_occurrences", "wait_events"],
+      "properties": {
+        "query_id": { "type": "string" },
+        "occurrences": { "type": "integer" },
+        "hourly_occurrences": { "$ref": "#/$defs/hourlyIntegers" },
+        "wait_events": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/waitEventEntry" }
+        }
+      }
+    },
+    "waitTypeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_occurrences", "unique_queries", "queries_list"],
+      "properties": {
+        "total_occurrences": { "type": "integer" },
+        "unique_queries": { "type": "integer" },
+        "queries_list": { "type": "array", "items": { "$ref": "#/$defs/queryEntry" } }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time_range_hours",
+        "start_time",
+        "end_time",
+        "wait_event_types_count",
+        "total_occurrences",
+        "hourly_timestamps"
+      ],
+      "properties": {
+        "time_range_hours": { "type": "integer" },
+        "start_time": { "type": "string" },
+        "end_time": { "type": "string" },
+        "wait_event_types_count": { "type": "integer" },
+        "total_occurrences": { "type": "integer" },
+        "hourly_timestamps": { "$ref": "#/$defs/timeline" }
+      }
+    },
+    "dbEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wait_event_types", "summary"],
+      "properties": {
+        "wait_event_types": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/waitTypeEntry" }
+        },
+        "summary": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/dbEntry" }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}
+
+
