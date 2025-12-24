@@ -684,8 +684,9 @@ mon
   .option("--demo", "demo mode with sample database", false)
   .option("--api-key <key>", "Postgres AI API key for automated report uploads")
   .option("--db-url <url>", "PostgreSQL connection URL to monitor")
+  .option("--tag <tag>", "Docker image tag to use (e.g., 0.14.0, 0.14.0-dev.33)")
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
-  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; yes: boolean }) => {
+  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
     console.log("\n=================================");
     console.log("  PostgresAI Monitoring Quickstart");
     console.log("=================================\n");
@@ -694,6 +695,26 @@ mon
     // Ensure we have a project directory with docker-compose.yml even if running from elsewhere
     const { projectDir } = await resolveOrInitPaths();
     console.log(`Project directory: ${projectDir}\n`);
+
+    // Update .env with custom tag if provided
+    const envFile = path.resolve(projectDir, ".env");
+    const imageTag = opts.tag || pkg.version;
+
+    // Build .env content
+    const envLines: string[] = [`PGAI_TAG=${imageTag}`];
+    // Preserve GF_SECURITY_ADMIN_PASSWORD if it exists
+    if (fs.existsSync(envFile)) {
+      const existingEnv = fs.readFileSync(envFile, "utf8");
+      const pwdMatch = existingEnv.match(/^GF_SECURITY_ADMIN_PASSWORD=(.+)$/m);
+      if (pwdMatch) {
+        envLines.push(`GF_SECURITY_ADMIN_PASSWORD=${pwdMatch[1]}`);
+      }
+    }
+    fs.writeFileSync(envFile, envLines.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
+
+    if (opts.tag) {
+      console.log(`Using image tag: ${imageTag}\n`);
+    }
 
     // Validate conflicting options
     if (opts.demo && opts.dbUrl) {
