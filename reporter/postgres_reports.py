@@ -25,7 +25,73 @@ except ImportError:  # pragma: no cover
 class PostgresReportGenerator:
     # Default databases to always exclude
     DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
-    
+
+    # Settings filter lists for reports based on A003
+    D004_SETTINGS = [
+        'pg_stat_statements.max',
+        'pg_stat_statements.track',
+        'pg_stat_statements.track_utility',
+        'pg_stat_statements.save',
+        'pg_stat_statements.track_planning',
+        'shared_preload_libraries',
+        'track_activities',
+        'track_counts',
+        'track_functions',
+        'track_io_timing',
+        'track_wal_io_timing'
+    ]
+
+    F001_SETTINGS = [
+        'autovacuum',
+        'autovacuum_analyze_scale_factor',
+        'autovacuum_analyze_threshold',
+        'autovacuum_freeze_max_age',
+        'autovacuum_max_workers',
+        'autovacuum_multixact_freeze_max_age',
+        'autovacuum_naptime',
+        'autovacuum_vacuum_cost_delay',
+        'autovacuum_vacuum_cost_limit',
+        'autovacuum_vacuum_insert_scale_factor',
+        'autovacuum_vacuum_scale_factor',
+        'autovacuum_vacuum_threshold',
+        'autovacuum_work_mem',
+        'vacuum_cost_delay',
+        'vacuum_cost_limit',
+        'vacuum_cost_page_dirty',
+        'vacuum_cost_page_hit',
+        'vacuum_cost_page_miss',
+        'vacuum_freeze_min_age',
+        'vacuum_freeze_table_age',
+        'vacuum_multixact_freeze_min_age',
+        'vacuum_multixact_freeze_table_age'
+    ]
+
+    G001_SETTINGS = [
+        'shared_buffers',
+        'work_mem',
+        'maintenance_work_mem',
+        'effective_cache_size',
+        'autovacuum_work_mem',
+        'max_wal_size',
+        'min_wal_size',
+        'wal_buffers',
+        'checkpoint_completion_target',
+        'max_connections',
+        'max_prepared_transactions',
+        'max_locks_per_transaction',
+        'max_pred_locks_per_transaction',
+        'max_pred_locks_per_relation',
+        'max_pred_locks_per_page',
+        'logical_decoding_work_mem',
+        'hash_mem_multiplier',
+        'temp_buffers',
+        'shared_preload_libraries',
+        'dynamic_shared_memory_type',
+        'huge_pages',
+        'max_files_per_process',
+        'max_stack_depth'
+    ]
+
     def __init__(self, prometheus_url: str = "http://sink-prometheus:9090", 
                  postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements",
                  excluded_databases: Optional[List[str]] = None):
@@ -1954,13 +2020,326 @@ class PostgresReportGenerator:
 
         return template_data
 
+    def filter_a003_settings(self, a003_report: Dict[str, Any], setting_names: List[str]) -> Dict[str, Any]:
+        """
+        Filter A003 settings data to include only specified settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            setting_names: List of setting names to include
+
+        Returns:
+            Filtered settings dictionary
+        """
+        filtered = {}
+        # Handle both single-node and multi-node A003 report structures
+        results = a003_report.get('results', {})
+        for node_name, node_data in results.items():
+            data = node_data.get('data', {})
+            for setting_name, setting_info in data.items():
+                if setting_name in setting_names:
+                    filtered[setting_name] = setting_info
+        return filtered
+
+    def extract_postgres_version_from_a003(self, a003_report: Dict[str, Any], node_name: str = None) -> Dict[str, str]:
+        """
+        Extract PostgreSQL version info from A003 report.
+
+        Args:
+            a003_report: Full A003 report
+            node_name: Optional specific node name. If None, uses first available node.
+
+        Returns:
+            Dictionary with postgres version info
+        """
+        results = a003_report.get('results', {})
+        if not results:
+            return {}
+
+        if node_name and node_name in results:
+            return results[node_name].get('postgres_version', {})
+
+        # Use first available node
+        first_node = next(iter(results.values()), {})
+        return first_node.get('postgres_version', {})
+
+    def generate_d004_from_a003(self, a003_report: Dict[str, Any], cluster: str = "local",
+                                 node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate D004 report by filtering A003 data for pg_stat_statements settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            cluster: Cluster name (for status checks)
+            node_name: Node name
+
+        Returns:
+            D004 report dictionary
+        """
+        print("Generating D004 from A003 data...")
+
+        # Filter A003 settings for D004-relevant settings
+        pgstat_data = self.filter_a003_settings(a003_report, self.D004_SETTINGS)
+
+        # Check extension status (still needs direct queries)
+        kcache_status = self._check_pg_stat_kcache_status(cluster, node_name)
+        pgss_status = self._check_pg_stat_statements_status(cluster, node_name)
+
+        # Extract postgres version from A003
+        postgres_version = self.extract_postgres_version_from_a003(a003_report, node_name)
+
+        return self.format_report_data(
+            "D004",
+            {
+                "settings": pgstat_data,
+                "pg_stat_statements_status": pgss_status,
+                "pg_stat_kcache_status": kcache_status,
+            },
+            node_name,
+            postgres_version=postgres_version,
+        )
+
+    def generate_f001_from_a003(self, a003_report: Dict[str, Any], node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate F001 report by filtering A003 data for autovacuum settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            node_name: Node name
+
+        Returns:
+            F001 report dictionary
+        """
+        print("Generating F001 from A003 data...")
+
+        # Filter A003 settings for F001-relevant settings
+        autovacuum_data = self.filter_a003_settings(a003_report, self.F001_SETTINGS)
+
+        # Extract postgres version from A003
+        postgres_version = self.extract_postgres_version_from_a003(a003_report, node_name)
+
+        return self.format_report_data("F001", autovacuum_data, node_name, postgres_version=postgres_version)
+
+    def generate_g001_from_a003(self, a003_report: Dict[str, Any], node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate G001 report by filtering A003 data for memory settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            node_name: Node name
+
+        Returns:
+            G001 report dictionary with memory analysis
+        """
+        print("Generating G001 from A003 data...")
+
+        # Filter A003 settings for G001-relevant settings
+        memory_data = self.filter_a003_settings(a003_report, self.G001_SETTINGS)
+
+        # Calculate memory analysis
+        memory_analysis = self._analyze_memory_settings(memory_data)
+
+        # Extract postgres version from A003
+        postgres_version = self.extract_postgres_version_from_a003(a003_report, node_name)
+
+        return self.format_report_data(
+            "G001",
+            {
+                "settings": memory_data,
+                "analysis": memory_analysis,
+            },
+            node_name,
+            postgres_version=postgres_version,
+        )
+
+    def report_to_markdown(self, report: Dict[str, Any]) -> str:
+        """
+        Convert a report dictionary to markdown format.
+
+        Args:
+            report: Report dictionary (D004, F001, G001, etc.)
+
+        Returns:
+            Markdown string representation of the report
+        """
+        check_id = report.get('checkId', 'Unknown')
+        check_title = report.get('checkTitle', 'Unknown Report')
+        timestamp = report.get('timestamptz', '')
+        nodes = report.get('nodes', {})
+        results = report.get('results', {})
+
+        lines = [
+            f"# {check_id}: {check_title}",
+            "",
+            f"**Generated:** {timestamp}",
+            "",
+        ]
+
+        # Add postgres version if available
+        for node_name, node_data in results.items():
+            pg_version = node_data.get('postgres_version', {})
+            if pg_version:
+                version_str = pg_version.get('version', 'Unknown')
+                lines.append(f"**PostgreSQL Version:** {version_str}")
+                lines.append("")
+                break
+
+        # Add node info
+        primary = nodes.get('primary', '')
+        standbys = nodes.get('standbys', [])
+        if primary:
+            lines.append(f"**Primary Node:** {primary}")
+        if standbys:
+            lines.append(f"**Standby Nodes:** {', '.join(standbys)}")
+        lines.append("")
+
+        # Generate content based on check type
+        if check_id == 'D004':
+            lines.extend(self._d004_to_markdown_content(results))
+        elif check_id == 'F001':
+            lines.extend(self._f001_to_markdown_content(results))
+        elif check_id == 'G001':
+            lines.extend(self._g001_to_markdown_content(results))
+        else:
+            lines.extend(self._generic_settings_to_markdown_content(results))
+
+        return '\n'.join(lines)
+
+    def _settings_table_markdown(self, settings: Dict[str, Any]) -> List[str]:
+        """Generate markdown table for settings."""
+        if not settings:
+            return ["*No settings data available.*", ""]
+
+        lines = [
+            "| Setting | Value | Category | Context |",
+            "|---------|-------|----------|---------|",
+        ]
+        for name, info in sorted(settings.items()):
+            value = info.get('pretty_value', info.get('setting', ''))
+            category = info.get('category', '')
+            context = info.get('context', '')
+            lines.append(f"| `{name}` | {value} | {category} | {context} |")
+        lines.append("")
+        return lines
+
+    def _d004_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
+        """Generate D004-specific markdown content."""
+        lines = []
+
+        for node_name, node_data in results.items():
+            data = node_data.get('data', {})
+
+            lines.append(f"## Node: {node_name}")
+            lines.append("")
+
+            # Settings table
+            lines.append("### pg_stat_statements and Related Settings")
+            lines.append("")
+            settings = data.get('settings', data)
+            lines.extend(self._settings_table_markdown(settings))
+
+            # pg_stat_statements status
+            pgss_status = data.get('pg_stat_statements_status', {})
+            if pgss_status:
+                lines.append("### pg_stat_statements Status")
+                lines.append("")
+                available = "✅ Available" if pgss_status.get('extension_available') else "❌ Not Available"
+                lines.append(f"- **Extension:** {available}")
+                lines.append(f"- **Metrics Count:** {pgss_status.get('metrics_count', 0)}")
+                lines.append(f"- **Total Calls:** {pgss_status.get('total_calls', 0)}")
+                lines.append("")
+
+            # pg_stat_kcache status
+            kcache_status = data.get('pg_stat_kcache_status', {})
+            if kcache_status:
+                lines.append("### pg_stat_kcache Status")
+                lines.append("")
+                available = "✅ Available" if kcache_status.get('extension_available') else "❌ Not Available"
+                lines.append(f"- **Extension:** {available}")
+                lines.append(f"- **Metrics Count:** {kcache_status.get('metrics_count', 0)}")
+                lines.append("")
+
+        return lines
+
+    def _f001_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
+        """Generate F001-specific markdown content."""
+        lines = []
+
+        for node_name, node_data in results.items():
+            data = node_data.get('data', {})
+
+            lines.append(f"## Node: {node_name}")
+            lines.append("")
+            lines.append("### Autovacuum Settings")
+            lines.append("")
+            lines.extend(self._settings_table_markdown(data))
+
+        return lines
+
+    def _g001_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
+        """Generate G001-specific markdown content."""
+        lines = []
+
+        for node_name, node_data in results.items():
+            data = node_data.get('data', {})
+
+            lines.append(f"## Node: {node_name}")
+            lines.append("")
+
+            # Settings table
+            lines.append("### Memory-Related Settings")
+            lines.append("")
+            settings = data.get('settings', {})
+            lines.extend(self._settings_table_markdown(settings))
+
+            # Memory analysis
+            analysis = data.get('analysis', {})
+            mem_usage = analysis.get('estimated_total_memory_usage', {})
+            if mem_usage:
+                lines.append("### Memory Usage Analysis")
+                lines.append("")
+                lines.append("| Metric | Value |")
+                lines.append("|--------|-------|")
+
+                if mem_usage.get('shared_buffers_pretty'):
+                    lines.append(f"| Shared Buffers | {mem_usage.get('shared_buffers_pretty')} |")
+                if mem_usage.get('wal_buffers_pretty'):
+                    lines.append(f"| WAL Buffers | {mem_usage.get('wal_buffers_pretty')} |")
+                if mem_usage.get('shared_memory_total_pretty'):
+                    lines.append(f"| Shared Memory Total | {mem_usage.get('shared_memory_total_pretty')} |")
+                if mem_usage.get('work_mem_per_connection_pretty'):
+                    lines.append(f"| Work Mem (per connection) | {mem_usage.get('work_mem_per_connection_pretty')} |")
+                if mem_usage.get('max_work_mem_usage_pretty'):
+                    lines.append(f"| Max Work Mem (all connections) | {mem_usage.get('max_work_mem_usage_pretty')} |")
+                if mem_usage.get('maintenance_work_mem_pretty'):
+                    lines.append(f"| Maintenance Work Mem | {mem_usage.get('maintenance_work_mem_pretty')} |")
+                if mem_usage.get('effective_cache_size_pretty'):
+                    lines.append(f"| Effective Cache Size | {mem_usage.get('effective_cache_size_pretty')} |")
+
+                lines.append("")
+
+        return lines
+
+    def _generic_settings_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
+        """Generate generic markdown content for settings-based reports."""
+        lines = []
+
+        for node_name, node_data in results.items():
+            data = node_data.get('data', {})
+
+            lines.append(f"## Node: {node_name}")
+            lines.append("")
+            lines.extend(self._settings_table_markdown(data))
+
+        return lines
+
     def get_check_title(self, check_id: str) -> str:
         """
         Get the human-readable title for a check ID.
-        
+
         Args:
             check_id: The check identifier (e.g., "H004")
-            
+
         Returns:
             Human-readable title for the check
         """
@@ -2229,17 +2608,14 @@ class PostgresReportGenerator:
             nodes_to_process = [node_name]
             all_nodes = {"primary": node_name, "standbys": []}
 
-        # Generate each report type
-        report_types = [
+        # Reports that don't depend on A003 (generate first)
+        independent_report_types = [
             ('A002', self.generate_a002_version_report),
             ('A003', self.generate_a003_settings_report),
             ('A004', self.generate_a004_cluster_report),
             ('A007', self.generate_a007_altered_settings_report),
-            ('D004', self.generate_d004_pgstat_settings_report),
-            ('F001', self.generate_f001_autovacuum_settings_report),
             ('F004', self.generate_f004_heap_bloat_report),
             ('F005', self.generate_f005_btree_bloat_report),
-            ('G001', self.generate_g001_memory_settings_report),
             ('H001', self.generate_h001_invalid_indexes_report),
             ('H002', self.generate_h002_unused_indexes_report),
             ('H004', self.generate_h004_redundant_indexes_report),
@@ -2247,7 +2623,7 @@ class PostgresReportGenerator:
             ('K003', self.generate_k003_top_queries_report),
         ]
 
-        for check_id, report_func in report_types:
+        for check_id, report_func in independent_report_types:
             if len(nodes_to_process) == 1:
                 # Single node - generate report normally
                 reports[check_id] = report_func(cluster, nodes_to_process[0])
@@ -2260,14 +2636,69 @@ class PostgresReportGenerator:
                     # Extract the data from the node report
                     if 'results' in node_report and node in node_report['results']:
                         combined_results[node] = node_report['results'][node]
-                
+
                 # Create combined report with all nodes
                 reports[check_id] = self.format_report_data(
-                    check_id, 
-                    combined_results, 
+                    check_id,
+                    combined_results,
                     all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
                     all_nodes
                 )
+
+        # Generate D004, F001, G001 from A003 data (if A003 was generated successfully)
+        a003_report = reports.get('A003')
+        if a003_report:
+            # Reports derived from A003
+            a003_derived_reports = [
+                ('D004', lambda c, n: self.generate_d004_from_a003(a003_report, c, n)),
+                ('F001', lambda c, n: self.generate_f001_from_a003(a003_report, n)),
+                ('G001', lambda c, n: self.generate_g001_from_a003(a003_report, n)),
+            ]
+
+            for check_id, report_func in a003_derived_reports:
+                if len(nodes_to_process) == 1:
+                    reports[check_id] = report_func(cluster, nodes_to_process[0])
+                else:
+                    # For multi-node, use the first node as reference
+                    # (A003 data already contains all nodes)
+                    combined_results = {}
+                    for node in nodes_to_process:
+                        print(f"Generating {check_id} report for node {node} from A003...")
+                        node_report = report_func(cluster, node)
+                        if 'results' in node_report and node in node_report['results']:
+                            combined_results[node] = node_report['results'][node]
+
+                    reports[check_id] = self.format_report_data(
+                        check_id,
+                        combined_results,
+                        all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
+                        all_nodes
+                    )
+        else:
+            # Fallback to direct generation if A003 failed
+            print("Warning: A003 report not available, generating D004/F001/G001 directly")
+            fallback_report_types = [
+                ('D004', self.generate_d004_pgstat_settings_report),
+                ('F001', self.generate_f001_autovacuum_settings_report),
+                ('G001', self.generate_g001_memory_settings_report),
+            ]
+            for check_id, report_func in fallback_report_types:
+                if len(nodes_to_process) == 1:
+                    reports[check_id] = report_func(cluster, nodes_to_process[0])
+                else:
+                    combined_results = {}
+                    for node in nodes_to_process:
+                        print(f"Generating {check_id} report for node {node}...")
+                        node_report = report_func(cluster, node)
+                        if 'results' in node_report and node in node_report['results']:
+                            combined_results[node] = node_report['results'][node]
+
+                    reports[check_id] = self.format_report_data(
+                        check_id,
+                        combined_results,
+                        all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
+                        all_nodes
+                    )
 
         return reports
 
@@ -2566,6 +2997,8 @@ def main():
                         help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                         help='Output file (default: stdout)')
+    parser.add_argument('--format', choices=['json', 'markdown', 'both'], default='json',
+                        help='Output format: json, markdown, or both (default: json)')
     parser.add_argument('--api-url', default='https://postgres.ai/api/general')
     parser.add_argument('--token', default='')
     parser.add_argument('--project-name', default='project-name',
@@ -2623,16 +3056,28 @@ def main():
                     report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
                 
                 reports = generator.generate_all_reports(cluster, args.node_name, combine_nodes)
-                
+
                 # Save reports with cluster name prefix
-                for report in reports:
-                    output_filename = f"{cluster}_{report}.json" if len(clusters_to_process) > 1 else f"{report}.json"
-                    with open(output_filename, "w") as f:
-                        json.dump(reports[report], f, indent=2)
-                    print(f"Generated report: {output_filename}")
-                    if not args.no_upload:
-                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
-                
+                for check_id in reports:
+                    report_data = reports[check_id]
+                    base_name = f"{cluster}_{check_id}" if len(clusters_to_process) > 1 else check_id
+
+                    # Write JSON if format is json or both
+                    if args.format in ('json', 'both'):
+                        json_filename = f"{base_name}.json"
+                        with open(json_filename, "w") as f:
+                            json.dump(report_data, f, indent=2)
+                        print(f"Generated JSON report: {json_filename}")
+                        if not args.no_upload:
+                            generator.upload_report_file(args.api_url, args.token, report_id, json_filename)
+
+                    # Write Markdown if format is markdown or both
+                    if args.format in ('markdown', 'both'):
+                        md_filename = f"{base_name}.md"
+                        with open(md_filename, 'w') as f:
+                            f.write(generator.report_to_markdown(report_data))
+                        print(f"Generated Markdown report: {md_filename}")
+
                 if args.output == '-':
                     pass
                 elif len(clusters_to_process) == 1:
@@ -2650,7 +3095,13 @@ def main():
                 # Generate specific report - use node_name or default
                 if args.node_name is None:
                     args.node_name = "node-01"
-                    
+
+                # For D004, F001, G001 - generate A003 first and derive from it
+                a003_report = None
+                if args.check_id in ('D004', 'F001', 'G001'):
+                    print(f"Generating A003 first for {args.check_id}...")
+                    a003_report = generator.generate_a003_settings_report(cluster, args.node_name)
+
                 if args.check_id == 'A002':
                     report = generator.generate_a002_version_report(cluster, args.node_name)
                 elif args.check_id == 'A003':
@@ -2660,15 +3111,24 @@ def main():
                 elif args.check_id == 'A007':
                     report = generator.generate_a007_altered_settings_report(cluster, args.node_name)
                 elif args.check_id == 'D004':
-                    report = generator.generate_d004_pgstat_settings_report(cluster, args.node_name)
+                    if a003_report:
+                        report = generator.generate_d004_from_a003(a003_report, cluster, args.node_name)
+                    else:
+                        report = generator.generate_d004_pgstat_settings_report(cluster, args.node_name)
                 elif args.check_id == 'F001':
-                    report = generator.generate_f001_autovacuum_settings_report(cluster, args.node_name)
+                    if a003_report:
+                        report = generator.generate_f001_from_a003(a003_report, args.node_name)
+                    else:
+                        report = generator.generate_f001_autovacuum_settings_report(cluster, args.node_name)
                 elif args.check_id == 'F004':
                     report = generator.generate_f004_heap_bloat_report(cluster, args.node_name)
                 elif args.check_id == 'F005':
                     report = generator.generate_f005_btree_bloat_report(cluster, args.node_name)
                 elif args.check_id == 'G001':
-                    report = generator.generate_g001_memory_settings_report(cluster, args.node_name)
+                    if a003_report:
+                        report = generator.generate_g001_from_a003(a003_report, args.node_name)
+                    else:
+                        report = generator.generate_g001_memory_settings_report(cluster, args.node_name)
                 elif args.check_id == 'H001':
                     report = generator.generate_h001_invalid_indexes_report(cluster, args.node_name)
                 elif args.check_id == 'H002':
@@ -2680,18 +3140,37 @@ def main():
                 elif args.check_id == 'K003':
                     report = generator.generate_k003_top_queries_report(cluster, args.node_name)
 
-                output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
-                
+                # Determine output filenames
+                base_name = f"{cluster}_{args.check_id}" if len(clusters_to_process) > 1 else args.check_id
+                json_filename = f"{base_name}.json" if args.output == '-' else args.output
+                md_filename = f"{base_name}.md"
+
+                # Output based on format
                 if args.output == '-' and len(clusters_to_process) == 1:
-                    print(json.dumps(report, indent=2))
+                    if args.format == 'markdown':
+                        print(generator.report_to_markdown(report))
+                    elif args.format == 'both':
+                        print(json.dumps(report, indent=2))
+                        print("\n--- Markdown ---\n")
+                        print(generator.report_to_markdown(report))
+                    else:
+                        print(json.dumps(report, indent=2))
                 else:
-                    with open(output_filename, 'w') as f:
-                        json.dump(report, f, indent=2)
-                    print(f"Report written to {output_filename}")
-                    if not args.no_upload:
-                        project_name = args.project_name if args.project_name != 'project-name' else cluster
-                        report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
-                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                    # Write JSON if format is json or both
+                    if args.format in ('json', 'both'):
+                        with open(json_filename, 'w') as f:
+                            json.dump(report, f, indent=2)
+                        print(f"JSON report written to {json_filename}")
+                        if not args.no_upload:
+                            project_name = args.project_name if args.project_name != 'project-name' else cluster
+                            report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
+                            generator.upload_report_file(args.api_url, args.token, report_id, json_filename)
+
+                    # Write Markdown if format is markdown or both
+                    if args.format in ('markdown', 'both'):
+                        with open(md_filename, 'w') as f:
+                            f.write(generator.report_to_markdown(report))
+                        print(f"Markdown report written to {md_filename}")
     except Exception as e:
         print(f"Error generating reports: {e}")
         raise e
