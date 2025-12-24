@@ -1536,10 +1536,26 @@ targets
 // Authentication and API key management
 program
   .command("auth")
-  .description("authenticate via browser and obtain API key")
+  .description("authenticate via browser (OAuth) or store API key directly")
+  .option("--set-key <key>", "store API key directly without OAuth flow")
   .option("--port <port>", "local callback server port (default: random)", parseInt)
   .option("--debug", "enable debug output")
-  .action(async (opts: { port?: number; debug?: boolean }) => {
+  .action(async (opts: { setKey?: string; port?: number; debug?: boolean }) => {
+    // If --set-key is provided, store it directly without OAuth
+    if (opts.setKey) {
+      const trimmedKey = opts.setKey.trim();
+      if (!trimmedKey) {
+        console.error("Error: API key cannot be empty");
+        process.exitCode = 1;
+        return;
+      }
+      
+      config.writeConfig({ apiKey: trimmedKey });
+      console.log(`API key saved to ${config.getConfigPath()}`);
+      return;
+    }
+
+    // Otherwise, proceed with OAuth flow
     const pkce = require("../lib/pkce");
     const authServer = require("../lib/auth-server");
 
@@ -1765,8 +1781,9 @@ program
 
 program
   .command("add-key <apiKey>")
-  .description("store API key")
+  .description("store API key (deprecated: use 'auth --set-key' instead)")
   .action(async (apiKey: string) => {
+    console.warn("Warning: 'add-key' is deprecated. Use 'auth --set-key <key>' instead.\n");
     config.writeConfig({ apiKey });
     console.log(`API key saved to ${config.getConfigPath()}`);
   });

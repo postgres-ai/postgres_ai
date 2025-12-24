@@ -256,10 +256,10 @@ postgres-ai mon show-grafana-credentials       # Show Grafana credentials
 
 ### Authentication and API key management
 ```bash
-postgres-ai auth               # Authenticate via browser (recommended)
-postgres-ai add-key <key>      # Manually store API key
-postgres-ai show-key           # Show stored key (masked)
-postgres-ai remove-key         # Remove stored key
+postgres-ai auth                    # Authenticate via browser (OAuth)
+postgres-ai auth --set-key <key>    # Store API key directly
+postgres-ai show-key                # Show stored key (masked)
+postgres-ai remove-key              # Remove stored key
 ```
 
 ## Configuration

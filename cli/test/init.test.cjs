@@ -320,4 +320,73 @@ test("pgai wrapper forwards to postgresai CLI", () => {
   assert.match(r.stdout, /postgresai|PostgresAI/i);
 });
 
+test("cli: prepare-db command exists and shows help", () => {
+  const r = runCli(["prepare-db", "--help"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /monitoring user/i);
+  assert.match(r.stdout, /--print-sql/);
+});
+
+test("cli: prepare-db with missing connection prints help/options", () => {
+  const r = runCli(["prepare-db"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /--print-sql/);
+  assert.match(r.stderr, /--monitoring-user/);
+});
+
+test("cli: prepare-db --print-sql works without connection (offline mode)", () => {
+  const r = runCli(["prepare-db", "--print-sql", "-d", "mydb", "--password", "monpw"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /SQL plan \(offline; not connected\)/);
+  assert.match(r.stdout, new RegExp(`grant connect on database "mydb" to "${DEFAULT_MONITORING_USER}"`, "i"));
+});
+
+test("cli: mon local-install command exists and shows help", () => {
+  const r = runCli(["mon", "local-install", "--help"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /--demo/);
+  assert.match(r.stdout, /--api-key/);
+});
+
+// Auth --set-key tests
+test("cli: auth --set-key stores key without OAuth", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const os = require("node:os");
+  
+  // Use a temp directory for config to avoid modifying user's actual config
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pgai-auth-test-"));
+  
+  try {
+    // Create the postgresai subdirectory so we know exactly where config goes
+    const postgresaiDir = path.join(tmpDir, "postgresai");
+    fs.mkdirSync(postgresaiDir, { recursive: true });
+    
+    // Set XDG_CONFIG_HOME to redirect config to temp dir
+    const r = runCli(["auth", "--set-key", "test-api-key-12345"], {
+      XDG_CONFIG_HOME: tmpDir,
+      // Also clear HOME to prevent fallbacks
+      HOME: tmpDir,
+    });
+    
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    assert.match(r.stdout, /API key saved/i);
+    
+    // Verify the config file was created with the API key
+    const actualConfigPath = path.join(postgresaiDir, "config.json");
+    assert.ok(fs.existsSync(actualConfigPath), "Config file should exist at " + actualConfigPath);
+    
+    const config = JSON.parse(fs.readFileSync(actualConfigPath, "utf8"));
+    assert.equal(config.apiKey, "test-api-key-12345");
+  } finally {
+    // Cleanup
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("cli: auth --help shows --set-key option", () => {
+  const r = runCli(["auth", "--help"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /--set-key/);
+});
 
