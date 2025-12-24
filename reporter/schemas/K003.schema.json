@@ -5,6 +5,8 @@
   "additionalProperties": false,
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
   "properties": {
+    "version": { "type": ["string", "null"] },
+    "build_ts": { "type": ["string", "null"] },
     "checkId": { "const": "K003" },
     "checkTitle": { "const": "Top-50 queries by total_time" },
     "timestamptz": { "type": "string" },
