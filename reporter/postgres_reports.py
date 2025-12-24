@@ -22,7 +22,7 @@ import psycopg2
 import psycopg2.extras
 
 
-from .logger import logger
+from reporter.logger import logger
 
 
 class PostgresReportGenerator:
