@@ -158,20 +158,19 @@ services:
     container_name: postgres-reports
     working_dir: /app
     volumes:
-      - ./reporter/postgres_reports.py:/app/postgres_reports.py
-      - ./reporter/logger.py:/app/logger.py
-      - ./reporter/requirements.txt:/app/requirements.txt
+      - ./reporter:/app/reporter
       - ./.pgwatch-config:/app/.pgwatch-config
       - ./instances.yml:/app/instances.yml
     environment:
       - PROMETHEUS_URL=http://sink-prometheus:9090
+      - PYTHONPATH=/app
     depends_on:
       - sink-prometheus
       - pgwatch-prometheus
     command: >
       sh -c "
       echo 'Installing Python dependencies...' &&
-      pip install -r requirements.txt &&
+      pip install -r reporter/requirements.txt &&
       pip install pyyaml &&
       echo 'Waiting 30 minutes before generating reports...' &&
       sleep 1800 &&
@@ -181,10 +180,10 @@ services:
         echo 'Generating PostgreSQL reports...' &&
         if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
           API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
-          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY
+          python -m reporter.postgres_reports --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY
         else
           echo 'No API key configured, generating reports without upload...' &&
-          python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
+          python -m reporter.postgres_reports --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
         fi
         status=$$?
         if [ $$status -ne 0 ]; then
