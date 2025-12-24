@@ -203,8 +203,8 @@ program
   );
 
 program
-  .command("init [conn]")
-  .description("Create a monitoring user, required view(s), and grant required permissions (idempotent)")
+  .command("prepare-db [conn]")
+  .description("Prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
   .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
   .option("-h, --host <host>", "PostgreSQL host (psql-like)")
   .option("-p, --port <port>", "PostgreSQL port (psql-like)")
@@ -223,9 +223,9 @@ program
     [
       "",
       "Examples:",
-      "  postgresai init postgresql://admin@host:5432/dbname",
-      "  postgresai init \"dbname=dbname host=host user=admin\"",
-      "  postgresai init -h host -p 5432 -U admin -d dbname",
+      "  postgresai prepare-db postgresql://admin@host:5432/dbname",
+      "  postgresai prepare-db \"dbname=dbname host=host user=admin\"",
+      "  postgresai prepare-db -h host -p 5432 -U admin -d dbname",
       "",
       "Admin password:",
       "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
@@ -247,16 +247,16 @@ program
       "  PGAI_MON_PASSWORD                   — monitoring password",
       "",
       "Inspect SQL without applying changes:",
-      "  postgresai init <conn> --print-sql",
+      "  postgresai prepare-db <conn> --print-sql",
       "",
       "Verify setup (no changes):",
-      "  postgresai init <conn> --verify",
+      "  postgresai prepare-db <conn> --verify",
       "",
       "Reset monitoring password only:",
-      "  postgresai init <conn> --reset-password --password '...'",
+      "  postgresai prepare-db <conn> --reset-password --password '...'",
       "",
       "Offline SQL plan (no DB connection):",
-      "  postgresai init --print-sql",
+      "  postgresai prepare-db --print-sql",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -336,7 +336,7 @@ program
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`Error: init: ${msg}`);
+      console.error(`Error: prepare-db: ${msg}`);
       // When connection details are missing, show full init help (options + examples).
       if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
         console.error("");
@@ -372,14 +372,14 @@ program
           includeOptionalPermissions,
         });
         if (v.ok) {
-          console.log("✓ init verify: OK");
+          console.log("✓ prepare-db verify: OK");
           if (v.missingOptional.length > 0) {
             console.log("⚠ Optional items missing:");
             for (const m of v.missingOptional) console.log(`- ${m}`);
           }
           return;
         }
-        console.error("✗ init verify failed: missing required items");
+        console.error("✗ prepare-db verify failed: missing required items");
         for (const m of v.missingRequired) console.error(`- ${m}`);
         if (v.missingOptional.length > 0) {
           console.error("Optional items missing:");
@@ -455,7 +455,7 @@ program
 
       const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
 
-      console.log(opts.resetPassword ? "✓ init password reset completed" : "✓ init completed");
+      console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
       if (skippedOptional.length > 0) {
         console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
         for (const s of skippedOptional) console.log(`- ${s}`);
@@ -477,7 +477,7 @@ program
       if (!message || message === "[object Object]") {
         message = "Unknown error";
       }
-      console.error(`Error: init: ${message}`);
+      console.error(`Error: prepare-db: ${message}`);
       // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
       const stepMatch =
         typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
@@ -679,8 +679,8 @@ program.command("help", { isDefault: true }).description("show help").action(() 
 const mon = program.command("mon").description("monitoring services management");
 
 mon
-  .command("quickstart")
-  .description("complete setup (generate config, start monitoring services)")
+  .command("local-install")
+  .description("install local monitoring stack (generate config, start services)")
   .option("--demo", "demo mode with sample database", false)
   .option("--api-key <key>", "Postgres AI API key for automated report uploads")
   .option("--db-url <url>", "PostgreSQL connection URL to monitor")
@@ -688,7 +688,7 @@ mon
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
   .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
     console.log("\n=================================");
-    console.log("  PostgresAI Monitoring Quickstart");
+    console.log("  PostgresAI monitoring local install");
     console.log("=================================\n");
     console.log("This will install, configure, and start the monitoring system\n");
 
@@ -726,8 +726,8 @@ mon
     if (opts.demo && opts.apiKey) {
       console.error("✗ Cannot use --api-key with --demo mode");
       console.error("✗ Demo mode is for testing only and does not support API key integration");
-      console.error("\nUse demo mode without API key: postgres-ai mon quickstart --demo");
-      console.error("Or use production mode with API key: postgres-ai mon quickstart --api-key=your_key");
+      console.error("\nUse demo mode without API key: postgres-ai mon local-install --demo");
+      console.error("Or use production mode with API key: postgres-ai mon local-install --api-key=your_key");
       process.exitCode = 1;
       return;
     }
@@ -989,7 +989,7 @@ mon
 
     // Final summary
     console.log("=================================");
-    console.log("  🎉 Quickstart setup completed!");
+    console.log("  Local install completed!");
     console.log("=================================\n");
 
     console.log("What's running:");
@@ -1536,10 +1536,26 @@ targets
 // Authentication and API key management
 program
   .command("auth")
-  .description("authenticate via browser and obtain API key")
+  .description("authenticate via browser (OAuth) or store API key directly")
+  .option("--set-key <key>", "store API key directly without OAuth flow")
   .option("--port <port>", "local callback server port (default: random)", parseInt)
   .option("--debug", "enable debug output")
-  .action(async (opts: { port?: number; debug?: boolean }) => {
+  .action(async (opts: { setKey?: string; port?: number; debug?: boolean }) => {
+    // If --set-key is provided, store it directly without OAuth
+    if (opts.setKey) {
+      const trimmedKey = opts.setKey.trim();
+      if (!trimmedKey) {
+        console.error("Error: API key cannot be empty");
+        process.exitCode = 1;
+        return;
+      }
+      
+      config.writeConfig({ apiKey: trimmedKey });
+      console.log(`API key saved to ${config.getConfigPath()}`);
+      return;
+    }
+
+    // Otherwise, proceed with OAuth flow
     const pkce = require("../lib/pkce");
     const authServer = require("../lib/auth-server");
 
@@ -1765,8 +1781,9 @@ program
 
 program
   .command("add-key <apiKey>")
-  .description("store API key")
+  .description("store API key (deprecated: use 'auth --set-key' instead)")
   .action(async (apiKey: string) => {
+    console.warn("Warning: 'add-key' is deprecated. Use 'auth --set-key <key>' instead.\n");
     config.writeConfig({ apiKey });
     console.log(`API key saved to ${config.getConfigPath()}`);
   });
@@ -1893,7 +1910,7 @@ mon
     const { projectDir } = await resolveOrInitPaths();
     const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     if (!fs.existsSync(cfgPath)) {
-      console.error("Configuration file not found. Run 'postgres-ai mon quickstart' first.");
+      console.error("Configuration file not found. Run 'postgres-ai mon local-install' first.");
       process.exitCode = 1;
       return;
     }
