@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import pytest
 
@@ -25,10 +25,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 @pytest.fixture(name="prom_result")
-def fixture_prom_result() -> Callable[[list[dict] | None, str], dict]:
+def fixture_prom_result() -> Callable[[Optional[List[Dict]], str], Dict]:
     """Build a Prometheus-like payload for the happy-path tests."""
 
-    def _builder(rows: list[dict] | None = None, status: str = "success") -> dict:
+    def _builder(rows: Optional[List[Dict]] = None, status: str = "success") -> Dict:
         return {
             "status": status,
             "data": {
@@ -40,14 +40,14 @@ def fixture_prom_result() -> Callable[[list[dict] | None, str], dict]:
 
 
 @pytest.fixture(name="series_sample")
-def fixture_series_sample() -> Callable[[str, dict | None, list[tuple[float | int, float | int | str]] | None], dict]:
+def fixture_series_sample() -> Callable[[str, Optional[Dict], Optional[List[Tuple[Union[float, int], Union[float, int, str]]]]], Dict]:
     """Create metric entries (metric metadata + values array) for query_range tests."""
 
     def _builder(
         metric_name: str,
-        labels: dict | None = None,
-        values: list[tuple[float | int, float | int | str]] | None = None,
-    ) -> dict:
+        labels: Optional[Dict] = None,
+        values: Optional[List[Tuple[Union[float, int], Union[float, int, str]]]] = None,
+    ) -> Dict:
         labels = labels or {}
         values = values or []
         return {

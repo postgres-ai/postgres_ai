@@ -11,6 +11,48 @@ PROJECT_NAME="postgres-ai-mon"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 PYTHON_REQUIREMENTS="$SCRIPT_DIR/requirements.txt"
 INSTANCES_FILE="$SCRIPT_DIR/instances.yml"
+ENV_FILE="$SCRIPT_DIR/.env"
+
+# Ensure PGAI_TAG is set for docker compose
+# Priority: 1) Already exported env var, 2) .env file, 3) Error with instructions
+ensure_pgai_config() {
+    # Try to load from .env file if exists
+    if [ -f "$ENV_FILE" ]; then
+        # Source .env file to get variables
+        set -a
+        # shellcheck disable=SC1090
+        source "$ENV_FILE" 2>/dev/null || true
+        set +a
+    fi
+
+    # Check required PGAI_TAG
+    if [ -z "${PGAI_TAG:-}" ]; then
+        log_error "PGAI_TAG is not set"
+        echo
+        echo "The docker-compose.yml requires PGAI_TAG to specify image version."
+        echo
+        echo "Create .env file (example for version 0.14.0):"
+        echo
+        echo "  echo 'PGAI_TAG=0.14.0' > $ENV_FILE"
+        echo
+        echo "Or for GitLab Container Registry images:"
+        echo
+        echo "  cat > $ENV_FILE << 'EOF'"
+        echo "  PGAI_REGISTRY=registry.gitlab.com/postgres-ai/postgres_ai"
+        echo "  PGAI_TAG=feat-branch-name"
+        echo "  EOF"
+        echo
+        echo "Or copy from example:"
+        echo "  cp $SCRIPT_DIR/.env.example $ENV_FILE"
+        echo
+        echo "Available versions: https://hub.docker.com/r/postgresai/postgres-ai-configs/tags"
+        exit 1
+    fi
+    
+    # Export for docker compose
+    export PGAI_TAG
+    [ -n "${PGAI_REGISTRY:-}" ] && export PGAI_REGISTRY
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -408,6 +450,7 @@ precheck_for_services() {
     check_prerequisites
     check_docker_running
     check_project_setup
+    ensure_pgai_config
 }
 
 # Precheck for commands that need running services
@@ -415,6 +458,7 @@ precheck_for_running_services() {
     check_prerequisites
     check_docker_running
     check_project_setup
+    ensure_pgai_config
     check_services_running
 }
 
@@ -1712,6 +1756,7 @@ update_project() {
 # Update configuration
 update_config() {
     check_project_setup
+    ensure_pgai_config
     
     log_info "Updating configuration files..."
     

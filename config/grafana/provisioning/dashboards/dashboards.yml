@@ -8,4 +8,4 @@ providers:
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards 
+      path: /postgres_ai_configs/grafana/dashboards

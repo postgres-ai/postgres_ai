@@ -15,8 +15,11 @@ from typing import Dict, List, Any, Optional
 import argparse
 import sys
 import os
-import psycopg2
-import psycopg2.extras
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:  # pragma: no cover
+    psycopg2 = None
 
 
 class PostgresReportGenerator:
@@ -39,10 +42,38 @@ class PostgresReportGenerator:
         self.base_url = f"{prometheus_url}/api/v1"
         self.postgres_sink_url = postgres_sink_url
         self.pg_conn = None
+        self._build_metadata = self._load_build_metadata()
         # Combine default exclusions with user-provided exclusions
         self.excluded_databases = self.DEFAULT_EXCLUDED_DATABASES.copy()
         if excluded_databases:
             self.excluded_databases.update(excluded_databases)
+
+    def _read_text_file(self, path: str) -> Optional[str]:
+        """Read and strip a small text file. Returns None if missing/empty/unreadable."""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                value = f.read().strip()
+            return value or None
+        except Exception:
+            return None
+
+    def _load_build_metadata(self) -> Dict[str, Optional[str]]:
+        """
+        Load build metadata from the container filesystem.
+
+        Defaults:
+        - VERSION_FILE: /VERSION
+        - BUILD_TS_FILE: /BUILD_TS
+        Both paths can be overridden for testing via env:
+        - PGAI_VERSION_FILE
+        - PGAI_BUILD_TS_FILE
+        """
+        version_path = os.getenv("PGAI_VERSION_FILE", "/VERSION")
+        build_ts_path = os.getenv("PGAI_BUILD_TS_FILE", "/BUILD_TS")
+        return {
+            "version": self._read_text_file(version_path),
+            "build_ts": self._read_text_file(build_ts_path),
+        }
 
     def test_connection(self) -> bool:
         """Test connection to Prometheus."""
@@ -57,6 +88,8 @@ class PostgresReportGenerator:
         """Connect to Postgres sink database."""
         if not self.postgres_sink_url:
             return False
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2 is required for postgres sink access but is not installed")
         
         try:
             self.pg_conn = psycopg2.connect(self.postgres_sink_url)
@@ -1910,6 +1943,8 @@ class PostgresReportGenerator:
             results = {host: node_result}
 
         template_data = {
+            "version": self._build_metadata.get("version"),
+            "build_ts": self._build_metadata.get("build_ts"),
             "checkId": check_id,
             "checkTitle": self.get_check_title(check_id),
             "timestamptz": now.isoformat(),
