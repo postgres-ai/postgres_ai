@@ -50,26 +50,26 @@ If you want `npx pgai ...` as a shorthand for `npx postgresai ...`, install the 
 npx pgai --help
 ```
 
-## init (create monitoring user in Postgres)
+## prepare-db (create monitoring user in Postgres)
 
 This command creates (or updates) the `postgres_ai_mon` user, creates the required view(s), and grants the permissions described in the root `README.md` (it is idempotent). Where supported, it also enables observability extensions described there.
 
 Run without installing (positional connection string):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname
+npx postgresai prepare-db postgresql://admin@host:5432/dbname
 ```
 
-It also accepts libpq “conninfo” syntax:
+It also accepts libpq "conninfo" syntax:
 
 ```bash
-npx postgresai init "dbname=dbname host=host user=admin"
+npx postgresai prepare-db "dbname=dbname host=host user=admin"
 ```
 
 And psql-like options:
 
 ```bash
-npx postgresai init -h host -p 5432 -U admin -d dbname
+npx postgresai prepare-db -h host -p 5432 -U admin -d dbname
 ```
 
 Password input options (in priority order):
@@ -83,7 +83,7 @@ By default, the generated password is printed **only in interactive (TTY) mode**
 Optional permissions (RDS/self-managed extras from the root `README.md`) are enabled by default. To skip them:
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --skip-optional-permissions
 ```
 
 ### Print SQL / dry run
@@ -91,7 +91,7 @@ npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissi
 To see what SQL would be executed (passwords redacted by default):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --print-sql
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --print-sql
 ```
 
 ### Verify and password reset
@@ -99,13 +99,13 @@ npx postgresai init postgresql://admin@host:5432/dbname --print-sql
 Verify that everything is configured as expected (no changes):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --verify
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --verify
 ```
 
 Reset monitoring user password only (no other changes):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
 ```
 
 ## Quick start
@@ -126,17 +126,17 @@ This will:
 
 Start monitoring with demo database:
 ```bash
-postgres-ai mon quickstart --demo
+postgres-ai mon local-install --demo
 ```
 
 Start monitoring with your own database:
 ```bash
-postgres-ai mon quickstart --db-url postgresql://user:pass@host:5432/db
+postgres-ai mon local-install --db-url postgresql://user:pass@host:5432/db
 ```
 
 Complete automated setup with API key and database:
 ```bash
-postgres-ai mon quickstart --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
+postgres-ai mon local-install --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
 ```
 
 This will:
@@ -153,12 +153,12 @@ This will:
 #### Service lifecycle
 ```bash
 # Complete setup with various options
-postgres-ai mon quickstart                                  # Interactive setup for production
-postgres-ai mon quickstart --demo                           # Demo mode with sample database
-postgres-ai mon quickstart --api-key <key>                  # Setup with API key
-postgres-ai mon quickstart --db-url <url>                   # Setup with database URL
-postgres-ai mon quickstart --api-key <key> --db-url <url>   # Complete automated setup
-postgres-ai mon quickstart -y                               # Auto-accept all defaults
+postgres-ai mon local-install                                  # Interactive setup for production
+postgres-ai mon local-install --demo                           # Demo mode with sample database
+postgres-ai mon local-install --api-key <key>                  # Setup with API key
+postgres-ai mon local-install --db-url <url>                   # Setup with database URL
+postgres-ai mon local-install --api-key <key> --db-url <url>   # Complete automated setup
+postgres-ai mon local-install -y                               # Auto-accept all defaults
 
 # Service management
 postgres-ai mon start                  # Start monitoring services
@@ -168,7 +168,7 @@ postgres-ai mon status                 # Show monitoring services status
 postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 ```
 
-##### Quickstart options
+##### local-install options
 - `--demo` - Demo mode with sample database (testing only, cannot use with --api-key)
 - `--api-key <key>` - Postgres AI API key for automated report uploads
 - `--db-url <url>` - PostgreSQL connection URL to monitor (format: `postgresql://user:pass@host:port/db`)
@@ -256,10 +256,10 @@ postgres-ai mon show-grafana-credentials       # Show Grafana credentials
 
 ### Authentication and API key management
 ```bash
-postgres-ai auth               # Authenticate via browser (recommended)
-postgres-ai add-key <key>      # Manually store API key
-postgres-ai show-key           # Show stored key (masked)
-postgres-ai remove-key         # Remove stored key
+postgres-ai auth                    # Authenticate via browser (OAuth)
+postgres-ai auth --set-key <key>    # Store API key directly
+postgres-ai show-key                # Show stored key (masked)
+postgres-ai remove-key              # Remove stored key
 ```
 
 ## Configuration

@@ -79,49 +79,49 @@ Use the CLI to create/update the monitoring role and grant all required permissi
 # Monitoring password:
 # - by default, postgresai generates a strong password automatically
 # - it is printed only in interactive (TTY) mode, or if you opt in via --print-password
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname
 ```
 
 Optional permissions (RDS/self-managed extras) are enabled by default. To skip them:
 
 ```bash
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --skip-optional-permissions
 ```
 
 Verify everything is in place (no changes):
 
 ```bash
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --verify
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --verify
 ```
 
 If you want to reset the monitoring password only (no other changes), you can rely on auto-generation:
 
 ```bash
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password
 ```
 
-By default, `postgresai init` auto-generates a strong password (see above).
+By default, `postgresai prepare-db` auto-generates a strong password (see above).
 
 If you want to set a specific password instead:
 
 ```bash
-PGPASSWORD='...' npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
 ```
 
 If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default). This can be done without a DB connection:
 
 ```bash
-npx postgresai init --print-sql
+npx postgresai prepare-db --print-sql
 ```
 
 Optionally, to render the plan for a specific database:
 
 ```bash
 # Pick database (default is PGDATABASE or "postgres"):
-npx postgresai init --print-sql -d dbname
+npx postgresai prepare-db --print-sql -d dbname
 
 # Provide an explicit monitoring password (still redacted in output):
-npx postgresai init --print-sql -d dbname --password '...'
+npx postgresai prepare-db --print-sql -d dbname --password '...'
 ```
 
 ### Troubleshooting
@@ -140,7 +140,7 @@ If you see errors like `permission denied` / `insufficient_privilege` / code `42
 - **Review SQL before running** (audit-friendly):
 
     ```bash
-    npx postgresai init --print-sql -d mydb
+    npx postgresai prepare-db --print-sql -d mydb
     ```
 
 **One command setup:**
