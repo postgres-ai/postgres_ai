@@ -4308,20 +4308,6 @@ def main():
                 # Free memory after writing all reports to disk
                 del reports
                 gc.collect()
-                
-                if args.output == '-':
-                    pass
-                elif len(clusters_to_process) == 1:
-                    # Single cluster - use specified output
-                    with open(args.output, 'w') as f:
-                        json.dump(reports, f, indent=2)
-                    logger.info(f"All reports written to {args.output}")
-                else:
-                    # Multiple clusters - create combined output
-                    combined_output = f"{cluster}_all_reports.json"
-                    with open(combined_output, 'w') as f:
-                        json.dump(reports, f, indent=2)
-                    logger.info(f"All reports for cluster {cluster} written to {combined_output}")
             else:
                 # Generate specific report - use node_name or default
                 if args.node_name is None:

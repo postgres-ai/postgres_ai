@@ -382,6 +382,7 @@ def test_get_all_databases_merges_sources(monkeypatch: pytest.MonkeyPatch, gener
                 "status": "success",
                 "data": {
                     "result": [
+                        # Reporter expects `datname` label for unused indexes metric.
                         {"metric": {"datname": "analytics"}, "value": [0, "1"]},
                         {"metric": {"datname": "appdb"}, "value": [0, "1"]},  # duplicate
                     ]
@@ -1039,6 +1040,63 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
     output = json.loads(json_str)
     assert output["checkId"] == "A002"
     assert "results" in output
+
+
+@pytest.mark.unit
+def test_main_all_reports_does_not_crash_when_output_is_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Regression test for reporter/postgres_reports.py around the `del reports` block
+    (~4308-4324).
+
+    In ALL-reports mode, providing a normal file path via --output should NOT
+    cause the process to crash. Current code crashes because it does `del reports`
+    and then later references `reports` when handling args.output.
+    """
+    class DummyGenerator:
+        DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
+
+        def __init__(self, *args, **kwargs):
+            self.pg_conn = None
+
+        def test_connection(self) -> bool:
+            return True
+
+        def get_all_clusters(self):
+            return ["local"]
+
+        def generate_all_reports(self, cluster, node_name, combine_nodes=True):
+            # Minimal plausible payload
+            return {
+                "A002": {"checkId": "A002", "results": {"node-1": {"data": {"ok": True}}}},
+                "A003": {"checkId": "A003", "results": {"node-1": {"data": {"ok": True}}}},
+            }
+
+        def generate_per_query_jsons(self, *args, **kwargs):
+            return []
+
+        def close_postgres_sink(self):
+            self.pg_conn = None
+
+    monkeypatch.setattr(postgres_reports_module, "PostgresReportGenerator", DummyGenerator)
+    monkeypatch.chdir(tmp_path)
+
+    out_path = tmp_path / "all_reports.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "postgres_reports.py",
+            "--check-id",
+            "ALL",
+            "--cluster",
+            "local",
+            "--output",
+            str(out_path),
+            "--no-upload",
+        ],
+    )
+
+    postgres_reports_module.main()
 
 
 @pytest.mark.unit
