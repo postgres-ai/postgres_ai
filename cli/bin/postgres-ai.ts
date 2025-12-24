@@ -679,8 +679,8 @@ program.command("help", { isDefault: true }).description("show help").action(() 
 const mon = program.command("mon").description("monitoring services management");
 
 mon
-  .command("quickstart")
-  .description("complete setup (generate config, start monitoring services)")
+  .command("local-install")
+  .description("install local monitoring stack (generate config, start services)")
   .option("--demo", "demo mode with sample database", false)
   .option("--api-key <key>", "Postgres AI API key for automated report uploads")
   .option("--db-url <url>", "PostgreSQL connection URL to monitor")
@@ -688,7 +688,7 @@ mon
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
   .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
     console.log("\n=================================");
-    console.log("  PostgresAI Monitoring Quickstart");
+    console.log("  PostgresAI monitoring local install");
     console.log("=================================\n");
     console.log("This will install, configure, and start the monitoring system\n");
 
@@ -726,8 +726,8 @@ mon
     if (opts.demo && opts.apiKey) {
       console.error("✗ Cannot use --api-key with --demo mode");
       console.error("✗ Demo mode is for testing only and does not support API key integration");
-      console.error("\nUse demo mode without API key: postgres-ai mon quickstart --demo");
-      console.error("Or use production mode with API key: postgres-ai mon quickstart --api-key=your_key");
+      console.error("\nUse demo mode without API key: postgres-ai mon local-install --demo");
+      console.error("Or use production mode with API key: postgres-ai mon local-install --api-key=your_key");
       process.exitCode = 1;
       return;
     }
@@ -989,7 +989,7 @@ mon
 
     // Final summary
     console.log("=================================");
-    console.log("  🎉 Quickstart setup completed!");
+    console.log("  Local install completed!");
     console.log("=================================\n");
 
     console.log("What's running:");
@@ -1893,7 +1893,7 @@ mon
     const { projectDir } = await resolveOrInitPaths();
     const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     if (!fs.existsSync(cfgPath)) {
-      console.error("Configuration file not found. Run 'postgres-ai mon quickstart' first.");
+      console.error("Configuration file not found. Run 'postgres-ai mon local-install' first.");
       process.exitCode = 1;
       return;
     }

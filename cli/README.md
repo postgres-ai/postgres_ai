@@ -126,17 +126,17 @@ This will:
 
 Start monitoring with demo database:
 ```bash
-postgres-ai mon quickstart --demo
+postgres-ai mon local-install --demo
 ```
 
 Start monitoring with your own database:
 ```bash
-postgres-ai mon quickstart --db-url postgresql://user:pass@host:5432/db
+postgres-ai mon local-install --db-url postgresql://user:pass@host:5432/db
 ```
 
 Complete automated setup with API key and database:
 ```bash
-postgres-ai mon quickstart --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
+postgres-ai mon local-install --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
 ```
 
 This will:
@@ -153,12 +153,12 @@ This will:
 #### Service lifecycle
 ```bash
 # Complete setup with various options
-postgres-ai mon quickstart                                  # Interactive setup for production
-postgres-ai mon quickstart --demo                           # Demo mode with sample database
-postgres-ai mon quickstart --api-key <key>                  # Setup with API key
-postgres-ai mon quickstart --db-url <url>                   # Setup with database URL
-postgres-ai mon quickstart --api-key <key> --db-url <url>   # Complete automated setup
-postgres-ai mon quickstart -y                               # Auto-accept all defaults
+postgres-ai mon local-install                                  # Interactive setup for production
+postgres-ai mon local-install --demo                           # Demo mode with sample database
+postgres-ai mon local-install --api-key <key>                  # Setup with API key
+postgres-ai mon local-install --db-url <url>                   # Setup with database URL
+postgres-ai mon local-install --api-key <key> --db-url <url>   # Complete automated setup
+postgres-ai mon local-install -y                               # Auto-accept all defaults
 
 # Service management
 postgres-ai mon start                  # Start monitoring services
@@ -168,7 +168,7 @@ postgres-ai mon status                 # Show monitoring services status
 postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 ```
 
-##### Quickstart options
+##### local-install options
 - `--demo` - Demo mode with sample database (testing only, cannot use with --api-key)
 - `--api-key <key>` - Postgres AI API key for automated report uploads
 - `--db-url <url>` - PostgreSQL connection URL to monitor (format: `postgresql://user:pass@host:port/db`)
