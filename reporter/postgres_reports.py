@@ -3315,25 +3315,63 @@ class PostgresReportGenerator:
 
     def extract_postgres_version_from_a003(self, a003_report: Dict[str, Any], node_name: str = None) -> Dict[str, str]:
         """
-        Extract PostgreSQL version info from A003 report.
+        Extract PostgreSQL version info from A003 report settings data.
+
+        Derives version from server_version and server_version_num settings
+        which are part of the A003 settings data.
 
         Args:
             a003_report: Full A003 report
             node_name: Optional specific node name. If None, uses first available node.
 
         Returns:
-            Dictionary with postgres version info
+            Dictionary with postgres version info (version, server_version_num, server_major_ver, server_minor_ver)
         """
         results = a003_report.get('results', {})
         if not results:
             return {}
 
+        # Get the node data
         if node_name and node_name in results:
-            return results[node_name].get('postgres_version', {})
+            node_data = results[node_name]
+        else:
+            node_data = next(iter(results.values()), {})
 
-        # Use first available node
-        first_node = next(iter(results.values()), {})
-        return first_node.get('postgres_version', {})
+        # First check if postgres_version is already in the node result
+        if node_data.get('postgres_version'):
+            return node_data['postgres_version']
+
+        # Otherwise, extract from settings data (server_version, server_version_num)
+        data = node_data.get('data', {})
+        version_str = None
+        version_num = None
+
+        # Look for server_version and server_version_num in settings
+        if 'server_version' in data:
+            version_str = data['server_version'].get('setting', '')
+        if 'server_version_num' in data:
+            version_num = data['server_version_num'].get('setting', '')
+
+        if not version_str and not version_num:
+            return {}
+
+        # Parse version numbers
+        major_ver = ""
+        minor_ver = ""
+        if version_num and len(version_num) >= 6:
+            try:
+                num = int(version_num)
+                major_ver = str(num // 10000)
+                minor_ver = str(num % 10000)
+            except ValueError:
+                pass
+
+        return {
+            "version": version_str or "",
+            "server_version_num": version_num or "",
+            "server_major_ver": major_ver,
+            "server_minor_ver": minor_ver
+        }
 
     def generate_d004_from_a003(self, a003_report: Dict[str, Any], cluster: str = "local",
                                  node_name: str = "node-01") -> Dict[str, Any]:
