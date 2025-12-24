@@ -177,8 +177,8 @@ test("resolveAdminConnection rejects when connection is missing", () => {
   assert.throws(() => init.resolveAdminConnection({}), /Connection is required/);
 });
 
-test("cli: init with missing connection prints init help/options", () => {
-  const r = runCli(["init"]);
+test("cli: prepare-db with missing connection prints help/options", () => {
+  const r = runCli(["prepare-db"]);
   assert.notEqual(r.status, 0);
   // We should show options, not just the error message.
   assert.match(r.stderr, /--print-sql/);
@@ -307,8 +307,8 @@ test("redactPasswordsInSql redacts password literals with embedded quotes", asyn
   assert.match(redacted, /password '<redacted>'/i);
 });
 
-test("cli: init --print-sql works without connection (offline mode)", () => {
-  const r = runCli(["init", "--print-sql", "-d", "mydb", "--password", "monpw"]);
+test("cli: prepare-db --print-sql works without connection (offline mode)", () => {
+  const r = runCli(["prepare-db", "--print-sql", "-d", "mydb", "--password", "monpw"]);
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /SQL plan \(offline; not connected\)/);
   assert.match(r.stdout, new RegExp(`grant connect on database "mydb" to "${DEFAULT_MONITORING_USER}"`, "i"));

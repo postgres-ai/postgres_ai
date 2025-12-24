@@ -8,14 +8,14 @@ Run without installing:
 
 ```bash
 npx pgai --help
-npx pgai init postgresql://admin@host:5432/dbname
+npx pgai prepare-db postgresql://admin@host:5432/dbname
 ```
 
 This is equivalent to:
 
 ```bash
 npx postgresai --help
-npx postgresai init postgresql://admin@host:5432/dbname
+npx postgresai prepare-db postgresql://admin@host:5432/dbname
 ```
 
 

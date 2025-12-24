@@ -203,8 +203,8 @@ program
   );
 
 program
-  .command("init [conn]")
-  .description("Create a monitoring user, required view(s), and grant required permissions (idempotent)")
+  .command("prepare-db [conn]")
+  .description("Prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
   .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
   .option("-h, --host <host>", "PostgreSQL host (psql-like)")
   .option("-p, --port <port>", "PostgreSQL port (psql-like)")
@@ -223,9 +223,9 @@ program
     [
       "",
       "Examples:",
-      "  postgresai init postgresql://admin@host:5432/dbname",
-      "  postgresai init \"dbname=dbname host=host user=admin\"",
-      "  postgresai init -h host -p 5432 -U admin -d dbname",
+      "  postgresai prepare-db postgresql://admin@host:5432/dbname",
+      "  postgresai prepare-db \"dbname=dbname host=host user=admin\"",
+      "  postgresai prepare-db -h host -p 5432 -U admin -d dbname",
       "",
       "Admin password:",
       "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
@@ -247,16 +247,16 @@ program
       "  PGAI_MON_PASSWORD                   — monitoring password",
       "",
       "Inspect SQL without applying changes:",
-      "  postgresai init <conn> --print-sql",
+      "  postgresai prepare-db <conn> --print-sql",
       "",
       "Verify setup (no changes):",
-      "  postgresai init <conn> --verify",
+      "  postgresai prepare-db <conn> --verify",
       "",
       "Reset monitoring password only:",
-      "  postgresai init <conn> --reset-password --password '...'",
+      "  postgresai prepare-db <conn> --reset-password --password '...'",
       "",
       "Offline SQL plan (no DB connection):",
-      "  postgresai init --print-sql",
+      "  postgresai prepare-db --print-sql",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -336,7 +336,7 @@ program
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`Error: init: ${msg}`);
+      console.error(`Error: prepare-db: ${msg}`);
       // When connection details are missing, show full init help (options + examples).
       if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
         console.error("");
@@ -372,14 +372,14 @@ program
           includeOptionalPermissions,
         });
         if (v.ok) {
-          console.log("✓ init verify: OK");
+          console.log("✓ prepare-db verify: OK");
           if (v.missingOptional.length > 0) {
             console.log("⚠ Optional items missing:");
             for (const m of v.missingOptional) console.log(`- ${m}`);
           }
           return;
         }
-        console.error("✗ init verify failed: missing required items");
+        console.error("✗ prepare-db verify failed: missing required items");
         for (const m of v.missingRequired) console.error(`- ${m}`);
         if (v.missingOptional.length > 0) {
           console.error("Optional items missing:");
@@ -455,7 +455,7 @@ program
 
       const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
 
-      console.log(opts.resetPassword ? "✓ init password reset completed" : "✓ init completed");
+      console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
       if (skippedOptional.length > 0) {
         console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
         for (const s of skippedOptional) console.log(`- ${s}`);
@@ -477,7 +477,7 @@ program
       if (!message || message === "[object Object]") {
         message = "Unknown error";
       }
-      console.error(`Error: init: ${message}`);
+      console.error(`Error: prepare-db: ${message}`);
       // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
       const stepMatch =
         typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;

@@ -50,26 +50,26 @@ If you want `npx pgai ...` as a shorthand for `npx postgresai ...`, install the 
 npx pgai --help
 ```
 
-## init (create monitoring user in Postgres)
+## prepare-db (create monitoring user in Postgres)
 
 This command creates (or updates) the `postgres_ai_mon` user, creates the required view(s), and grants the permissions described in the root `README.md` (it is idempotent). Where supported, it also enables observability extensions described there.
 
 Run without installing (positional connection string):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname
+npx postgresai prepare-db postgresql://admin@host:5432/dbname
 ```
 
-It also accepts libpq “conninfo” syntax:
+It also accepts libpq "conninfo" syntax:
 
 ```bash
-npx postgresai init "dbname=dbname host=host user=admin"
+npx postgresai prepare-db "dbname=dbname host=host user=admin"
 ```
 
 And psql-like options:
 
 ```bash
-npx postgresai init -h host -p 5432 -U admin -d dbname
+npx postgresai prepare-db -h host -p 5432 -U admin -d dbname
 ```
 
 Password input options (in priority order):
@@ -83,7 +83,7 @@ By default, the generated password is printed **only in interactive (TTY) mode**
 Optional permissions (RDS/self-managed extras from the root `README.md`) are enabled by default. To skip them:
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissions
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --skip-optional-permissions
 ```
 
 ### Print SQL / dry run
@@ -91,7 +91,7 @@ npx postgresai init postgresql://admin@host:5432/dbname --skip-optional-permissi
 To see what SQL would be executed (passwords redacted by default):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --print-sql
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --print-sql
 ```
 
 ### Verify and password reset
@@ -99,13 +99,13 @@ npx postgresai init postgresql://admin@host:5432/dbname --print-sql
 Verify that everything is configured as expected (no changes):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --verify
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --verify
 ```
 
 Reset monitoring user password only (no other changes):
 
 ```bash
-npx postgresai init postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
 ```
 
 ## Quick start
