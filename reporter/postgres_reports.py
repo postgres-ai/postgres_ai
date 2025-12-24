@@ -22,6 +22,9 @@ import psycopg2
 import psycopg2.extras
 
 
+from reporter.logger import logger
+
+
 class PostgresReportGenerator:
     # Default databases to always exclude
     DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
@@ -53,7 +56,7 @@ class PostgresReportGenerator:
             response = requests.get(f"{self.base_url}/status/config", timeout=10)
             return response.status_code == 200
         except Exception as e:
-            print(f"Connection failed: {e}")
+            logger.error(f"Connection failed: {e}")
             return False
 
     def connect_postgres_sink(self) -> bool:
@@ -65,7 +68,7 @@ class PostgresReportGenerator:
             self.pg_conn = psycopg2.connect(self.postgres_sink_url)
             return True
         except Exception as e:
-            print(f"Postgres sink connection failed: {e}")
+            logger.error(f"Postgres sink connection failed: {e}")
             return False
 
     def close_postgres_sink(self):
@@ -131,7 +134,7 @@ class PostgresReportGenerator:
                         index_definitions[key] = row['index_definition']
         
         except Exception as e:
-            print(f"Error fetching index definitions from Postgres sink: {e}")
+            logger.error(f"Error fetching index definitions from Postgres sink: {e}")
         
         return index_definitions
 
@@ -206,7 +209,7 @@ class PostgresReportGenerator:
                     queries_by_db[db_name][queryid] = query_text or ''
         
         except Exception as e:
-            print(f"Error fetching queryid queries from Postgres sink: {e}")
+            logger.error(f"Error fetching queryid queries from Postgres sink: {e}")
         
         return queries_by_db
 
@@ -227,10 +230,10 @@ class PostgresReportGenerator:
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"Query failed with status {response.status_code}: {response.text}")
+                logger.error(f"Query failed with status {response.status_code}: {response.text}")
                 return {}
         except Exception as e:
-            print(f"Query error: {e}")
+            logger.error(f"Query error: {e}")
             return {}
 
     def _get_postgres_version_info(self, cluster: str, node_name: str) -> Dict[str, str]:
@@ -279,7 +282,7 @@ class PostgresReportGenerator:
                 break
 
         if not (version_str or version_num):
-            print(f"Warning: No version data found (cluster={cluster}, node_name={node_name})")
+            logger.warning(f"No version data found (cluster={cluster}, node_name={node_name})")
 
         server_version = version_str or "Unknown"
         version_info: Dict[str, str] = {
@@ -314,7 +317,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing version information
         """
-        print(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
+        logger.info(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
         version_info = self._get_postgres_version_info(cluster, node_name)
         return self.format_report_data("A002", {"version": version_info}, node_name)
 
@@ -329,7 +332,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing settings information
         """
-        print("Generating A003 PostgreSQL Settings report...")
+        logger.info("Generating A003 PostgreSQL Settings report...")
 
         # Query all PostgreSQL settings using the pgwatch_settings_configured metric with last_over_time
         # This metric has labels for each setting name
@@ -362,9 +365,9 @@ class PostgresReportGenerator:
                     "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                 }
         else:
-            print(f"Warning: A003 - No settings data returned for cluster={cluster}, node_name={node_name}")
-            print(f"Query result status: {result.get('status')}")
-            print(f"Query result data: {result.get('data', {})}")
+            logger.warning(f"A003 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.info(f"Query result status: {result.get('status')}")
+            logger.info(f"Query result data: {result.get('data', {})}")
 
         return self.format_report_data("A003", settings_data, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
@@ -379,7 +382,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing cluster information
         """
-        print("Generating A004 Cluster Information report...")
+        logger.info("Generating A004 Cluster Information report...")
 
         # Query cluster information
         cluster_queries = {
@@ -441,7 +444,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing altered settings information
         """
-        print("Generating A007 Altered Settings report...")
+        logger.info("Generating A007 Altered Settings report...")
 
         # Query settings by source using the pgwatch_settings_is_default metric with last_over_time
         # This returns settings where is_default = 0 (i.e., non-default/altered settings)
@@ -469,8 +472,8 @@ class PostgresReportGenerator:
                     "pretty_value": pretty_value
                 }
         else:
-            print(f"Warning: A007 - No altered settings data returned for cluster={cluster}, node_name={node_name}")
-            print(f"Query result status: {result.get('status')}")
+            logger.warning(f"A007 - No altered settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.info(f"Query result status: {result.get('status')}")
 
         return self.format_report_data("A007", altered_settings, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
@@ -486,7 +489,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing invalid indexes information
         """
-        print("Generating H001 Invalid Indexes report...")
+        logger.info("Generating H001 Invalid Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -568,7 +571,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing unused indexes information
         """
-        print("Generating H002 Unused Indexes report...")
+        logger.info("Generating H002 Unused Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -700,7 +703,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing redundant indexes information
         """
-        print("Generating H004 Redundant Indexes report...")
+        logger.info("Generating H004 Redundant Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -813,7 +816,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing pg_stat_statements and pg_stat_kcache settings information
         """
-        print("Generating D004 pgstatstatements and pgstatkcache Settings report...")
+        logger.info("Generating D004 pgstatstatements and pgstatkcache Settings report...")
 
         # Define relevant pg_stat_statements and pg_stat_kcache settings
         pgstat_settings = [
@@ -860,7 +863,7 @@ class PostgresReportGenerator:
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
         else:
-            print(f"Warning: D004 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.warning(f"D004 - No settings data returned for cluster={cluster}, node_name={node_name}")
 
         # Check if pg_stat_kcache extension is available and working by querying its metrics
         kcache_status = self._check_pg_stat_kcache_status(cluster, node_name)
@@ -992,7 +995,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing autovacuum settings information
         """
-        print("Generating F001 Autovacuum: Current Settings report...")
+        logger.info("Generating F001 Autovacuum: Current Settings report...")
 
         # Define autovacuum related settings
         autovacuum_settings = [
@@ -1059,7 +1062,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing btree index bloat information
         """
-        print("Generating F005 Autovacuum: Btree Index Bloat (Estimated) report...")
+        logger.info("Generating F005 Autovacuum: Btree Index Bloat (Estimated) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -1268,7 +1271,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing memory-related settings information
         """
-        print("Generating G001 Memory-related Settings report...")
+        logger.info("Generating G001 Memory-related Settings report...")
 
         # Define memory-related settings
         memory_settings = [
@@ -1327,7 +1330,7 @@ class PostgresReportGenerator:
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
         else:
-            print(f"Warning: G001 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.warning(f"G001 - No settings data returned for cluster={cluster}, node_name={node_name}")
 
         # Calculate some memory usage estimates and recommendations
         memory_analysis = self._analyze_memory_settings(memory_data)
@@ -1442,13 +1445,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing heap bloat information
         """
-        print("Generating F004 Autovacuum: Heap Bloat (Estimated) report...")
+        logger.info("Generating F004 Autovacuum: Heap Bloat (Estimated) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: F004 - No databases found")
+            logger.warning("F004 - No databases found")
 
         # Get database sizes
         db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
@@ -1534,7 +1537,7 @@ class PostgresReportGenerator:
                         bloated_tables[table_key][metric_type] = value
                 else:
                     if metric_type == 'real_size_mib':  # Only log once per database
-                        print(f"Warning: F004 - No bloat data for database {db_name}, metric {metric_type}")
+                        logger.warning(f"F004 - No bloat data for database {db_name}, metric {metric_type}")
             
             # Skip databases with no bloat data
             if not bloated_tables:
@@ -1597,13 +1600,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing query metrics sorted by calls
         """
-        print("Generating K001 Globally Aggregated Query Metrics report...")
+        logger.info("Generating K001 Globally Aggregated Query Metrics report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K001 - No databases found")
+            logger.warning("K001 - No databases found")
 
         queries_by_db = {}
         
@@ -1613,14 +1616,14 @@ class PostgresReportGenerator:
             metric_name = "pgwatch_pg_stat_statements_calls"
             
             for db_name in databases:
-                print(f"K001: Processing database {db_name} (hourly mode)...")
+                logger.info(f"K001: Processing database {db_name} (hourly mode)...")
                 
                 per_query, other, timeline = self._get_hourly_topk_pgss_data(
                     cluster, node_name, db_name, metric_name, hours=hours
                 )
                 
                 if not per_query and sum(other) == 0:
-                    print(f"Warning: K001 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K001 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate total calls per query across all hours
@@ -1657,12 +1660,12 @@ class PostgresReportGenerator:
             start_time = end_time - timedelta(minutes=time_range_minutes)
 
             for db_name in databases:
-                print(f"K001: Processing database {db_name}...")
+                logger.info(f"K001: Processing database {db_name}...")
                 # Get pg_stat_statements metrics for this database
                 query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
 
                 if not query_metrics:
-                    print(f"Warning: K001 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K001 - No query metrics returned for database {db_name}")
 
                 # Sort by calls (descending)
                 sorted_metrics = sorted(query_metrics, key=lambda x: x.get('calls', 0), reverse=True)
@@ -1707,13 +1710,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by total execution time (exec + plan)
         """
-        print("Generating K003 Top-50 Queries by total_time (exec + plan) report...")
+        logger.info("Generating K003 Top-50 Queries by total_time (exec + plan) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K003 - No databases found")
+            logger.warning("K003 - No databases found")
 
         queries_by_db = {}
         
@@ -1722,7 +1725,7 @@ class PostgresReportGenerator:
             hours = time_range_minutes // 60
             
             for db_name in databases:
-                print(f"K003: Processing database {db_name} (hourly mode)...")
+                logger.info(f"K003: Processing database {db_name} (hourly mode)...")
                 
                 # Get exec time
                 exec_per_query, exec_other, timeline = self._get_hourly_topk_pgss_data(
@@ -1739,7 +1742,7 @@ class PostgresReportGenerator:
                 plan_time_available = total_plan_time > 0
                 
                 if not exec_per_query and sum(exec_other) == 0:
-                    print(f"Warning: K003 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K003 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Combine exec and plan time per query across all hours
@@ -1798,12 +1801,12 @@ class PostgresReportGenerator:
             start_time = end_time - timedelta(minutes=time_range_minutes)
 
             for db_name in databases:
-                print(f"K003: Processing database {db_name}...")
+                logger.info(f"K003: Processing database {db_name}...")
                 # Get pg_stat_statements metrics for this database
                 query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
 
                 if not query_metrics:
-                    print(f"Warning: K003 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K003 - No query metrics returned for database {db_name}")
 
                 # Sort by total_time (descending) and limit to top N per database
                 sorted_metrics = sorted(query_metrics, key=lambda x: x.get('total_time', 0), reverse=True)[:limit]
@@ -1849,13 +1852,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by mean execution time
         """
-        print("Generating M001 Top-50 Queries by mean execution time report...")
+        logger.info("Generating M001 Top-50 Queries by mean execution time report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: M001 - No databases found")
+            logger.warning("M001 - No databases found")
 
         queries_by_db = {}
         
@@ -1864,7 +1867,7 @@ class PostgresReportGenerator:
             hours = time_range_minutes // 60
             
             for db_name in databases:
-                print(f"M001: Processing database {db_name} (hourly mode)...")
+                logger.info(f"M001: Processing database {db_name} (hourly mode)...")
                 
                 # Get both time and calls metrics
                 time_per_query, time_other, timeline = self._get_hourly_topk_pgss_data(
@@ -1875,7 +1878,7 @@ class PostgresReportGenerator:
                 )
                 
                 if not time_per_query and sum(time_other) == 0:
-                    print(f"Warning: M001 - No query metrics returned for database {db_name}")
+                    logger.warning(f"M001 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate mean time per query across all hours
@@ -1917,12 +1920,12 @@ class PostgresReportGenerator:
             start_time = end_time - timedelta(minutes=time_range_minutes)
 
             for db_name in databases:
-                print(f"M001: Processing database {db_name}...")
+                logger.info(f"M001: Processing database {db_name}...")
                 # Get pg_stat_statements metrics for this database
                 query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
 
                 if not query_metrics:
-                    print(f"Warning: M001 - No query metrics returned for database {db_name}")
+                    logger.warning(f"M001 - No query metrics returned for database {db_name}")
 
                 # Calculate mean execution time for each query
                 queries_with_mean = []
@@ -1978,13 +1981,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by rows processed
         """
-        print("Generating M002 Top-50 Queries by rows report...")
+        logger.info("Generating M002 Top-50 Queries by rows report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: M002 - No databases found")
+            logger.warning("M002 - No databases found")
 
         queries_by_db = {}
         
@@ -1994,14 +1997,14 @@ class PostgresReportGenerator:
             metric_name = "pgwatch_pg_stat_statements_rows"
             
             for db_name in databases:
-                print(f"M002: Processing database {db_name} (hourly mode)...")
+                logger.info(f"M002: Processing database {db_name} (hourly mode)...")
                 
                 per_query, other, timeline = self._get_hourly_topk_pgss_data(
                     cluster, node_name, db_name, metric_name, hours=hours
                 )
                 
                 if not per_query and sum(other) == 0:
-                    print(f"Warning: M002 - No query metrics returned for database {db_name}")
+                    logger.warning(f"M002 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate total rows per query across all hours
@@ -2039,12 +2042,12 @@ class PostgresReportGenerator:
             start_time = end_time - timedelta(minutes=time_range_minutes)
 
             for db_name in databases:
-                print(f"M002: Processing database {db_name}...")
+                logger.info(f"M002: Processing database {db_name}...")
                 # Get pg_stat_statements metrics for this database
                 query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
 
                 if not query_metrics:
-                    print(f"Warning: M002 - No query metrics returned for database {db_name}")
+                    logger.warning(f"M002 - No query metrics returned for database {db_name}")
 
                 # Sort by rows (descending) and limit to top N per database
                 sorted_metrics = sorted(query_metrics, key=lambda x: x.get('rows', 0), reverse=True)[:limit]
@@ -2090,13 +2093,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by total I/O time
         """
-        print("Generating M003 Top-50 Queries by I/O time report...")
+        logger.info("Generating M003 Top-50 Queries by I/O time report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: M003 - No databases found")
+            logger.warning("M003 - No databases found")
 
         queries_by_db = {}
         
@@ -2105,7 +2108,7 @@ class PostgresReportGenerator:
             hours = time_range_minutes // 60
             
             for db_name in databases:
-                print(f"M003: Processing database {db_name} (hourly mode)...")
+                logger.info(f"M003: Processing database {db_name} (hourly mode)...")
                 
                 # Get both read and write I/O time metrics
                 read_per_query, read_other, timeline = self._get_hourly_topk_pgss_data(
@@ -2116,7 +2119,7 @@ class PostgresReportGenerator:
                 )
                 
                 if not read_per_query and not write_per_query and sum(read_other) == 0 and sum(write_other) == 0:
-                    print(f"Warning: M003 - No query metrics returned for database {db_name}")
+                    logger.warning(f"M003 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Combine read and write times, calculate total I/O time per query
@@ -2167,12 +2170,12 @@ class PostgresReportGenerator:
             start_time = end_time - timedelta(minutes=time_range_minutes)
 
             for db_name in databases:
-                print(f"M003: Processing database {db_name}...")
+                logger.info(f"M003: Processing database {db_name}...")
                 # Get pg_stat_statements metrics for this database
                 query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
 
                 if not query_metrics:
-                    print(f"Warning: M003 - No query metrics returned for database {db_name}")
+                    logger.warning(f"M003 - No query metrics returned for database {db_name}")
 
                 # Calculate total I/O time for each query
                 queries_with_io_time = []
@@ -2229,13 +2232,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by temp bytes written
         """
-        print("Generating K004 Top-50 Queries by temp bytes written report...")
+        logger.info("Generating K004 Top-50 Queries by temp bytes written report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K004 - No databases found")
+            logger.warning("K004 - No databases found")
 
         queries_by_db = {}
         
@@ -2245,14 +2248,14 @@ class PostgresReportGenerator:
             metric_name = "pgwatch_pg_stat_statements_temp_bytes_written"
             
             for db_name in databases:
-                print(f"K004: Processing database {db_name} (hourly mode)...")
+                logger.info(f"K004: Processing database {db_name} (hourly mode)...")
                 
                 per_query, other, timeline = self._get_hourly_topk_pgss_data(
                     cluster, node_name, db_name, metric_name, hours=hours
                 )
                 
                 if not per_query and sum(other) == 0:
-                    print(f"Warning: K004 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K004 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate total temp bytes per query across all hours
@@ -2310,13 +2313,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by WAL bytes generated
         """
-        print("Generating K005 Top-50 Queries by WAL generation report...")
+        logger.info("Generating K005 Top-50 Queries by WAL generation report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K005 - No databases found")
+            logger.warning("K005 - No databases found")
 
         queries_by_db = {}
         
@@ -2326,14 +2329,14 @@ class PostgresReportGenerator:
             metric_name = "pgwatch_pg_stat_statements_wal_bytes"
             
             for db_name in databases:
-                print(f"K005: Processing database {db_name} (hourly mode)...")
+                logger.info(f"K005: Processing database {db_name} (hourly mode)...")
                 
                 per_query, other, timeline = self._get_hourly_topk_pgss_data(
                     cluster, node_name, db_name, metric_name, hours=hours
                 )
                 
                 if not per_query and sum(other) == 0:
-                    print(f"Warning: K005 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K005 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate total WAL bytes per query across all hours
@@ -2391,13 +2394,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by shared blocks read
         """
-        print("Generating K006 Top-50 Queries by shared blocks read report...")
+        logger.info("Generating K006 Top-50 Queries by shared blocks read report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K006 - No databases found")
+            logger.warning("K006 - No databases found")
 
         queries_by_db = {}
         
@@ -2407,14 +2410,14 @@ class PostgresReportGenerator:
             metric_name = "pgwatch_pg_stat_statements_shared_bytes_read_total"
             
             for db_name in databases:
-                print(f"K006: Processing database {db_name} (hourly mode)...")
+                logger.info(f"K006: Processing database {db_name} (hourly mode)...")
                 
                 per_query, other, timeline = self._get_hourly_topk_pgss_data(
                     cluster, node_name, db_name, metric_name, hours=hours
                 )
                 
                 if not per_query and sum(other) == 0:
-                    print(f"Warning: K006 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K006 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate total shared read bytes per query across all hours
@@ -2472,13 +2475,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing top queries sorted by shared blocks hit
         """
-        print("Generating K007 Top-50 Queries by shared blocks hit report...")
+        logger.info("Generating K007 Top-50 Queries by shared blocks hit report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K007 - No databases found")
+            logger.warning("K007 - No databases found")
 
         queries_by_db = {}
         
@@ -2488,14 +2491,14 @@ class PostgresReportGenerator:
             metric_name = "pgwatch_pg_stat_statements_shared_bytes_hit_total"
             
             for db_name in databases:
-                print(f"K007: Processing database {db_name} (hourly mode)...")
+                logger.info(f"K007: Processing database {db_name} (hourly mode)...")
                 
                 per_query, other, timeline = self._get_hourly_topk_pgss_data(
                     cluster, node_name, db_name, metric_name, hours=hours
                 )
                 
                 if not per_query and sum(other) == 0:
-                    print(f"Warning: K007 - No query metrics returned for database {db_name}")
+                    logger.warning(f"K007 - No query metrics returned for database {db_name}")
                     continue  # Skip databases with no data
                 
                 # Calculate total shared hit bytes per query across all hours
@@ -2551,13 +2554,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing wait events grouped by type and query_id with hourly occurrences
         """
-        print("Generating N001 Wait Events report...")
+        logger.info("Generating N001 Wait Events report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: N001 - No databases found")
+            logger.warning("N001 - No databases found")
 
         # Build timeline
         now = int(time.time())
@@ -2567,7 +2570,7 @@ class PostgresReportGenerator:
         wait_events_by_db = {}
         
         for db_name in databases:
-            print(f"N001: Processing database {db_name}...")
+            logger.info(f"N001: Processing database {db_name}...")
             
             # Query wait events from Prometheus
             # pgwatch_wait_events_total has labels: wait_event_type, wait_event, query_id, datname
@@ -2586,7 +2589,7 @@ class PostgresReportGenerator:
                                         datetime.fromtimestamp(end_s), step="3600s")
                 
                 if not result:
-                    print(f"Warning: N001 - No wait events data for database {db_name}")
+                    logger.warning(f"N001 - No wait events data for database {db_name}")
                     continue
                 
                 # Build timestamp to hour index map
@@ -2659,7 +2662,7 @@ class PostgresReportGenerator:
                 
                 # Skip databases with no wait events data
                 if not wait_events_grouped:
-                    print(f"Warning: N001 - No wait events data for database {db_name}")
+                    logger.warning(f"N001 - No wait events data for database {db_name}")
                     continue
                 
                 # Count unique queries and convert to list
@@ -2693,7 +2696,7 @@ class PostgresReportGenerator:
                 }
                 
             except Exception as e:
-                print(f"Error querying wait events for database {db_name}: {e}")
+                logger.error(f"Error querying wait events for database {db_name}: {e}")
                 continue
 
         return self.format_report_data(
@@ -2769,7 +2772,7 @@ class PostgresReportGenerator:
                     end_data.extend(end_result)
 
             except Exception as e:
-                print(f"Warning: Failed to query metric {metric}: {e}")
+                logger.warning(f"Failed to query metric {metric}: {e}")
                 continue
 
         # Process the data to calculate differences
@@ -2803,9 +2806,9 @@ class PostgresReportGenerator:
                 if result.get('status') == 'success':
                     return result.get('data', {}).get('result', [])
             else:
-                print(f"Range query failed with status {response.status_code}: {response.text}")
+                logger.error(f"Range query failed with status {response.status_code}: {response.text}")
         except Exception as e:
-            print(f"Range query error: {e}")
+            logger.error(f"Range query error: {e}")
 
         return []
 
@@ -3168,7 +3171,7 @@ class PostgresReportGenerator:
             # Multi-node structure: data is already in {node_name: {"data": ...}} format
             # postgres_version should already be embedded per-node; warn if passed here
             if postgres_version:
-                print(f"Warning: postgres_version parameter ignored for multi-node data in {check_id}")
+                logger.warning(f"postgres_version parameter ignored for multi-node data in {check_id}")
             results = data
         else:
             # Single-node structure: wrap data in host key
@@ -3454,11 +3457,11 @@ class PostgresReportGenerator:
             
             # If no nodes found, fall back to default
             if not nodes_to_process:
-                print(f"Warning: No nodes found in cluster '{cluster}', using default 'node-01'")
+                logger.warning(f"No nodes found in cluster '{cluster}', using default 'node-01'")
                 nodes_to_process = ["node-01"]
                 all_nodes = {"primary": "node-01", "standbys": []}
             else:
-                print(f"Combining reports from nodes: {nodes_to_process}")
+                logger.info(f"Combining reports from nodes: {nodes_to_process}")
         else:
             # Use single node (backward compatibility)
             if node_name is None:
@@ -3509,7 +3512,7 @@ class PostgresReportGenerator:
                 # Multiple nodes - combine reports
                 combined_results = {}
                 for node in nodes_to_process:
-                    print(f"Generating {check_id} report for node {node}...")
+                    logger.info(f"Generating {check_id} report for node {node}...")
                     node_report = report_func(cluster, node, **report_kwargs)
                     # Extract the data from the node report
                     if 'results' in node_report and node in node_report['results']:
@@ -3548,7 +3551,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary with database names as keys, containing lists of queryids
         """
-        print("DEPRECATED: generate_queries_json is no longer used")
+        logger.warning("DEPRECATED: generate_queries_json is no longer used")
         queries_with_text = self.get_queryid_queries_from_sink(query_text_limit)
         
         # Convert from {db: {queryid: text}} to {db: [queryid, ...]}
@@ -3653,7 +3656,7 @@ class PostgresReportGenerator:
         
         # Log summary
         total_queryids = sum(len(qids) for qids in queryids_by_db.values())
-        print(f"Extracted {total_queryids} unique queryids from hourly reports across {len(queryids_by_db)} database(s)")
+        logger.info(f"Extracted {total_queryids} unique queryids from hourly reports across {len(queryids_by_db)} database(s)")
         
         return queryids_by_db
 
@@ -3726,7 +3729,7 @@ class PostgresReportGenerator:
                         if value > 0:
                             metrics[metric_key] = value
                         break
-            except Exception as e:
+            except Exception:
                 # Silently skip metrics that fail (some may not exist for older PG versions)
                 pass
         
@@ -3765,13 +3768,13 @@ class PostgresReportGenerator:
         Returns:
             List of dictionaries with 'filename' (and optionally 'data' if not written immediately)
         """
-        print("Generating per-query JSON files...")
+        logger.info("Generating per-query JSON files...")
         
         # Extract all queryids from reports
         queryids_by_db = self.extract_queryids_from_reports(reports)
         
         if not queryids_by_db:
-            print("No queryids found in hourly reports")
+            logger.warning("No queryids found in hourly reports")
             return []
         
         # Get node name if not specified
@@ -3781,7 +3784,7 @@ class PostgresReportGenerator:
         
         # Get query texts from sink - only for databases found in reports (memory optimization)
         db_names_list = list(queryids_by_db.keys())
-        print(f"Fetching query texts for {len(db_names_list)} database(s): {db_names_list}")
+        logger.info(f"Fetching query texts for {len(db_names_list)} database(s): {db_names_list}")
         query_texts = self.get_queryid_queries_from_sink(query_text_limit, db_names=db_names_list)
         
         query_files = []
@@ -3793,7 +3796,7 @@ class PostgresReportGenerator:
             
             for queryid in queryids:
                 processed += 1
-                print(f"  Processing query {processed}/{total_queries}: {queryid[:20]}...")
+                logger.info(f"Processing query {processed}/{total_queries}: {queryid[:20]}...")
                 
                 # Get query text
                 query_text = db_query_texts.get(queryid)
@@ -3820,7 +3823,7 @@ class PostgresReportGenerator:
                     # Write to disk immediately to reduce memory usage
                     with open(filename, "w") as f:
                         json.dump(query_data, f, indent=2)
-                    print(f"  Generated query file: {filename}")
+                    logger.info(f"Generated query file: {filename}")
                     
                     # Upload if API credentials provided
                     if api_url and token and report_id:
@@ -3847,7 +3850,7 @@ class PostgresReportGenerator:
         del query_texts
         gc.collect()
         
-        print(f"Generated {len(query_files)} per-query JSON files")
+        logger.info(f"Generated {len(query_files)} per-query JSON files")
         return query_files
 
     def get_all_clusters(self) -> List[str]:
@@ -3870,11 +3873,11 @@ class PostgresReportGenerator:
                     cluster_set.add(cluster_name)
         else:
             # Debug output
-            print(f"Debug - get_all_clusters query status: {result.get('status')}")
-            print(f"Debug - get_all_clusters result count: {len(result.get('data', {}).get('result', []))}")
+            logger.info(f"Debug - get_all_clusters query status: {result.get('status')}")
+            logger.info(f"Debug - get_all_clusters result count: {len(result.get('data', {}).get('result', []))}")
         
         if cluster_set:
-            print(f"Found {len(cluster_set)} cluster(s): {sorted(list(cluster_set))}")
+            logger.info(f"Found {len(cluster_set)} cluster(s): {sorted(list(cluster_set))}")
         
         return sorted(list(cluster_set))
 
@@ -3906,9 +3909,9 @@ class PostgresReportGenerator:
         node_list = sorted(list(node_set))
         
         if node_list:
-            print(f"  Found {len(node_list)} node(s) in cluster '{cluster}': {node_list}")
+            logger.info(f"Found {len(node_list)} node(s) in cluster '{cluster}': {node_list}")
         else:
-            print(f"  Warning: No nodes found in cluster '{cluster}'")
+            logger.warning(f"No nodes found in cluster '{cluster}'")
         
         # Use pgwatch_db_stats_in_recovery_int to determine primary vs standby
         # in_recovery = 0 means primary, in_recovery = 1 means standby
@@ -3921,7 +3924,7 @@ class PostgresReportGenerator:
                 if recovery_result['data']['result']:
                     in_recovery_value = float(recovery_result['data']['result'][0]['value'][1])
                     is_standby = (in_recovery_value > 0)
-                    print(f"  Node '{node_name}': in_recovery={int(in_recovery_value)} ({'standby' if is_standby else 'primary'})")
+                    logger.info(f"Node '{node_name}': in_recovery={int(in_recovery_value)} ({'standby' if is_standby else 'primary'})")
             
             if is_standby:
                 nodes["standbys"].append(node_name)
@@ -3931,10 +3934,10 @@ class PostgresReportGenerator:
                     nodes["primary"] = node_name
                 else:
                     # If we have multiple primaries (shouldn't happen), treat as replicas
-                    print(f"  Warning: Multiple primary nodes detected, treating '{node_name}' as replica")
+                    logger.warning(f"Multiple primary nodes detected, treating '{node_name}' as replica")
                     nodes["standbys"].append(node_name)
         
-        print(f"  Result: primary={nodes['primary']}, replicas={nodes['standbys']}")
+        logger.info(f"Result: primary={nodes['primary']}, replicas={nodes['standbys']}")
         return nodes
 
     def get_all_databases(self, cluster: str = "local", node_name: str = "node-01") -> List[str]:
@@ -4073,18 +4076,18 @@ class PostgresReportGenerator:
                     end_data.extend(end_result)
 
             except Exception as e:
-                print(f"Warning: Failed to query metric {metric} for database {db_name}: {e}")
+                logger.warning(f"Failed to query metric {metric} for database {db_name}: {e}")
                 continue
         
         if metrics_found == 0:
-            print(f"Warning: No pg_stat_statements metrics found for database {db_name}")
-            print(f"  Checked time range: {start_time.isoformat()} to {end_time.isoformat()}")
+            logger.warning(f"No pg_stat_statements metrics found for database {db_name}")
+            logger.info(f"Checked time range: {start_time.isoformat()} to {end_time.isoformat()}")
 
         # Process the data to calculate differences
         result = self._process_pgss_data(start_data, end_data, start_time, end_time, METRIC_NAME_MAPPING)
         
         if not result:
-            print(f"Warning: _process_pgss_data returned empty result for database {db_name}")
+            logger.warning(f"_process_pgss_data returned empty result for database {db_name}")
             
         return result
 
@@ -4112,24 +4115,24 @@ class PostgresReportGenerator:
             report_id = response.get("report_id")
             if not report_id:
                 message = response.get("message", "Cannot create report.")
-                print(f"Warning: {message}")
+                logger.warning(f"{message}")
                 return None
             
-            print(f"Created report ID: {report_id}")
+            logger.info(f"Created report ID: {report_id}")
             return int(report_id)
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if hasattr(e, 'response') else 'unknown'
             if status == 404:
-                print(f"Warning: API endpoint not available (404). Reports will be saved locally only.")
+                logger.warning("API endpoint not available (404). Reports will be saved locally only.")
             elif status == 400:
-                print(f"Request data: {len(json.dumps(request_data))} chars")
-                print(f"Warning: API rejected request (400 Bad Request). Reports will be saved locally only.")
-                print(f"This may indicate authentication issues or API format changes.")
+                logger.info(f"Request data: {len(json.dumps(request_data))} chars")
+                logger.warning("API rejected request (400 Bad Request). Reports will be saved locally only.")
+                logger.warning("This may indicate authentication issues or API format changes.")
             else:
-                print(f"Warning: Failed to create report (HTTP {status}): {e}")
+                logger.error(f"Failed to create report (HTTP {status}): {e}")
             return None
         except Exception as e:
-            print(f"Warning: Failed to create report: {e}")
+            logger.error(f"Failed to create report: {e}")
             return None
 
     def upload_report_file(self, api_url, token, report_id, path):
@@ -4169,20 +4172,20 @@ class PostgresReportGenerator:
             response = make_request(api_url, "/rpc/checkup_report_file_post", request_data)
             if "message" in response:
                 raise Exception(response["message"])
-            print(f"  Uploaded: {file_name}")
+            logger.info(f"Uploaded: {file_name}")
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if hasattr(e, 'response') else 'unknown'
             if status == 404:
-                print(f"  Warning: Upload endpoint not available (404). File saved locally: {path}")
+                logger.warning(f"Upload endpoint not available (404). File saved locally: {path}")
             elif status == 400:
-                print(f"  Warning: Upload rejected by API (400 Bad Request). File saved locally: {path}")
-                print(f"  This may indicate the API endpoint format has changed or authentication issue.")
+                logger.warning(f"Upload rejected by API (400 Bad Request). File saved locally: {path}")
+                logger.warning("This may indicate the API endpoint format has changed or authentication issue.")
             else:
-                print(f"  Warning: Upload failed for {file_name} (HTTP {status}). File saved locally: {path}")
-            print(f"  Use --no-upload flag to skip API uploads and suppress these warnings.")
+                logger.error(f"Upload failed for {file_name} (HTTP {status}). File saved locally: {path}")
+            logger.info("Use --no-upload flag to skip API uploads and suppress these warnings.")
         except Exception as e:
-            print(f"  Warning: Upload failed for {file_name}: {e}")
-            print(f"  File saved locally: {path}")
+            logger.error(f"Upload failed for {file_name}: {e}")
+            logger.info(f"File saved locally: {path}")
 
 
 def make_request(api_url, endpoint, request_data):
@@ -4232,7 +4235,7 @@ def main():
 
     # Test connection
     if not generator.test_connection():
-        print("Error: Cannot connect to Prometheus. Make sure it's running and accessible.")
+        logger.error("Cannot connect to Prometheus. Make sure it's running and accessible.")
         sys.exit(1)
 
     try:
@@ -4243,16 +4246,16 @@ def main():
         else:
             clusters_to_process = generator.get_all_clusters()
             if not clusters_to_process:
-                print("Warning: No clusters found, using default 'local'")
+                logger.warning("No clusters found, using default 'local'")
                 clusters_to_process = ['local']
             else:
-                print(f"Discovered clusters: {clusters_to_process}")
+                logger.info(f"Discovered clusters: {clusters_to_process}")
         
         # Process each cluster
         for cluster in clusters_to_process:
-            print(f"\n{'='*60}")
-            print(f"Processing cluster: {cluster}")
-            print(f"{'='*60}\n")
+            logger.info("=" * 60)
+            logger.info(f"Processing cluster: {cluster}")
+            logger.info("=" * 60)
             
             # Set default node_name if not provided and not combining nodes
             combine_nodes = not args.no_combine_nodes
@@ -4268,13 +4271,13 @@ def main():
                     report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
                     # If report creation failed, disable uploads for this cluster
                     if report_id is None:
-                        print(f"Skipping API uploads for cluster {cluster}")
+                        logger.info(f"Skipping API uploads for cluster {cluster}")
                 
                 reports = generator.generate_all_reports(cluster, args.node_name, combine_nodes)
                 
                 # Generate per-query JSON files BEFORE deleting reports (needs queryids from reports)
                 # Use write_immediately=True to avoid accumulating all data in memory
-                print("Generating per-query JSON files (streaming mode to reduce memory usage)...")
+                logger.info("Generating per-query JSON files (streaming mode to reduce memory usage)...")
                 query_files = generator.generate_per_query_jsons(
                     reports, cluster, node_name=args.node_name, 
                     query_text_limit=1000, hours=24,
@@ -4293,7 +4296,7 @@ def main():
                     output_filename = f"{cluster}_{report_key}.json" if len(clusters_to_process) > 1 else f"{report_key}.json"
                     with open(output_filename, "w") as f:
                         json.dump(reports[report_key], f, indent=2)
-                    print(f"Generated report: {output_filename}")
+                    logger.info(f"Generated report: {output_filename}")
                     if not args.no_upload and report_id:
                         generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
                     
@@ -4312,13 +4315,13 @@ def main():
                     # Single cluster - use specified output
                     with open(args.output, 'w') as f:
                         json.dump(reports, f, indent=2)
-                    print(f"All reports written to {args.output}")
+                    logger.info(f"All reports written to {args.output}")
                 else:
                     # Multiple clusters - create combined output
                     combined_output = f"{cluster}_all_reports.json"
                     with open(combined_output, 'w') as f:
                         json.dump(reports, f, indent=2)
-                    print(f"All reports for cluster {cluster} written to {combined_output}")
+                    logger.info(f"All reports for cluster {cluster} written to {combined_output}")
             else:
                 # Generate specific report - use node_name or default
                 if args.node_name is None:
@@ -4372,11 +4375,12 @@ def main():
                 output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
                 
                 if args.output == '-' and len(clusters_to_process) == 1:
-                    print(json.dumps(report, indent=2))
+                    # Report payload to stdout must remain raw JSON (not prefixed with log metadata).
+                    sys.stdout.write(json.dumps(report, indent=2) + "\n")
                 else:
                     with open(output_filename, 'w') as f:
                         json.dump(report, f, indent=2)
-                    print(f"Report written to {output_filename}")
+                    logger.info(f"Report written to {output_filename}")
                     if not args.no_upload:
                         project_name = args.project_name if args.project_name != 'project-name' else cluster
                         report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
@@ -4384,18 +4388,18 @@ def main():
                             generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
             
             # Free memory after processing each cluster
-            print(f"Freeing memory after processing cluster {cluster}...")
+            logger.info(f"Freeing memory after processing cluster {cluster}...")
             
             # Close and reconnect postgres to free any accumulated memory
             if generator.pg_conn:
-                print(f"Reconnecting to Postgres sink to free memory...")
+                logger.info("Reconnecting to Postgres sink to free memory...")
                 generator.close_postgres_sink()
                 # Connection will be recreated on next use
             
             gc.collect()
             
     except Exception as e:
-        print(f"Error generating reports: {e}")
+        logger.error(f"Error generating reports: {e}")
         raise e
         sys.exit(1)
     finally:
