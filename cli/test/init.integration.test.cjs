@@ -310,7 +310,7 @@ test("integration: prepare-db reports nicely when lacking permissions", { skip: 
   const limitedUri = `postgresql://limited:${limitedPw}@127.0.0.1:${pg.port}/testdb`;
   const r = await runCliInit([limitedUri, "--password", "monpw", "--skip-optional-permissions"]);
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /Error: init:/);
+  assert.match(r.stderr, /Error: prepare-db:/);
   // Should include step context and hint.
   assert.match(r.stderr, /Failed at step "/);
   assert.match(r.stderr, /Fix: connect as a superuser/i);
