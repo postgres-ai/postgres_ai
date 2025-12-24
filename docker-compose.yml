@@ -184,8 +184,14 @@ services:
         else
           echo 'No API key configured, generating reports without upload...' &&
           python postgres_reports.py --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
-        fi &&
-        echo 'Reports generated. Sleeping for 24 hours...' &&
+        fi
+        status=$$?
+        if [ $$status -ne 0 ]; then
+          echo \"Report generation failed (exit $$status). Will retry after 24 hours.\"
+        else
+          echo 'Reports generated successfully.'
+        fi
+        echo 'Sleeping for 24 hours...' &&
         sleep 86400
       done
       "
