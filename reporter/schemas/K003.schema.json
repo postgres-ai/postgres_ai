@@ -6,7 +6,7 @@
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
   "properties": {
     "checkId": { "const": "K003" },
-    "checkTitle": { "const": "Top-50 queries by total_time" },
+    "checkTitle": { "const": "Top queries by total_time" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {

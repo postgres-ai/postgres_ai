@@ -1696,21 +1696,21 @@ class PostgresReportGenerator:
         )
 
     def generate_k003_top_queries_report(self, cluster: str = "local", node_name: str = "node-01",
-                                         time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                         time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate K003 Top-50 Queries by total_time (exec + plan) report.
+        Generate K003 Top Queries by total_time (exec + plan) report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by total execution time (exec + plan)
         """
-        logger.info("Generating K003 Top-50 Queries by total_time (exec + plan) report...")
+        logger.info("Generating K003 Top Queries by total_time (exec + plan) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -1838,21 +1838,21 @@ class PostgresReportGenerator:
         )
 
     def generate_m001_mean_time_report(self, cluster: str = "local", node_name: str = "node-01",
-                                       time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                       time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate M001 Top-50 Queries by mean execution time report.
+        Generate M001 Top Queries by mean execution time report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by mean execution time
         """
-        logger.info("Generating M001 Top-50 Queries by mean execution time report...")
+        logger.info("Generating M001 Top Queries by mean execution time report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -1967,21 +1967,21 @@ class PostgresReportGenerator:
         )
 
     def generate_m002_rows_report(self, cluster: str = "local", node_name: str = "node-01",
-                                  time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                  time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate M002 Top-50 Queries by rows (I/O intensity) report.
+        Generate M002 Top Queries by rows (I/O intensity) report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by rows processed
         """
-        logger.info("Generating M002 Top-50 Queries by rows report...")
+        logger.info("Generating M002 Top Queries by rows report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -2079,21 +2079,21 @@ class PostgresReportGenerator:
         )
 
     def generate_m003_io_time_report(self, cluster: str = "local", node_name: str = "node-01",
-                                     time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                     time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate M003 Top-50 Queries by I/O time report.
+        Generate M003 Top Queries by I/O time report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by total I/O time
         """
-        logger.info("Generating M003 Top-50 Queries by I/O time report...")
+        logger.info("Generating M003 Top Queries by I/O time report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -2218,21 +2218,21 @@ class PostgresReportGenerator:
         )
 
     def generate_k004_temp_bytes_report(self, cluster: str = "local", node_name: str = "node-01",
-                                        time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                        time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate K004 Top-50 Queries by temp bytes written report.
+        Generate K004 Top Queries by temp bytes written report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by temp bytes written
         """
-        logger.info("Generating K004 Top-50 Queries by temp bytes written report...")
+        logger.info("Generating K004 Top Queries by temp bytes written report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -2299,21 +2299,21 @@ class PostgresReportGenerator:
         )
 
     def generate_k005_wal_bytes_report(self, cluster: str = "local", node_name: str = "node-01",
-                                       time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                       time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate K005 Top-50 Queries by WAL generation report.
+        Generate K005 Top Queries by WAL generation report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by WAL bytes generated
         """
-        logger.info("Generating K005 Top-50 Queries by WAL generation report...")
+        logger.info("Generating K005 Top Queries by WAL generation report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -2380,21 +2380,21 @@ class PostgresReportGenerator:
         )
 
     def generate_k006_shared_read_report(self, cluster: str = "local", node_name: str = "node-01",
-                                         time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                         time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate K006 Top-50 Queries by shared blocks read report.
+        Generate K006 Top Queries by shared blocks read report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by shared blocks read
         """
-        logger.info("Generating K006 Top-50 Queries by shared blocks read report...")
+        logger.info("Generating K006 Top Queries by shared blocks read report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -2461,21 +2461,21 @@ class PostgresReportGenerator:
         )
 
     def generate_k007_shared_hit_report(self, cluster: str = "local", node_name: str = "node-01",
-                                        time_range_minutes: int = 60, limit: int = 50, use_hourly: bool = True) -> Dict[str, Any]:
+                                        time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate K007 Top-50 Queries by shared blocks hit report.
+        Generate K007 Top Queries by shared blocks hit report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
             time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
-            limit: Number of top queries to return (default: 50)
+            limit: Number of top queries to return (default: 100)
             use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing top queries sorted by shared blocks hit
         """
-        logger.info("Generating K007 Top-50 Queries by shared blocks hit report...")
+        logger.info("Generating K007 Top Queries by shared blocks hit report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -3257,11 +3257,11 @@ class PostgresReportGenerator:
             "J001": "Capacity planning",
             "K001": "Globally aggregated query metrics",
             "K002": "Workload type",
-            "K003": "Top-50 queries by total_time",
+            "K003": "Top queries by total_time",
             "L001": "Table sizes",
-            "M001": "Top-50 queries by mean execution time",
-            "M002": "Top-50 queries by rows (I/O intensity)",
-            "M003": "Top-50 queries by I/O time",
+            "M001": "Top queries by mean execution time",
+            "M002": "Top queries by rows (I/O intensity)",
+            "M003": "Top queries by I/O time",
             "N001": "Wait events grouped by type and query",
             "L002": "Data types being used",
             "L003": "Integer out-of-range risks in PKs",

@@ -275,7 +275,23 @@ postgres_ai monitoring generates automated health check reports based on [postgr
 | Check ID | Title |
 |----------|-------|
 | K001 | Globally aggregated query metrics |
-| K003 | Top-50 queries by total_time |
+| K003 | Top queries by total_time |
+| K004 | Top queries by temp bytes written |
+| K005 | Top queries by WAL generation |
+| K006 | Top queries by shared blocks read |
+| K007 | Top queries by shared blocks hit |
+
+### M. SQL query analysis (top queries)
+| Check ID | Title |
+|----------|-------|
+| M001 | Top queries by mean execution time |
+| M002 | Top queries by rows (I/O intensity) |
+| M003 | Top queries by I/O time |
+
+### N. Wait events analysis
+| Check ID | Title |
+|----------|-------|
+| N001 | Wait events grouped by type and query |
 
 ## 🌐 Access points
 
