@@ -159,6 +159,7 @@ services:
     working_dir: /app
     volumes:
       - ./reporter/postgres_reports.py:/app/postgres_reports.py
+      - ./reporter/logger.py:/app/logger.py
       - ./reporter/requirements.txt:/app/requirements.txt
       - ./.pgwatch-config:/app/.pgwatch-config
       - ./instances.yml:/app/instances.yml
