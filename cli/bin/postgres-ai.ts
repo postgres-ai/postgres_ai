@@ -788,13 +788,15 @@ program
         }
       } else if (uploadSummary) {
         // Default with --upload: show upload result instead of local-only summary.
-        console.log("\nCheckup report uploaded:");
+        console.log("\nCheckup report uploaded");
         console.log("======================\n");
         console.log(`Project: ${uploadSummary.project}`);
         console.log(`Report ID: ${uploadSummary.reportId}`);
+        console.log("View in Console: console.postgres.ai → Support → checkup reports");
         console.log("");
+        console.log("Files:");
         for (const item of uploadSummary.uploaded) {
-          console.log(`${item.checkId}: ${item.filename} (chunk ${item.chunkId})`);
+          console.log(`- ${item.checkId}: ${item.filename}`);
         }
       } else {
         // Default: print summary
