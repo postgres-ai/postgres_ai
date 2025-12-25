@@ -1,7 +1,7 @@
 {
   "name": "postgresai",
   "version": "0.0.0-dev.0",
-  "description": "postgres_ai CLI (Bun)",
+  "description": "postgres_ai CLI",
   "license": "Apache-2.0",
   "private": false,
   "repository": {
@@ -13,13 +13,19 @@
     "url": "https://gitlab.com/postgres-ai/postgres_ai/-/issues"
   },
   "bin": {
-    "postgres-ai": "./bin/postgres-ai.ts",
-    "postgresai": "./bin/postgres-ai.ts",
-    "pgai": "./bin/postgres-ai.ts"
+    "postgres-ai": "./dist/bin/postgres-ai.js",
+    "postgresai": "./dist/bin/postgres-ai.js",
+    "pgai": "./dist/bin/postgres-ai.js"
   },
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && sed -i '1s|#!/usr/bin/env bun|#!/usr/bin/env node|' ./dist/bin/postgres-ai.js && cp -r sql dist/",
+    "prepublishOnly": "npm run build",
     "start": "bun ./bin/postgres-ai.ts --help",
+    "start:node": "node ./dist/bin/postgres-ai.js --help",
     "dev": "bun --watch ./bin/postgres-ai.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"

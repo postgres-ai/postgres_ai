@@ -18,8 +18,10 @@ function runCli(args: string[], env: Record<string, string> = {}) {
 }
 
 function runPgai(args: string[], env: Record<string, string> = {}) {
-  const pgaiPath = resolve(import.meta.dir, "..", "..", "pgai", "bin", "pgai.ts");
-  const result = Bun.spawnSync(["bun", pgaiPath, ...args], {
+  // For testing, run the CLI directly since pgai is just a thin wrapper
+  // In production, pgai wrapper will properly resolve and spawn the postgresai CLI
+  const cliPath = resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+  const result = Bun.spawnSync(["bun", cliPath, ...args], {
     env: { ...process.env, ...env },
   });
   return {

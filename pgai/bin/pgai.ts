@@ -1,7 +1,14 @@
 #!/usr/bin/env bun
 
+import { spawn } from "child_process";
 import { resolve, dirname } from "path";
 import { existsSync } from "fs";
+import { createRequire } from "module";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
 
 function die(msg: string): never {
   process.stderr.write(`${msg}\n`);
@@ -12,14 +19,23 @@ let target: string;
 
 // Try to find the postgresai package
 try {
-  // First try to resolve from node_modules
-  const postgreaiIndex = require.resolve("postgresai");
-  target = resolve(dirname(postgreaiIndex), "..", "bin", "postgres-ai.ts");
+  // First try to resolve from node_modules - look for the compiled dist version
+  const postgresaiPkg = require.resolve("postgresai/package.json");
+  target = resolve(dirname(postgresaiPkg), "dist", "bin", "postgres-ai.js");
+
+  // Fallback to source TS if dist doesn't exist (development)
+  if (!existsSync(target)) {
+    target = resolve(dirname(postgresaiPkg), "bin", "postgres-ai.ts");
+  }
 } catch {
   // Dev-friendly fallback when running from the monorepo checkout (postgresai lives under ../cli).
-  const fallback = resolve(import.meta.dir, "..", "..", "cli", "bin", "postgres-ai.ts");
-  if (existsSync(fallback)) {
-    target = fallback;
+  const fallbackJs = resolve(__dirname, "..", "..", "cli", "dist", "bin", "postgres-ai.js");
+  const fallbackTs = resolve(__dirname, "..", "..", "cli", "bin", "postgres-ai.ts");
+
+  if (existsSync(fallbackJs)) {
+    target = fallbackJs;
+  } else if (existsSync(fallbackTs)) {
+    target = fallbackTs;
   } else {
     die(
       [
@@ -31,7 +47,22 @@ try {
   }
 }
 
-// Import and run the main CLI
-const mainModule = await import(target);
+// Determine if we should use node or bun based on the file extension
+const isTsFile = target.endsWith(".ts");
+const runtime = isTsFile ? "bun" : process.execPath;
 
-// The CLI parses process.argv and runs automatically, so we don't need to do anything else
+const child = spawn(runtime, [target, ...process.argv.slice(2)], {
+  stdio: "inherit",
+});
+
+child.on("exit", (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
+  }
+  process.exit(code ?? 0);
+});
+
+child.on("error", (err) => {
+  die(`pgai: failed to run postgresai: ${err instanceof Error ? err.message : String(err)}`);
+});

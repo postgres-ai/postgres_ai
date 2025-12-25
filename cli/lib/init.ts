@@ -159,13 +159,17 @@ export type InitPlan = {
   steps: InitStep[];
 };
 
-function packageRootDir(): string {
-  // lib/init.ts -> <pkg>/lib ; package root is ..
-  return path.resolve(__dirname, "..");
-}
-
 function sqlDir(): string {
-  return path.join(packageRootDir(), "sql");
+  // Handle both development (lib/init.ts) and production (dist/bin/postgres-ai.js) paths
+  // Development: lib/ -> ../sql
+  // Production (bundled): dist/bin/ -> ../sql (copied during build)
+  const devPath = path.resolve(__dirname, "..", "sql");
+  const prodPath = path.resolve(__dirname, "..", "sql");
+
+  if (fs.existsSync(devPath)) {
+    return devPath;
+  }
+  return prodPath;
 }
 
 function loadSqlTemplate(filename: string): string {
