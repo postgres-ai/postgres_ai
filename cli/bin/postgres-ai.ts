@@ -344,6 +344,20 @@ program
   );
 
 program
+  .command("set-default-project <project>")
+  .description("store default project for checkup uploads")
+  .action(async (project: string) => {
+    const value = (project || "").trim();
+    if (!value) {
+      console.error("Error: project is required");
+      process.exitCode = 1;
+      return;
+    }
+    config.writeConfig({ defaultProject: value });
+    console.log(`Default project saved: ${value}`);
+  });
+
+program
   .command("prepare-db [conn]")
   .description("prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
   .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
