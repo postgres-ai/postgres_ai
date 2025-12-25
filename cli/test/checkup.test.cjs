@@ -537,9 +537,12 @@ test("cli: checkup --help shows available check IDs", () => {
   assert.match(r.stdout, /A013/);
 });
 
-test("cli: checkup without connection shows error", () => {
+test("cli: checkup without connection shows help", () => {
   const r = runCli(["checkup"]);
   assert.notEqual(r.status, 0);
-  // Should show connection required error
-  assert.match(r.stderr, /connection|required|PostgreSQL/i);
+  // Should show full help (options + examples), like `checkup --help`
+  assert.match(r.stdout, /generate health check reports/i);
+  assert.match(r.stdout, /--check-id/);
+  assert.match(r.stdout, /available checks/i);
+  assert.match(r.stdout, /A002/);
 });
