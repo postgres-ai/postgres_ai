@@ -18,6 +18,7 @@ from typing import Dict, List, Any, Optional, Tuple
 import argparse
 import sys
 import os
+from pathlib import Path
 try:
     import psycopg2
     import psycopg2.extras
@@ -4220,18 +4221,25 @@ class PostgresReportGenerator:
         """
         file_type = os.path.splitext(path)[1].lower().lstrip(".")
         file_name = os.path.basename(path)
-        
-        # Extract check_id from filename (e.g., "A002_report.json" -> "A002")
-        # For query files (e.g., "query_12345.json"), use empty check_id
-        if file_name[4:5] == "_" and len(file_name) >= 4 and file_name[:4].isupper():
-            check_id = file_name[:4]
-            generate_issue = True  # Generate issues for report files with check_ids
-        else:
-            check_id = ""
-            generate_issue = False  # Don't generate issues for query files or files without check_ids
 
-        with open(path, "r") as f:
-            data = f.read()
+        data = Path(path).read_text(encoding="utf-8")
+
+        # Prefer extracting check_id from JSON payload (filenames vary: A002.json, cluster_A002.json, etc.)
+        # Per-query JSON files intentionally do not have checkId (see reporter/schemas/query.schema.json).
+        check_id = ""
+        generate_issue = False
+        if file_type == "json":
+            try:
+                payload = json.loads(data)
+                if isinstance(payload, dict):
+                    maybe = payload.get("checkId")
+                    if isinstance(maybe, str) and maybe:
+                        check_id = maybe
+                        generate_issue = True
+            except Exception:
+                logger.warning(f"Upload: failed to parse JSON file '{file_name}', uploading without check_id")
+                # Keep check_id empty / generate_issue False to avoid mislabeling.
+                pass
 
         request_data = {
             "access_token": token,

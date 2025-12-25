@@ -930,7 +930,8 @@ def test_upload_report_file_sends_contents(tmp_path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
 
     report_file = tmp_path / "A002_report.json"
-    report_file.write_text('{"foo": "bar"}', encoding="utf-8")
+    # check_id is derived from JSON payload (not filename).
+    report_file.write_text('{"checkId": "A002", "foo": "bar"}', encoding="utf-8")
 
     generator.upload_report_file("https://api", "tok", 100, str(report_file))
 
