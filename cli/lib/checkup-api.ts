@@ -2,6 +2,44 @@ import * as https from "https";
 import { URL } from "url";
 import { normalizeBaseUrl } from "./util";
 
+export class RpcError extends Error {
+  rpcName: string;
+  statusCode: number;
+  payloadText: string;
+  payloadJson: any | null;
+
+  constructor(params: { rpcName: string; statusCode: number; payloadText: string; payloadJson: any | null }) {
+    const { rpcName, statusCode, payloadText, payloadJson } = params;
+    super(`RPC ${rpcName} failed: HTTP ${statusCode}`);
+    this.name = "RpcError";
+    this.rpcName = rpcName;
+    this.statusCode = statusCode;
+    this.payloadText = payloadText;
+    this.payloadJson = payloadJson;
+  }
+}
+
+export function formatRpcErrorForDisplay(err: RpcError): string[] {
+  const lines: string[] = [];
+  lines.push(`Error: RPC ${err.rpcName} failed: HTTP ${err.statusCode}`);
+
+  const obj = err.payloadJson && typeof err.payloadJson === "object" ? err.payloadJson : null;
+  const details = obj && typeof (obj as any).details === "string" ? (obj as any).details : "";
+  const hint = obj && typeof (obj as any).hint === "string" ? (obj as any).hint : "";
+  const message = obj && typeof (obj as any).message === "string" ? (obj as any).message : "";
+
+  if (message) lines.push(`Message: ${message}`);
+  if (details) lines.push(`Details: ${details}`);
+  if (hint) lines.push(`Hint: ${hint}`);
+
+  // Fallback to raw payload if we couldn't extract anything useful.
+  if (!message && !details && !hint) {
+    const t = (err.payloadText || "").trim();
+    if (t) lines.push(t);
+  }
+  return lines;
+}
+
 function unwrapRpcResponse(parsed: unknown): any {
   // Some deployments return a plain object, others return an array of rows,
   // and some wrap OUT params under a "result" key.
@@ -56,16 +94,16 @@ async function postRpc<T>(params: {
               reject(new Error(`Failed to parse RPC response: ${data}`));
             }
           } else {
-            let errMsg = `RPC ${rpcName} failed: HTTP ${res.statusCode}`;
+            const statusCode = res.statusCode || 0;
+            let payloadJson: any | null = null;
             if (data) {
               try {
-                const errObj = JSON.parse(data);
-                errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
+                payloadJson = JSON.parse(data);
               } catch {
-                errMsg += `\n${data}`;
+                payloadJson = null;
               }
             }
-            reject(new Error(errMsg));
+            reject(new RpcError({ rpcName, statusCode, payloadText: data, payloadJson }));
           }
         });
       }

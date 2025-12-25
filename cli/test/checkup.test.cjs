@@ -622,3 +622,24 @@ test("cli: checkup --upload uses defaultProject when --project omitted", () => {
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+test("formatRpcErrorForDisplay formats details/hint nicely", () => {
+  const api = require("../dist/lib/checkup-api.js");
+  const err = new api.RpcError({
+    rpcName: "checkup_report_file_post",
+    statusCode: 402,
+    payloadText: JSON.stringify({
+      hint: "Start an express checkup subscription for the organization or contact support.",
+      details: "Checkup report uploads require an active checkup subscription",
+    }),
+    payloadJson: {
+      hint: "Start an express checkup subscription for the organization or contact support.",
+      details: "Checkup report uploads require an active checkup subscription.",
+    },
+  });
+  const lines = api.formatRpcErrorForDisplay(err);
+  const text = lines.join("\n");
+  assert.match(text, /RPC checkup_report_file_post failed: HTTP 402/);
+  assert.match(text, /Details:/);
+  assert.match(text, /Hint:/);
+});
