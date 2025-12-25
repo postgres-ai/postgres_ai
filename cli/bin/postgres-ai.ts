@@ -18,7 +18,7 @@ import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from 
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
-import { createCheckupReport, uploadCheckupReportJson } from "../lib/checkup-api";
+import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay } from "../lib/checkup-api";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -827,8 +827,14 @@ program
       }
     } catch (error) {
       spinner.stop();
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`Error: ${message}`);
+      if (error instanceof RpcError) {
+        for (const line of formatRpcErrorForDisplay(error)) {
+          console.error(line);
+        }
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Error: ${message}`);
+      }
       process.exitCode = 1;
     } finally {
       if (client) {
