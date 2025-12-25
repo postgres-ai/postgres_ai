@@ -17,6 +17,7 @@ import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -2248,6 +2249,165 @@ mcp
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Failed to install MCP server: ${message}`);
       process.exitCode = 1;
+    }
+  });
+
+// Express checkup - direct database analysis
+program
+  .command("checkup [conn]")
+  .description("generate health check reports directly from PostgreSQL (express mode)")
+  .option("--db-url <url>", "PostgreSQL connection URL (deprecated; pass as positional arg)")
+  .option("-h, --host <host>", "PostgreSQL host")
+  .option("-p, --port <port>", "PostgreSQL port")
+  .option("-U, --username <username>", "PostgreSQL user")
+  .option("-d, --dbname <dbname>", "PostgreSQL database name")
+  .option("--password <password>", "PostgreSQL password (otherwise uses PGPASSWORD)")
+  .option("--check-id <id>", `specific check to run: ${Object.keys(CHECK_INFO).join(", ")}, or ALL`, "ALL")
+  .option("--node-name <name>", "node name for reports", "node-01")
+  .option("--output <path>", "output directory for JSON files (default: current directory)")
+  .option("--json", "output to stdout as JSON instead of files")
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  postgresai checkup postgresql://user:pass@host:5432/dbname",
+      "  postgresai checkup -h localhost -p 5432 -U postgres -d mydb",
+      "  postgresai checkup --db-url postgresql://... --check-id A003",
+      "  postgresai checkup postgresql://... --json",
+      "",
+      "Available checks:",
+      ...Object.entries(CHECK_INFO).map(([id, title]) => `  ${id}: ${title}`),
+      "",
+      "Express mode runs SQL queries directly against PostgreSQL,",
+      "without requiring Prometheus. Useful for quick health checks.",
+    ].join("\n")
+  )
+  .action(async (conn: string | undefined, opts: {
+    dbUrl?: string;
+    host?: string;
+    port?: string;
+    username?: string;
+    dbname?: string;
+    password?: string;
+    checkId: string;
+    nodeName: string;
+    output?: string;
+    json?: boolean;
+  }) => {
+    // Build connection config
+    let connectionString: string | undefined;
+    let connectionConfig: {
+      host?: string;
+      port?: number;
+      user?: string;
+      database?: string;
+      password?: string;
+    } | undefined;
+
+    if (conn) {
+      connectionString = conn;
+    } else if (opts.dbUrl) {
+      connectionString = opts.dbUrl;
+    } else if (opts.host || opts.username || opts.dbname) {
+      connectionConfig = {
+        host: opts.host || process.env.PGHOST || "localhost",
+        port: parseInt(opts.port || process.env.PGPORT || "5432", 10),
+        user: opts.username || process.env.PGUSER || "postgres",
+        database: opts.dbname || process.env.PGDATABASE || "postgres",
+        password: opts.password || process.env.PGPASSWORD,
+      };
+    } else {
+      // Try environment variables
+      if (process.env.PGHOST || process.env.DATABASE_URL) {
+        connectionString = process.env.DATABASE_URL;
+        if (!connectionString) {
+          connectionConfig = {
+            host: process.env.PGHOST,
+            port: parseInt(process.env.PGPORT || "5432", 10),
+            user: process.env.PGUSER || "postgres",
+            database: process.env.PGDATABASE || "postgres",
+            password: process.env.PGPASSWORD,
+          };
+        }
+      } else {
+        console.error("Error: Connection details required");
+        console.error("");
+        console.error("Provide connection via:");
+        console.error("  positional argument: postgresai checkup postgresql://...");
+        console.error("  flags: postgresai checkup -h host -p port -U user -d database");
+        console.error("  environment: PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD");
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    // Validate check ID
+    const checkId = opts.checkId.toUpperCase();
+    if (checkId !== "ALL" && !REPORT_GENERATORS[checkId]) {
+      console.error(`Error: Unknown check ID: ${opts.checkId}`);
+      console.error(`Available checks: ${Object.keys(CHECK_INFO).join(", ")}, ALL`);
+      process.exitCode = 1;
+      return;
+    }
+
+    // Connect to database
+    const client = new Client(connectionString ? { connectionString } : connectionConfig);
+
+    try {
+      console.error("Connecting to PostgreSQL...");
+      await client.connect();
+
+      const dbResult = await client.query("SELECT current_database() as db, version() as ver");
+      const dbName = dbResult.rows[0]?.db;
+      const dbVersion = dbResult.rows[0]?.ver;
+      console.error(`Connected to: ${dbName}`);
+      console.error(`Version: ${dbVersion}`);
+      console.error("");
+
+      if (checkId === "ALL") {
+        // Generate all reports
+        console.error("Generating all reports...");
+        const reports = await generateAllReports(client, opts.nodeName);
+
+        if (opts.json) {
+          // Output all reports as JSON to stdout
+          console.log(JSON.stringify(reports, null, 2));
+        } else {
+          // Write each report to a file
+          const outputDir = opts.output || process.cwd();
+          for (const [id, report] of Object.entries(reports)) {
+            const filePath = path.join(outputDir, `${id}.json`);
+            fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
+            console.error(`Generated: ${filePath}`);
+          }
+          console.error("");
+          console.error(`All reports written to: ${outputDir}`);
+        }
+      } else {
+        // Generate specific report
+        console.error(`Generating ${checkId} report...`);
+        const generator = REPORT_GENERATORS[checkId];
+        const report = await generator(client, opts.nodeName);
+
+        if (opts.json) {
+          // Output to stdout
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          // Write to file
+          const outputDir = opts.output || process.cwd();
+          const filePath = path.join(outputDir, `${checkId}.json`);
+          fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
+          console.error(`Generated: ${filePath}`);
+        }
+      }
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Error: ${message}`);
+      process.exitCode = 1;
+    } finally {
+      await client.end();
     }
   });
 
