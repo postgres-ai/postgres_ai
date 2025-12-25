@@ -204,7 +204,7 @@ program
 
 program
   .command("prepare-db [conn]")
-  .description("Prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
+  .description("prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
   .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
   .option("-h, --host <host>", "PostgreSQL host (psql-like)")
   .option("-p, --port <port>", "PostgreSQL port (psql-like)")
@@ -1534,8 +1534,10 @@ targets
   });
 
 // Authentication and API key management
-program
-  .command("auth")
+const auth = program.command("auth").description("authentication and API key management");
+
+auth
+  .command("login", { isDefault: true })
   .description("authenticate via browser (OAuth) or store API key directly")
   .option("--set-key <key>", "store API key directly without OAuth flow")
   .option("--port <port>", "local callback server port (default: random)", parseInt)
@@ -1779,7 +1781,7 @@ program
     }
   });
 
-program
+auth
   .command("add-key <apiKey>")
   .description("store API key (deprecated: use 'auth --set-key' instead)")
   .action(async (apiKey: string) => {
@@ -1788,7 +1790,7 @@ program
     console.log(`API key saved to ${config.getConfigPath()}`);
   });
 
-program
+auth
   .command("show-key")
   .description("show API key (masked)")
   .action(async () => {
@@ -1806,7 +1808,7 @@ program
     console.log(`Config location: ${config.getConfigPath()}`);
   });
 
-program
+auth
   .command("remove-key")
   .description("remove API key")
   .action(async () => {
