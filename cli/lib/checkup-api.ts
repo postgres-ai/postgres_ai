@@ -158,7 +158,7 @@ export async function uploadCheckupReportJson(params: {
     check_id: checkId,
     data: jsonText,
     type: "json",
-    generate_issue: false,
+    generate_issue: true,
   };
 
   const resp = await postRpc<any>({
