@@ -59,8 +59,8 @@ test("createBaseReport creates correct structure", () => {
 
   assert.equal(report.checkId, "A002");
   assert.equal(report.checkTitle, "Postgres major version");
-  assert.equal(report.version, null);
-  assert.equal(report.build_ts, null);
+  assert.ok(typeof report.version === "string" && report.version.length > 0);
+  assert.ok(typeof report.build_ts === "string" && report.build_ts.length > 0);
   assert.equal(report.nodes.primary, "test-node");
   assert.deepEqual(report.nodes.standbys, []);
   assert.deepEqual(report.results, {});
