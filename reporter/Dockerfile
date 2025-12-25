@@ -16,14 +16,15 @@ LABEL org.opencontainers.image.created="${BUILD_TS}"
 WORKDIR /app
 
 # Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy reporter script
-COPY postgres_reports.py .
+# Copy the full reporter package (postgres_reports.py imports reporter.*)
+RUN mkdir -p /app/reporter
+COPY . /app/reporter
 
 # Make script executable
-RUN chmod +x postgres_reports.py
+RUN chmod +x /app/reporter/postgres_reports.py
 
 # Embed build metadata into the image filesystem
 RUN printf '%s' "${VERSION}" > /VERSION \
@@ -33,5 +34,5 @@ RUN printf '%s' "${VERSION}" > /VERSION \
 RUN mkdir -p /app/reports
 
 # Default command
-CMD ["python", "postgres_reports.py"]
+CMD ["python", "-m", "reporter.postgres_reports"]
 
