@@ -691,7 +691,6 @@ program
   .option("--check-id <id>", `specific check to run: ${Object.keys(CHECK_INFO).join(", ")}, or ALL`, "ALL")
   .option("--node-name <name>", "node name for reports", "node-01")
   .option("--output <path>", "output directory for JSON files")
-  .option("--json", "output to stdout as JSON instead of files")
   .option("--upload", "create a remote checkup report and upload JSON results (requires API key)", false)
   .option("--project <project>", "project name or ID for remote upload (used with --upload; defaults to config defaultProject)")
   .addHelpText(
@@ -704,7 +703,6 @@ program
       "Examples:",
       "  postgresai checkup postgresql://user:pass@host:5432/db",
       "  postgresai checkup postgresql://user:pass@host:5432/db --check-id A003",
-      "  postgresai checkup postgresql://user:pass@host:5432/db --json",
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
       "  postgresai checkup postgresql://user:pass@host:5432/db --upload --project my_project",
       "  postgresai set-default-project my_project",
@@ -715,7 +713,6 @@ program
     checkId: string;
     nodeName: string;
     output?: string;
-    json?: boolean;
     upload?: boolean;
     project?: string;
   }, cmd: Command) => {
@@ -729,7 +726,7 @@ program
     // Preflight: validate/create output directory BEFORE connecting / running checks.
     // This avoids waiting on network/DB work only to fail at the very end.
     let outputPath: string | undefined;
-    if (opts.output && !opts.json) {
+    if (opts.output) {
       const outputDir = expandHomePath(opts.output);
       outputPath = path.isAbsolute(outputDir) ? outputDir : path.resolve(process.cwd(), outputDir);
       if (!fs.existsSync(outputPath)) {
@@ -791,7 +788,7 @@ program
       envPassword: process.env.PGPASSWORD,
     });
     let client: Client | undefined;
-    const spinnerEnabled = !!process.stdout.isTTY && !opts.json;
+    const spinnerEnabled = !!process.stdout.isTTY && !!opts.upload;
     const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {
@@ -833,9 +830,9 @@ program
         });
 
         const reportId = created.reportId;
-        // Keep upload progress out of stdout when --json is used.
+        // Keep upload progress out of stdout since JSON is output to stdout.
         const logUpload = (msg: string): void => {
-          if (opts.json) console.error(msg);
+          console.error(msg);
         };
         logUpload(`Created remote checkup report: ${reportId}`);
 
@@ -859,9 +856,7 @@ program
 
       spinner.stop();
       // Output results
-      if (opts.json) {
-        console.log(JSON.stringify(reports, null, 2));
-      } else if (opts.output) {
+      if (opts.output) {
         // Write to files
         // outputPath is preflight-validated above
         const outDir = outputPath || path.resolve(process.cwd(), expandHomePath(opts.output));
@@ -871,45 +866,21 @@ program
           console.log(`✓ ${checkId}: ${filePath}`);
         }
       } else if (uploadSummary) {
-        // Default with --upload: show upload result instead of local-only summary.
-        console.log("\nCheckup report uploaded");
-        console.log("======================\n");
-        console.log(`Project: ${uploadSummary.project}`);
-        console.log(`Report ID: ${uploadSummary.reportId}`);
-        console.log("View in Console: console.postgres.ai → Support → checkup reports");
-        console.log("");
-        console.log("Files:");
+        // With --upload: show upload result to stderr, JSON to stdout.
+        console.error("\nCheckup report uploaded");
+        console.error("======================\n");
+        console.error(`Project: ${uploadSummary.project}`);
+        console.error(`Report ID: ${uploadSummary.reportId}`);
+        console.error("View in Console: console.postgres.ai → Support → checkup reports");
+        console.error("");
+        console.error("Files:");
         for (const item of uploadSummary.uploaded) {
-          console.log(`- ${item.checkId}: ${item.filename}`);
+          console.error(`- ${item.checkId}: ${item.filename}`);
         }
+        console.log(JSON.stringify(reports, null, 2));
       } else {
-        // Default: print summary
-        console.log("\nHealth Check Reports Generated:");
-        console.log("================================\n");
-        for (const [checkId, report] of Object.entries(reports)) {
-          const r = report as any;
-          console.log(`${checkId}: ${r.checkTitle}`);
-          if (r.results && r.results[opts.nodeName]) {
-            const nodeData = r.results[opts.nodeName];
-            if (nodeData.postgres_version) {
-              console.log(`  PostgreSQL: ${nodeData.postgres_version.version}`);
-            }
-            if (checkId === "A007" && nodeData.data) {
-              const count = Object.keys(nodeData.data).length;
-              console.log(`  Altered settings: ${count}`);
-            }
-            if (checkId === "A004" && nodeData.data) {
-              if (nodeData.data.database_sizes) {
-                const dbCount = Object.keys(nodeData.data.database_sizes).length;
-                console.log(`  Databases: ${dbCount}`);
-              }
-              if (nodeData.data.general_info?.cache_hit_ratio) {
-                console.log(`  Cache hit ratio: ${nodeData.data.general_info.cache_hit_ratio.value}%`);
-              }
-            }
-          }
-        }
-        console.log("\nUse --json for full output or --output <dir> to save files");
+        // Default: output JSON to stdout
+        console.log(JSON.stringify(reports, null, 2));
       }
     } catch (error) {
       spinner.stop();

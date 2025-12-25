@@ -524,7 +524,7 @@ test("cli: checkup command exists and shows help", () => {
   assert.match(r.stdout, /--check-id/);
   assert.match(r.stdout, /--node-name/);
   assert.match(r.stdout, /--output/);
-  assert.match(r.stdout, /--json/);
+  assert.match(r.stdout, /--upload/);
 });
 
 test("cli: checkup --help shows available check IDs", () => {
