@@ -159,13 +159,13 @@ export type InitPlan = {
   steps: InitStep[];
 };
 
-function packageRootDirFromCompiled(): string {
-  // dist/lib/init.js -> <pkg>/dist/lib ; package root is ../..
-  return path.resolve(__dirname, "..", "..");
+function packageRootDir(): string {
+  // lib/init.ts -> <pkg>/lib ; package root is ..
+  return path.resolve(__dirname, "..");
 }
 
 function sqlDir(): string {
-  return path.join(packageRootDirFromCompiled(), "sql");
+  return path.join(packageRootDir(), "sql");
 }
 
 function loadSqlTemplate(filename: string): string {

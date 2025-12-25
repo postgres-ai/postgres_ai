@@ -1,7 +1,7 @@
 {
   "name": "pgai",
   "version": "0.0.0-dev.0",
-  "description": "Thin wrapper for postgresai CLI (provides `npx pgai ...`)",
+  "description": "Thin wrapper for postgresai CLI (provides `bunx pgai ...`)",
   "license": "Apache-2.0",
   "private": false,
   "repository": {
@@ -13,14 +13,14 @@
     "url": "https://gitlab.com/postgres-ai/postgres_ai/-/issues"
   },
   "bin": {
-    "pgai": "./bin/pgai.js"
+    "pgai": "./bin/pgai.ts"
   },
-  "type": "commonjs",
-  "engines": {
-    "node": ">=18"
-  },
+  "type": "module",
   "dependencies": {
     "postgresai": "0.0.0-dev.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14"
   }
 }
 

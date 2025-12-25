@@ -1,12 +1,12 @@
-import * as pkg from "../package.json";
+import pkg from "../package.json";
 import * as config from "./config";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "./issues";
 import { resolveBaseUrls } from "./util";
 
-// MCP SDK imports
-import { Server } from "@modelcontextprotocol/sdk/server";
-import * as path from "path";
-// Types schemas will be loaded dynamically from the SDK's CJS bundle
+// MCP SDK imports - Bun handles these directly
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 interface RootOptsLike {
   apiKey?: string;
@@ -14,16 +14,6 @@ interface RootOptsLike {
 }
 
 export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: boolean }): Promise<void> {
-  // Resolve stdio transport at runtime to avoid subpath export resolution issues
-  const serverEntry = require.resolve("@modelcontextprotocol/sdk/server");
-  const stdioPath = path.join(path.dirname(serverEntry), "stdio.js");
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { StdioServerTransport } = require(stdioPath);
-  // Load schemas dynamically to avoid subpath export resolution issues
-  const typesPath = path.resolve(path.dirname(serverEntry), "../types.js");
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { CallToolRequestSchema, ListToolsRequestSchema } = require(typesPath);
-
   const server = new Server(
     { name: "postgresai-mcp", version: pkg.version },
     { capabilities: { tools: {} } }
@@ -85,7 +75,7 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
     };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (req: any) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req: { params: { name: string; arguments?: Record<string, unknown> } }) => {
     const toolName = req.params.name;
     const args = (req.params.arguments as Record<string, unknown>) || {};
 
@@ -152,5 +142,3 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
-
-

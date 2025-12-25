@@ -1,5 +1,3 @@
-import * as https from "https";
-import { URL } from "url";
 import { maskSecret, normalizeBaseUrl } from "./util";
 
 export interface IssueActionItem {
@@ -75,59 +73,42 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListI
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    // eslint-disable-next-line no-console
     console.log(`Debug: Resolved API base URL: ${base}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: GET URL: ${url.toString()}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Auth scheme: access-token`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      url,
-      {
-        method: "GET",
-        headers,
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          if (debug) {
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response status: ${res.statusCode}`);
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response headers: ${JSON.stringify(res.headers)}`);
-          }
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsed = JSON.parse(data) as IssueListItem[];
-              resolve(parsed);
-            } catch {
-              reject(new Error(`Failed to parse issues response: ${data}`));
-            }
-          } else {
-            let errMsg = `Failed to fetch issues: HTTP ${res.statusCode}`;
-            if (data) {
-              try {
-                const errObj = JSON.parse(data);
-                errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-              } catch {
-                errMsg += `\n${data}`;
-              }
-            }
-            reject(new Error(errMsg));
-          }
-        });
-      }
-    );
-
-    req.on("error", (err: Error) => reject(err));
-    req.end();
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers,
   });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      return JSON.parse(data) as IssueListItem[];
+    } catch {
+      throw new Error(`Failed to parse issues response: ${data}`);
+    }
+  } else {
+    let errMsg = `Failed to fetch issues: HTTP ${response.status}`;
+    if (data) {
+      try {
+        const errObj = JSON.parse(data);
+        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
+      } catch {
+        errMsg += `\n${data}`;
+      }
+    }
+    throw new Error(errMsg);
+  }
 }
 
 
@@ -158,59 +139,42 @@ export async function fetchIssueComments(params: FetchIssueCommentsParams): Prom
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    // eslint-disable-next-line no-console
     console.log(`Debug: Resolved API base URL: ${base}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: GET URL: ${url.toString()}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Auth scheme: access-token`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      url,
-      {
-        method: "GET",
-        headers,
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          if (debug) {
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response status: ${res.statusCode}`);
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response headers: ${JSON.stringify(res.headers)}`);
-          }
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsed = JSON.parse(data) as IssueComment[];
-              resolve(parsed);
-            } catch {
-              reject(new Error(`Failed to parse issue comments response: ${data}`));
-            }
-          } else {
-            let errMsg = `Failed to fetch issue comments: HTTP ${res.statusCode}`;
-            if (data) {
-              try {
-                const errObj = JSON.parse(data);
-                errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-              } catch {
-                errMsg += `\n${data}`;
-              }
-            }
-            reject(new Error(errMsg));
-          }
-        });
-      }
-    );
-
-    req.on("error", (err: Error) => reject(err));
-    req.end();
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers,
   });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      return JSON.parse(data) as IssueComment[];
+    } catch {
+      throw new Error(`Failed to parse issue comments response: ${data}`);
+    }
+  } else {
+    let errMsg = `Failed to fetch issue comments: HTTP ${response.status}`;
+    if (data) {
+      try {
+        const errObj = JSON.parse(data);
+        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
+      } catch {
+        errMsg += `\n${data}`;
+      }
+    }
+    throw new Error(errMsg);
+  }
 }
 
 export interface FetchIssueParams {
@@ -243,63 +207,47 @@ export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail 
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    // eslint-disable-next-line no-console
     console.log(`Debug: Resolved API base URL: ${base}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: GET URL: ${url.toString()}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Auth scheme: access-token`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      url,
-      {
-        method: "GET",
-        headers,
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          if (debug) {
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response status: ${res.statusCode}`);
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response headers: ${JSON.stringify(res.headers)}`);
-          }
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsed = JSON.parse(data);
-              if (Array.isArray(parsed)) {
-                resolve((parsed[0] as IssueDetail) ?? null);
-              } else {
-                resolve(parsed as IssueDetail);
-              }
-            } catch {
-              reject(new Error(`Failed to parse issue response: ${data}`));
-            }
-          } else {
-            let errMsg = `Failed to fetch issue: HTTP ${res.statusCode}`;
-            if (data) {
-              try {
-                const errObj = JSON.parse(data);
-                errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-              } catch {
-                errMsg += `\n${data}`;
-              }
-            }
-            reject(new Error(errMsg));
-          }
-        });
-      }
-    );
-
-    req.on("error", (err: Error) => reject(err));
-    req.end();
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers,
   });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return (parsed[0] as IssueDetail) ?? null;
+      } else {
+        return parsed as IssueDetail;
+      }
+    } catch {
+      throw new Error(`Failed to parse issue response: ${data}`);
+    }
+  } else {
+    let errMsg = `Failed to fetch issue: HTTP ${response.status}`;
+    if (data) {
+      try {
+        const errObj = JSON.parse(data);
+        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
+      } catch {
+        errMsg += `\n${data}`;
+      }
+    }
+    throw new Error(errMsg);
+  }
 }
 
 export interface CreateIssueCommentParams {
@@ -339,67 +287,46 @@ export async function createIssueComment(params: CreateIssueCommentParams): Prom
     "access-token": apiKey,
     "Prefer": "return=representation",
     "Content-Type": "application/json",
-    "Content-Length": Buffer.byteLength(body).toString(),
   };
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    // eslint-disable-next-line no-console
     console.log(`Debug: Resolved API base URL: ${base}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: POST URL: ${url.toString()}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Auth scheme: access-token`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    // eslint-disable-next-line no-console
     console.log(`Debug: Request body: ${body}`);
   }
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      url,
-      {
-        method: "POST",
-        headers,
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          if (debug) {
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response status: ${res.statusCode}`);
-            // eslint-disable-next-line no-console
-            console.log(`Debug: Response headers: ${JSON.stringify(res.headers)}`);
-          }
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsed = JSON.parse(data) as IssueComment;
-              resolve(parsed);
-            } catch {
-              reject(new Error(`Failed to parse create comment response: ${data}`));
-            }
-          } else {
-            let errMsg = `Failed to create issue comment: HTTP ${res.statusCode}`;
-            if (data) {
-              try {
-                const errObj = JSON.parse(data);
-                errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-              } catch {
-                errMsg += `\n${data}`;
-              }
-            }
-            reject(new Error(errMsg));
-          }
-        });
-      }
-    );
-
-    req.on("error", (err: Error) => reject(err));
-    req.write(body);
-    req.end();
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers,
+    body,
   });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      return JSON.parse(data) as IssueComment;
+    } catch {
+      throw new Error(`Failed to parse create comment response: ${data}`);
+    }
+  } else {
+    let errMsg = `Failed to create issue comment: HTTP ${response.status}`;
+    if (data) {
+      try {
+        const errObj = JSON.parse(data);
+        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
+      } catch {
+        errMsg += `\n${data}`;
+      }
+    }
+    throw new Error(errMsg);
+  }
 }
-
-

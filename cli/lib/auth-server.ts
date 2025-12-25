@@ -1,6 +1,3 @@
-import * as http from "http";
-import { URL } from "url";
-
 /**
  * OAuth callback result
  */
@@ -13,7 +10,7 @@ export interface CallbackResult {
  * Callback server structure
  */
 export interface CallbackServer {
-  server: http.Server;
+  server: { stop: () => void };
   promise: Promise<CallbackResult>;
   getPort: () => number;
 }
@@ -34,7 +31,7 @@ function escapeHtml(str: string | null): string {
 }
 
 /**
- * Create and start callback server, returning server object and promise
+ * Create and start callback server using Bun.serve
  * @param port - Port to listen on (0 for random available port)
  * @param expectedState - Expected state parameter for CSRF protection
  * @param timeoutMs - Timeout in milliseconds
@@ -46,42 +43,42 @@ export function createCallbackServer(
   timeoutMs: number = 300000
 ): CallbackServer {
   let resolved = false;
-  let server: http.Server | null = null;
   let actualPort = port;
   let resolveCallback: (value: CallbackResult) => void;
   let rejectCallback: (reason: Error) => void;
-  
+  let serverInstance: ReturnType<typeof Bun.serve> | null = null;
+
   const promise = new Promise<CallbackResult>((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
   });
-  
+
   // Timeout handler
   const timeout = setTimeout(() => {
     if (!resolved) {
       resolved = true;
-      if (server) {
-        server.close();
+      if (serverInstance) {
+        serverInstance.stop();
       }
       rejectCallback(new Error("Authentication timeout. Please try again."));
     }
   }, timeoutMs);
-  
-  // Request handler
-  const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
-    if (resolved) {
-      return;
-    }
 
-    // Only handle /callback path
-    if (!req.url || !req.url.startsWith("/callback")) {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Not Found");
-      return;
-    }
+  serverInstance = Bun.serve({
+    port: port,
+    hostname: "127.0.0.1",
+    fetch(req) {
+      if (resolved) {
+        return new Response("Already handled", { status: 200 });
+      }
 
-    try {
-      const url = new URL(req.url, `http://localhost:${actualPort}`);
+      const url = new URL(req.url);
+
+      // Only handle /callback path
+      if (!url.pathname.startsWith("/callback")) {
+        return new Response("Not Found", { status: 404 });
+      }
+
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
       const error = url.searchParams.get("error");
@@ -91,9 +88,11 @@ export function createCallbackServer(
       if (error) {
         resolved = true;
         clearTimeout(timeout);
-        
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(`
+
+        setTimeout(() => serverInstance?.stop(), 100);
+        rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
+
+        return new Response(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -114,19 +113,12 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `);
-        
-        if (server) {
-          server.close();
-        }
-        rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
-        return;
+        `, { status: 400, headers: { "Content-Type": "text/html" } });
       }
 
       // Validate required parameters
       if (!code || !state) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(`
+        return new Response(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -145,17 +137,18 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `);
-        return;
+        `, { status: 400, headers: { "Content-Type": "text/html" } });
       }
 
       // Validate state (CSRF protection)
       if (expectedState && state !== expectedState) {
         resolved = true;
         clearTimeout(timeout);
-        
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(`
+
+        setTimeout(() => serverInstance?.stop(), 100);
+        rejectCallback(new Error("State mismatch (possible CSRF attack)"));
+
+        return new Response(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -174,21 +167,17 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `);
-        
-        if (server) {
-          server.close();
-        }
-        rejectCallback(new Error("State mismatch (possible CSRF attack)"));
-        return;
+        `, { status: 400, headers: { "Content-Type": "text/html" } });
       }
 
       // Success!
       resolved = true;
       clearTimeout(timeout);
-      
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(`
+
+      setTimeout(() => serverInstance?.stop(), 100);
+      resolveCallback({ code, state });
+
+      return new Response(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -207,61 +196,24 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-      `);
-      
-      if (server) {
-        server.close();
-      }
-      resolveCallback({ code, state });
-    } catch (err) {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Internal Server Error");
-        if (server) {
-          server.close();
-        }
-        rejectCallback(err instanceof Error ? err : new Error(String(err)));
-      }
-    }
-  };
-
-  // Create server
-  server = http.createServer(requestHandler);
-  
-  server.on("error", (err: Error) => {
-    if (!resolved) {
-      resolved = true;
-      clearTimeout(timeout);
-      rejectCallback(err);
-    }
-  });
-
-  server.listen(port, "127.0.0.1", () => {
-    const address = server?.address();
-    if (address && typeof address === "object") {
-      actualPort = address.port;
-    }
-  });
-  
-  return {
-    server,
-    promise,
-    getPort: () => {
-      const address = server?.address();
-      return address && typeof address === "object" ? address.port : 0;
+      `, { status: 200, headers: { "Content-Type": "text/html" } });
     },
+  });
+
+  actualPort = serverInstance.port;
+
+  return {
+    server: { stop: () => serverInstance?.stop() },
+    promise,
+    getPort: () => actualPort,
   };
 }
 
 /**
  * Get the actual port the server is listening on
- * @param server - HTTP server instance
+ * @param server - Bun server instance
  * @returns Port number
  */
-export function getServerPort(server: http.Server): number {
-  const address = server.address();
-  return address && typeof address === "object" ? address.port : 0;
+export function getServerPort(server: ReturnType<typeof Bun.serve>): number {
+  return server.port;
 }
-
