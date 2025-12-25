@@ -546,3 +546,79 @@ test("cli: checkup without connection shows help", () => {
   assert.match(r.stdout, /available checks/i);
   assert.match(r.stdout, /A002/);
 });
+
+test("cli: set-default-project writes config defaultProject", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+
+  const tmpRoot = path.resolve(__dirname, ".tmp-config");
+  const xdgHome = path.join(tmpRoot, "xdg");
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  fs.mkdirSync(xdgHome, { recursive: true });
+
+  const r = runCli(["set-default-project", "cli_project"], { XDG_CONFIG_HOME: xdgHome });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+
+  const cfgPath = path.join(xdgHome, "postgresai", "config.json");
+  const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+  assert.equal(cfg.defaultProject, "cli_project");
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test("cli: checkup --output validates/creates output dir before connecting", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+
+  const tmpRoot = path.resolve(__dirname, ".tmp-output");
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  fs.mkdirSync(tmpRoot, { recursive: true });
+
+  // Make parent dir non-writable and attempt to create a child output dir inside it.
+  const locked = path.join(tmpRoot, "locked");
+  fs.mkdirSync(locked, { recursive: true });
+  fs.chmodSync(locked, 0o555);
+
+  const out = path.join(locked, "reports");
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db", "--output", out]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /failed to create output directory/i);
+
+  // Cleanup: restore perms so we can delete it.
+  fs.chmodSync(locked, 0o755);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test("cli: checkup --upload requires API key (fast-fail)", () => {
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db", "--upload", "--project", "p"], {
+    PGAI_API_KEY: "",
+    XDG_CONFIG_HOME: "/nonexistent",
+  });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /api key is required/i);
+});
+
+test("cli: checkup --upload uses defaultProject when --project omitted", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+
+  const tmpRoot = path.resolve(__dirname, ".tmp-config2");
+  const xdgHome = path.join(tmpRoot, "xdg");
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.join(xdgHome, "postgresai"), { recursive: true });
+
+  // Provide API key + defaultProject so preflight passes without --project.
+  fs.writeFileSync(
+    path.join(xdgHome, "postgresai", "config.json"),
+    JSON.stringify({ apiKey: "dummy", defaultProject: "p" }, null, 2) + "\n"
+  );
+
+  // It will fail later on connection (port 1) — that's fine; we only assert it didn't
+  // fail due to missing project/API key.
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db", "--upload"], { XDG_CONFIG_HOME: xdgHome });
+  assert.notEqual(r.status, 0);
+  assert.doesNotMatch(r.stderr, /--project is required/i);
+  assert.doesNotMatch(r.stderr, /api key is required/i);
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
