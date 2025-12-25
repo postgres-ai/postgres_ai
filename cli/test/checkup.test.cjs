@@ -90,6 +90,16 @@ test("CHECK_INFO contains A013", () => {
   assert.equal(checkup.CHECK_INFO.A013, "Postgres minor version");
 });
 
+test("CHECK_INFO contains A004", () => {
+  assert.ok("A004" in checkup.CHECK_INFO);
+  assert.equal(checkup.CHECK_INFO.A004, "Cluster information");
+});
+
+test("CHECK_INFO contains A007", () => {
+  assert.ok("A007" in checkup.CHECK_INFO);
+  assert.equal(checkup.CHECK_INFO.A007, "Altered settings");
+});
+
 // Tests for REPORT_GENERATORS
 test("REPORT_GENERATORS has generator for A002", () => {
   assert.ok("A002" in checkup.REPORT_GENERATORS);
@@ -104,6 +114,16 @@ test("REPORT_GENERATORS has generator for A003", () => {
 test("REPORT_GENERATORS has generator for A013", () => {
   assert.ok("A013" in checkup.REPORT_GENERATORS);
   assert.equal(typeof checkup.REPORT_GENERATORS.A013, "function");
+});
+
+test("REPORT_GENERATORS has generator for A004", () => {
+  assert.ok("A004" in checkup.REPORT_GENERATORS);
+  assert.equal(typeof checkup.REPORT_GENERATORS.A004, "function");
+});
+
+test("REPORT_GENERATORS has generator for A007", () => {
+  assert.ok("A007" in checkup.REPORT_GENERATORS);
+  assert.equal(typeof checkup.REPORT_GENERATORS.A007, "function");
 });
 
 test("REPORT_GENERATORS and CHECK_INFO have same keys", () => {
@@ -124,15 +144,90 @@ test("METRICS_SQL.version queries server_version fields", () => {
   assert.ok(checkup.METRICS_SQL.version.includes("server_version_num"));
 });
 
+test("METRICS_SQL.alteredSettings filters non-default settings", () => {
+  assert.ok(checkup.METRICS_SQL.alteredSettings.includes("pg_settings"));
+  assert.ok(checkup.METRICS_SQL.alteredSettings.includes("source <> 'default'"));
+});
+
+test("METRICS_SQL.databaseSizes queries pg_database", () => {
+  assert.ok(checkup.METRICS_SQL.databaseSizes.includes("pg_database"));
+  assert.ok(checkup.METRICS_SQL.databaseSizes.includes("pg_database_size"));
+});
+
+test("METRICS_SQL.clusterStats queries pg_stat_database", () => {
+  assert.ok(checkup.METRICS_SQL.clusterStats.includes("pg_stat_database"));
+  assert.ok(checkup.METRICS_SQL.clusterStats.includes("xact_commit"));
+  assert.ok(checkup.METRICS_SQL.clusterStats.includes("deadlocks"));
+});
+
+test("METRICS_SQL.connectionStates queries pg_stat_activity", () => {
+  assert.ok(checkup.METRICS_SQL.connectionStates.includes("pg_stat_activity"));
+  assert.ok(checkup.METRICS_SQL.connectionStates.includes("state"));
+});
+
+// Tests for formatBytes
+test("formatBytes formats zero bytes", () => {
+  assert.equal(checkup.formatBytes(0), "0 B");
+});
+
+test("formatBytes formats bytes", () => {
+  assert.equal(checkup.formatBytes(500), "500.00 B");
+});
+
+test("formatBytes formats kilobytes", () => {
+  assert.equal(checkup.formatBytes(1024), "1.00 kB");
+  assert.equal(checkup.formatBytes(1536), "1.50 kB");
+});
+
+test("formatBytes formats megabytes", () => {
+  assert.equal(checkup.formatBytes(1048576), "1.00 MB");
+});
+
+test("formatBytes formats gigabytes", () => {
+  assert.equal(checkup.formatBytes(1073741824), "1.00 GB");
+});
+
 // Mock client tests for report generators
-function createMockClient(versionRows, settingsRows) {
+function createMockClient(versionRows, settingsRows, options = {}) {
+  const {
+    alteredSettingsRows = [],
+    databaseSizesRows = [],
+    clusterStatsRows = [],
+    connectionStatesRows = [],
+    uptimeRows = [],
+  } = options;
+
   return {
     query: async (sql) => {
-      if (sql.includes("server_version")) {
+      // Version query (used by many reports)
+      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("ORDER BY")) {
         return { rows: versionRows };
       }
-      if (sql.includes("pg_settings") && sql.includes("ORDER BY")) {
+      // Full settings query (A003) - check this BEFORE altered settings
+      // because full settings has "ORDER BY" and "CASE WHEN source <> 'default'"
+      // while altered settings has "WHERE source <> 'default'"
+      if (sql.includes("pg_settings") && sql.includes("ORDER BY") && sql.includes("is_default")) {
         return { rows: settingsRows };
+      }
+      // Altered settings query (A007) - has "WHERE source <> 'default'" (not in a CASE)
+      if (sql.includes("pg_settings") && sql.includes("WHERE source <> 'default'")) {
+        return { rows: alteredSettingsRows };
+      }
+      // Database sizes (A004)
+      if (sql.includes("pg_database") && sql.includes("pg_database_size")) {
+        return { rows: databaseSizesRows };
+      }
+      // Cluster stats (A004)
+      if (sql.includes("pg_stat_database") && sql.includes("xact_commit")) {
+        return { rows: clusterStatsRows };
+      }
+      // Connection states (A004)
+      if (sql.includes("pg_stat_activity") && sql.includes("state")) {
+        return { rows: connectionStatesRows };
+      }
+      // Uptime info (A004)
+      if (sql.includes("pg_postmaster_start_time")) {
+        return { rows: uptimeRows };
       }
       throw new Error(`Unexpected query: ${sql}`);
     },
@@ -256,16 +351,169 @@ test("generateAllReports returns reports for all checks", async () => {
         vartype: "integer",
         pretty_value: "128 MB",
       },
-    ]
+    ],
+    {
+      alteredSettingsRows: [
+        { name: "shared_buffers", setting: "16384", unit: "8kB", category: "Resource Usage / Memory", pretty_value: "128 MB" },
+      ],
+      databaseSizesRows: [{ datname: "postgres", size_bytes: "1073741824" }],
+      clusterStatsRows: [{ total_connections: 5, total_commits: 100, total_rollbacks: 1, blocks_read: 1000, blocks_hit: 9000, tuples_returned: 500, tuples_fetched: 400, tuples_inserted: 50, tuples_updated: 30, tuples_deleted: 10, total_deadlocks: 0, temp_files_created: 0, temp_bytes_written: 0 }],
+      connectionStatesRows: [{ state: "active", count: 2 }, { state: "idle", count: 3 }],
+      uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
+    }
   );
 
   const reports = await checkup.generateAllReports(mockClient, "test-node");
   assert.ok("A002" in reports);
   assert.ok("A003" in reports);
+  assert.ok("A004" in reports);
+  assert.ok("A007" in reports);
   assert.ok("A013" in reports);
   assert.equal(reports.A002.checkId, "A002");
   assert.equal(reports.A003.checkId, "A003");
+  assert.equal(reports.A004.checkId, "A004");
+  assert.equal(reports.A007.checkId, "A007");
   assert.equal(reports.A013.checkId, "A013");
+});
+
+// Tests for A007 (Altered settings)
+test("getAlteredSettings returns non-default settings", async () => {
+  const mockClient = createMockClient([], [], {
+    alteredSettingsRows: [
+      { name: "shared_buffers", setting: "256MB", unit: "", category: "Resource Usage / Memory", pretty_value: "256 MB" },
+      { name: "work_mem", setting: "64MB", unit: "", category: "Resource Usage / Memory", pretty_value: "64 MB" },
+    ],
+  });
+
+  const settings = await checkup.getAlteredSettings(mockClient);
+  assert.ok("shared_buffers" in settings);
+  assert.ok("work_mem" in settings);
+  assert.equal(settings.shared_buffers.value, "256MB");
+  assert.equal(settings.work_mem.pretty_value, "64 MB");
+});
+
+test("generateA007 creates report with altered settings", async () => {
+  const mockClient = createMockClient(
+    [
+      { name: "server_version", setting: "16.3" },
+      { name: "server_version_num", setting: "160003" },
+    ],
+    [],
+    {
+      alteredSettingsRows: [
+        { name: "max_connections", setting: "200", unit: "", category: "Connections and Authentication", pretty_value: "200" },
+      ],
+    }
+  );
+
+  const report = await checkup.generateA007(mockClient, "test-node");
+  assert.equal(report.checkId, "A007");
+  assert.equal(report.checkTitle, "Altered settings");
+  assert.equal(report.nodes.primary, "test-node");
+  assert.ok("test-node" in report.results);
+  assert.ok("max_connections" in report.results["test-node"].data);
+  assert.equal(report.results["test-node"].data.max_connections.value, "200");
+  assert.ok(report.results["test-node"].postgres_version);
+});
+
+// Tests for A004 (Cluster information)
+test("getDatabaseSizes returns database sizes", async () => {
+  const mockClient = createMockClient([], [], {
+    databaseSizesRows: [
+      { datname: "postgres", size_bytes: "1073741824" },
+      { datname: "mydb", size_bytes: "536870912" },
+    ],
+  });
+
+  const sizes = await checkup.getDatabaseSizes(mockClient);
+  assert.ok("postgres" in sizes);
+  assert.ok("mydb" in sizes);
+  assert.equal(sizes.postgres, 1073741824);
+  assert.equal(sizes.mydb, 536870912);
+});
+
+test("getClusterInfo returns cluster metrics", async () => {
+  const mockClient = createMockClient([], [], {
+    clusterStatsRows: [{
+      total_connections: 10,
+      total_commits: 1000,
+      total_rollbacks: 5,
+      blocks_read: 500,
+      blocks_hit: 9500,
+      tuples_returned: 5000,
+      tuples_fetched: 4000,
+      tuples_inserted: 100,
+      tuples_updated: 50,
+      tuples_deleted: 25,
+      total_deadlocks: 0,
+      temp_files_created: 2,
+      temp_bytes_written: 1048576,
+    }],
+    connectionStatesRows: [
+      { state: "active", count: 3 },
+      { state: "idle", count: 7 },
+    ],
+    uptimeRows: [{
+      start_time: new Date("2024-01-01T00:00:00Z"),
+      uptime: "30 days",
+    }],
+  });
+
+  const info = await checkup.getClusterInfo(mockClient);
+  assert.ok("total_connections" in info);
+  assert.ok("cache_hit_ratio" in info);
+  assert.ok("connections_active" in info);
+  assert.ok("connections_idle" in info);
+  assert.ok("start_time" in info);
+  assert.equal(info.total_connections.value, "10");
+  assert.equal(info.cache_hit_ratio.value, "95.00");
+  assert.equal(info.connections_active.value, "3");
+});
+
+test("generateA004 creates report with cluster info and database sizes", async () => {
+  const mockClient = createMockClient(
+    [
+      { name: "server_version", setting: "16.3" },
+      { name: "server_version_num", setting: "160003" },
+    ],
+    [],
+    {
+      databaseSizesRows: [
+        { datname: "postgres", size_bytes: "1073741824" },
+      ],
+      clusterStatsRows: [{
+        total_connections: 5,
+        total_commits: 100,
+        total_rollbacks: 1,
+        blocks_read: 100,
+        blocks_hit: 900,
+        tuples_returned: 500,
+        tuples_fetched: 400,
+        tuples_inserted: 50,
+        tuples_updated: 30,
+        tuples_deleted: 10,
+        total_deadlocks: 0,
+        temp_files_created: 0,
+        temp_bytes_written: 0,
+      }],
+      connectionStatesRows: [{ state: "active", count: 2 }],
+      uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
+    }
+  );
+
+  const report = await checkup.generateA004(mockClient, "test-node");
+  assert.equal(report.checkId, "A004");
+  assert.equal(report.checkTitle, "Cluster information");
+  assert.equal(report.nodes.primary, "test-node");
+  assert.ok("test-node" in report.results);
+
+  const data = report.results["test-node"].data;
+  assert.ok("general_info" in data);
+  assert.ok("database_sizes" in data);
+  assert.ok("total_connections" in data.general_info);
+  assert.ok("postgres" in data.database_sizes);
+  assert.equal(data.database_sizes.postgres, 1073741824);
+  assert.ok(report.results["test-node"].postgres_version);
 });
 
 // CLI tests
@@ -284,6 +532,8 @@ test("cli: checkup --help shows available check IDs", () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /A002/);
   assert.match(r.stdout, /A003/);
+  assert.match(r.stdout, /A004/);
+  assert.match(r.stdout, /A007/);
   assert.match(r.stdout, /A013/);
 });
 
