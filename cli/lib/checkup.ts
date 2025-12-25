@@ -7,6 +7,9 @@
  */
 
 import { Client } from "pg";
+import * as fs from "fs";
+import * as path from "path";
+import * as pkg from "../package.json";
 
 /**
  * PostgreSQL version information
@@ -431,9 +434,10 @@ export function createBaseReport(
   checkTitle: string,
   nodeName: string
 ): Report {
+  const buildTs = resolveBuildTs();
   return {
-    version: null,
-    build_ts: null,
+    version: pkg.version || null,
+    build_ts: buildTs,
     checkId,
     checkTitle,
     timestamptz: new Date().toISOString(),
@@ -443,6 +447,44 @@ export function createBaseReport(
     },
     results: {},
   };
+}
+
+function readTextFileSafe(p: string): string | null {
+  try {
+    const value = fs.readFileSync(p, "utf8").trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveBuildTs(): string | null {
+  // Follow reporter.py approach: read BUILD_TS from filesystem, with env override.
+  // Default: /BUILD_TS (useful in container images).
+  const envPath = process.env.PGAI_BUILD_TS_FILE;
+  const p = (envPath && envPath.trim()) ? envPath.trim() : "/BUILD_TS";
+
+  const fromFile = readTextFileSafe(p);
+  if (fromFile) return fromFile;
+
+  // Fallback for packaged CLI: allow placing BUILD_TS next to dist/ (package root).
+  // dist/lib/checkup.js => package root: dist/..
+  try {
+    const pkgRoot = path.resolve(__dirname, "..");
+    const fromPkgFile = readTextFileSafe(path.join(pkgRoot, "BUILD_TS"));
+    if (fromPkgFile) return fromPkgFile;
+  } catch {
+    // ignore
+  }
+
+  // Last resort: use package.json mtime as an approximation (non-null, stable-ish).
+  try {
+    const pkgJsonPath = path.resolve(__dirname, "..", "package.json");
+    const st = fs.statSync(pkgJsonPath);
+    return st.mtime.toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
 }
 
 /**
