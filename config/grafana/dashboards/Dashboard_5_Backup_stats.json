@@ -264,7 +264,7 @@
           "editorMode": "code",
           "expr": "irate(pgwatch_archive_lag_archived_count[$__rate_interval])/(irate(pgwatch_archive_lag_archived_count[$__rate_interval])+irate(pgwatch_archive_lag_failed_count[$__rate_interval]))",
           "interval": "60",
-          "legendFormat": "Percentage of succesful operations",
+          "legendFormat": "Percentage of successful operations",
           "range": true,
           "refId": "A"
         }
