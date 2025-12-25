@@ -17,6 +17,7 @@ import * as authServer from "../lib/auth-server";
 import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
 import * as childProcess from "child_process";
+import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
