@@ -5,6 +5,8 @@
   "additionalProperties": false,
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
   "properties": {
+    "version": { "type": ["string", "null"] },
+    "build_ts": { "type": ["string", "null"] },
     "checkId": { "const": "K006" },
     "checkTitle": { "const": "Check K006" },
     "timestamptz": { "type": "string" },

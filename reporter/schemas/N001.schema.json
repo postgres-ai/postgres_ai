@@ -5,6 +5,8 @@
   "additionalProperties": false,
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
   "properties": {
+    "version": { "type": ["string", "null"] },
+    "build_ts": { "type": ["string", "null"] },
     "checkId": { "const": "N001" },
     "checkTitle": { "const": "Wait events grouped by type and query" },
     "timestamptz": { "type": "string" },
