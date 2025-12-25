@@ -18,7 +18,7 @@ import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
-import { createCheckupReport, uploadCheckupReportJson } from "../lib/checkup-api";
+import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay } from "../lib/checkup-api";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -911,8 +911,14 @@ program
       }
     } catch (error) {
       spinner.stop();
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`Error: ${message}`);
+      if (error instanceof RpcError) {
+        for (const line of formatRpcErrorForDisplay(error)) {
+          console.error(line);
+        }
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Error: ${message}`);
+      }
       process.exitCode = 1;
     } finally {
       if (client) {
