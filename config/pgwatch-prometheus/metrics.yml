@@ -1829,7 +1829,6 @@ metrics:
           schema_name as tag_schema_name,
           table_name as tag_table_name,
           index_name as tag_index_name,
-          current_database() as tag_datname,
           idx_scan,
           all_scans,
           index_scan_pct,
