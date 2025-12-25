@@ -556,11 +556,23 @@ export const CHECK_INFO: Record<string, string> = {
  */
 export async function generateAllReports(
   client: Client,
-  nodeName: string = "node-01"
+  nodeName: string = "node-01",
+  onProgress?: (info: { checkId: string; checkTitle: string; index: number; total: number }) => void
 ): Promise<Record<string, Report>> {
   const reports: Record<string, Report> = {};
 
-  for (const [checkId, generator] of Object.entries(REPORT_GENERATORS)) {
+  const entries = Object.entries(REPORT_GENERATORS);
+  const total = entries.length;
+  let index = 0;
+
+  for (const [checkId, generator] of entries) {
+    index += 1;
+    onProgress?.({
+      checkId,
+      checkTitle: CHECK_INFO[checkId] || checkId,
+      index,
+      total,
+    });
     reports[checkId] = await generator(client, nodeName);
   }
 
