@@ -61,6 +61,90 @@ interface PathResolution {
   instancesFile: string;
 }
 
+function getDefaultMonitoringProjectDir(): string {
+  const override = process.env.PGAI_PROJECT_DIR;
+  if (override && override.trim()) return override.trim();
+  // Keep monitoring project next to user-level config (~/.config/postgresai)
+  return path.join(config.getConfigDir(), "monitoring");
+}
+
+async function downloadText(url: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const req = http.get(new URL(url), (res) => {
+      if (!res.statusCode || res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode || "?"} for ${url}`));
+        res.resume();
+        return;
+      }
+      res.setEncoding("utf8");
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => resolve(data));
+    });
+    req.on("error", reject);
+    req.setTimeout(15_000, () => req.destroy(new Error(`Timeout fetching ${url}`)));
+  });
+}
+
+async function ensureDefaultMonitoringProject(): Promise<PathResolution> {
+  const projectDir = getDefaultMonitoringProjectDir();
+  const composeFile = path.resolve(projectDir, "docker-compose.yml");
+  const instancesFile = path.resolve(projectDir, "instances.yml");
+
+  if (!fs.existsSync(projectDir)) {
+    fs.mkdirSync(projectDir, { recursive: true, mode: 0o700 });
+  }
+
+  if (!fs.existsSync(composeFile)) {
+    const refs = [
+      process.env.PGAI_PROJECT_REF,
+      pkg.version,
+      `v${pkg.version}`,
+      "main",
+    ].filter((v): v is string => Boolean(v && v.trim()));
+
+    let lastErr: unknown;
+    for (const ref of refs) {
+      const url = `https://gitlab.com/postgres-ai/postgres_ai/-/raw/${encodeURIComponent(ref)}/docker-compose.yml`;
+      try {
+        const text = await downloadText(url);
+        fs.writeFileSync(composeFile, text, { encoding: "utf8", mode: 0o600 });
+        break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    if (!fs.existsSync(composeFile)) {
+      const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+      throw new Error(`Failed to bootstrap docker-compose.yml: ${msg}`);
+    }
+  }
+
+  // Ensure instances.yml exists as a FILE (avoid Docker creating a directory)
+  if (!fs.existsSync(instancesFile)) {
+    const header =
+      "# PostgreSQL instances to monitor\n" +
+      "# Add your instances using: pgai mon targets add <connection-string> <name>\n\n";
+    fs.writeFileSync(instancesFile, header, { encoding: "utf8", mode: 0o600 });
+  }
+
+  // Ensure .pgwatch-config exists as a FILE for reporter (may remain empty)
+  const pgwatchConfig = path.resolve(projectDir, ".pgwatch-config");
+  if (!fs.existsSync(pgwatchConfig)) {
+    fs.writeFileSync(pgwatchConfig, "", { encoding: "utf8", mode: 0o600 });
+  }
+
+  // Ensure .env exists and has PGAI_TAG (compose requires it)
+  const envFile = path.resolve(projectDir, ".env");
+  if (!fs.existsSync(envFile)) {
+    const envText = `PGAI_TAG=${pkg.version}\n# PGAI_REGISTRY=registry.gitlab.com/postgres-ai/postgres_ai\n`;
+    fs.writeFileSync(envFile, envText, { encoding: "utf8", mode: 0o600 });
+  }
+
+  return { fs, path, projectDir, composeFile, instancesFile };
+}
+
 /**
  * Get configuration from various sources
  * @param opts - Command line options
@@ -119,8 +203,8 @@ program
   );
 
 program
-  .command("init [conn]")
-  .description("Create a monitoring user, required view(s), and grant required permissions (idempotent)")
+  .command("prepare-db [conn]")
+  .description("Prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
   .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
   .option("-h, --host <host>", "PostgreSQL host (psql-like)")
   .option("-p, --port <port>", "PostgreSQL port (psql-like)")
@@ -139,9 +223,9 @@ program
     [
       "",
       "Examples:",
-      "  postgresai init postgresql://admin@host:5432/dbname",
-      "  postgresai init \"dbname=dbname host=host user=admin\"",
-      "  postgresai init -h host -p 5432 -U admin -d dbname",
+      "  postgresai prepare-db postgresql://admin@host:5432/dbname",
+      "  postgresai prepare-db \"dbname=dbname host=host user=admin\"",
+      "  postgresai prepare-db -h host -p 5432 -U admin -d dbname",
       "",
       "Admin password:",
       "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
@@ -163,16 +247,16 @@ program
       "  PGAI_MON_PASSWORD                   — monitoring password",
       "",
       "Inspect SQL without applying changes:",
-      "  postgresai init <conn> --print-sql",
+      "  postgresai prepare-db <conn> --print-sql",
       "",
       "Verify setup (no changes):",
-      "  postgresai init <conn> --verify",
+      "  postgresai prepare-db <conn> --verify",
       "",
       "Reset monitoring password only:",
-      "  postgresai init <conn> --reset-password --password '...'",
+      "  postgresai prepare-db <conn> --reset-password --password '...'",
       "",
       "Offline SQL plan (no DB connection):",
-      "  postgresai init --print-sql",
+      "  postgresai prepare-db --print-sql",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -252,7 +336,7 @@ program
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`Error: init: ${msg}`);
+      console.error(`Error: prepare-db: ${msg}`);
       // When connection details are missing, show full init help (options + examples).
       if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
         console.error("");
@@ -288,14 +372,14 @@ program
           includeOptionalPermissions,
         });
         if (v.ok) {
-          console.log("✓ init verify: OK");
+          console.log("✓ prepare-db verify: OK");
           if (v.missingOptional.length > 0) {
             console.log("⚠ Optional items missing:");
             for (const m of v.missingOptional) console.log(`- ${m}`);
           }
           return;
         }
-        console.error("✗ init verify failed: missing required items");
+        console.error("✗ prepare-db verify failed: missing required items");
         for (const m of v.missingRequired) console.error(`- ${m}`);
         if (v.missingOptional.length > 0) {
           console.error("Optional items missing:");
@@ -371,7 +455,7 @@ program
 
       const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
 
-      console.log(opts.resetPassword ? "✓ init password reset completed" : "✓ init completed");
+      console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
       if (skippedOptional.length > 0) {
         console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
         for (const s of skippedOptional) console.log(`- ${s}`);
@@ -393,7 +477,7 @@ program
       if (!message || message === "[object Object]") {
         message = "Unknown error";
       }
-      console.error(`Error: init: ${message}`);
+      console.error(`Error: prepare-db: ${message}`);
       // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
       const stepMatch =
         typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
@@ -478,6 +562,14 @@ function resolvePaths(): PathResolution {
   );
 }
 
+async function resolveOrInitPaths(): Promise<PathResolution> {
+  try {
+    return resolvePaths();
+  } catch {
+    return ensureDefaultMonitoringProject();
+  }
+}
+
 /**
  * Check if Docker daemon is running
  */
@@ -529,7 +621,7 @@ async function runCompose(args: string[]): Promise<number> {
   let composeFile: string;
   let projectDir: string;
   try {
-    ({ composeFile, projectDir } = resolvePaths());
+    ({ composeFile, projectDir } = await resolveOrInitPaths());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
@@ -572,7 +664,8 @@ async function runCompose(args: string[]): Promise<number> {
   return new Promise<number>((resolve) => {
     const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], {
       stdio: "inherit",
-      env: env
+      env: env,
+      cwd: projectDir
     });
     child.on("close", (code) => resolve(code || 0));
   });
@@ -586,17 +679,42 @@ program.command("help", { isDefault: true }).description("show help").action(() 
 const mon = program.command("mon").description("monitoring services management");
 
 mon
-  .command("quickstart")
-  .description("complete setup (generate config, start monitoring services)")
+  .command("local-install")
+  .description("install local monitoring stack (generate config, start services)")
   .option("--demo", "demo mode with sample database", false)
   .option("--api-key <key>", "Postgres AI API key for automated report uploads")
   .option("--db-url <url>", "PostgreSQL connection URL to monitor")
+  .option("--tag <tag>", "Docker image tag to use (e.g., 0.14.0, 0.14.0-dev.33)")
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
-  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; yes: boolean }) => {
+  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
     console.log("\n=================================");
-    console.log("  PostgresAI Monitoring Quickstart");
+    console.log("  PostgresAI monitoring local install");
     console.log("=================================\n");
     console.log("This will install, configure, and start the monitoring system\n");
+
+    // Ensure we have a project directory with docker-compose.yml even if running from elsewhere
+    const { projectDir } = await resolveOrInitPaths();
+    console.log(`Project directory: ${projectDir}\n`);
+
+    // Update .env with custom tag if provided
+    const envFile = path.resolve(projectDir, ".env");
+    const imageTag = opts.tag || pkg.version;
+
+    // Build .env content
+    const envLines: string[] = [`PGAI_TAG=${imageTag}`];
+    // Preserve GF_SECURITY_ADMIN_PASSWORD if it exists
+    if (fs.existsSync(envFile)) {
+      const existingEnv = fs.readFileSync(envFile, "utf8");
+      const pwdMatch = existingEnv.match(/^GF_SECURITY_ADMIN_PASSWORD=(.+)$/m);
+      if (pwdMatch) {
+        envLines.push(`GF_SECURITY_ADMIN_PASSWORD=${pwdMatch[1]}`);
+      }
+    }
+    fs.writeFileSync(envFile, envLines.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
+
+    if (opts.tag) {
+      console.log(`Using image tag: ${imageTag}\n`);
+    }
 
     // Validate conflicting options
     if (opts.demo && opts.dbUrl) {
@@ -608,8 +726,8 @@ mon
     if (opts.demo && opts.apiKey) {
       console.error("✗ Cannot use --api-key with --demo mode");
       console.error("✗ Demo mode is for testing only and does not support API key integration");
-      console.error("\nUse demo mode without API key: postgres-ai mon quickstart --demo");
-      console.error("Or use production mode with API key: postgres-ai mon quickstart --api-key=your_key");
+      console.error("\nUse demo mode without API key: postgres-ai mon local-install --demo");
+      console.error("Or use production mode with API key: postgres-ai mon local-install --api-key=your_key");
       process.exitCode = 1;
       return;
     }
@@ -630,6 +748,11 @@ mon
       if (opts.apiKey) {
         console.log("Using API key provided via --api-key parameter");
         config.writeConfig({ apiKey: opts.apiKey });
+        // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+        fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${opts.apiKey}\n`, {
+          encoding: "utf8",
+          mode: 0o600
+        });
         console.log("✓ API key saved\n");
       } else if (opts.yes) {
         // Auto-yes mode without API key - skip API key setup
@@ -656,6 +779,11 @@ mon
 
               if (trimmedKey) {
                 config.writeConfig({ apiKey: trimmedKey });
+                // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+                fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${trimmedKey}\n`, {
+                  encoding: "utf8",
+                  mode: 0o600
+                });
                 console.log("✓ API key saved\n");
                 break;
               }
@@ -686,9 +814,11 @@ mon
       console.log("Step 2: Add PostgreSQL Instance to Monitor\n");
 
       // Clear instances.yml in production mode (start fresh)
-      const instancesPath = path.resolve(process.cwd(), "instances.yml");
+      const { instancesFile: instancesPath, projectDir } = await resolveOrInitPaths();
       const emptyInstancesContent = "# PostgreSQL instances to monitor\n# Add your instances using: postgres-ai mon targets add\n\n";
       fs.writeFileSync(instancesPath, emptyInstancesContent, "utf8");
+      console.log(`Instances file: ${instancesPath}`);
+      console.log(`Project directory: ${projectDir}\n`);
 
       if (opts.dbUrl) {
         console.log("Using database URL provided via --db-url parameter");
@@ -808,7 +938,7 @@ mon
 
     // Step 4: Ensure Grafana password is configured
     console.log(opts.demo ? "Step 4: Configuring Grafana security..." : "Step 4: Configuring Grafana security...");
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     let grafanaPassword = "";
 
     try {
@@ -859,7 +989,7 @@ mon
 
     // Final summary
     console.log("=================================");
-    console.log("  🎉 Quickstart setup completed!");
+    console.log("  Local install completed!");
     console.log("=================================\n");
 
     console.log("What's running:");
@@ -1015,7 +1145,7 @@ mon
     let composeFile: string;
     let instancesFile: string;
     try {
-      ({ projectDir, composeFile, instancesFile } = resolvePaths());
+      ({ projectDir, composeFile, instancesFile } = await resolveOrInitPaths());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(message);
@@ -1215,9 +1345,9 @@ targets
   .command("list")
   .description("list monitoring target databases")
   .action(async () => {
-    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: instancesPath, projectDir } = await resolveOrInitPaths();
     if (!fs.existsSync(instancesPath)) {
-      console.error(`instances.yml not found in ${process.cwd()}`);
+      console.error(`instances.yml not found in ${projectDir}`);
       process.exitCode = 1;
       return;
     }
@@ -1264,7 +1394,7 @@ targets
   .command("add [connStr] [name]")
   .description("add monitoring target database")
   .action(async (connStr?: string, name?: string) => {
-    const file = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: file } = await resolveOrInitPaths();
     if (!connStr) {
       console.error("Connection string required: postgresql://user:pass@host:port/db");
       process.exitCode = 1;
@@ -1314,7 +1444,7 @@ targets
   .command("remove <name>")
   .description("remove monitoring target database")
   .action(async (name: string) => {
-    const file = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: file } = await resolveOrInitPaths();
     if (!fs.existsSync(file)) {
       console.error("instances.yml not found");
       process.exitCode = 1;
@@ -1351,7 +1481,7 @@ targets
   .command("test <name>")
   .description("test monitoring target database connectivity")
   .action(async (name: string) => {
-    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: instancesPath } = await resolveOrInitPaths();
     if (!fs.existsSync(instancesPath)) {
       console.error("instances.yml not found");
       process.exitCode = 1;
@@ -1406,10 +1536,26 @@ targets
 // Authentication and API key management
 program
   .command("auth")
-  .description("authenticate via browser and obtain API key")
+  .description("authenticate via browser (OAuth) or store API key directly")
+  .option("--set-key <key>", "store API key directly without OAuth flow")
   .option("--port <port>", "local callback server port (default: random)", parseInt)
   .option("--debug", "enable debug output")
-  .action(async (opts: { port?: number; debug?: boolean }) => {
+  .action(async (opts: { setKey?: string; port?: number; debug?: boolean }) => {
+    // If --set-key is provided, store it directly without OAuth
+    if (opts.setKey) {
+      const trimmedKey = opts.setKey.trim();
+      if (!trimmedKey) {
+        console.error("Error: API key cannot be empty");
+        process.exitCode = 1;
+        return;
+      }
+      
+      config.writeConfig({ apiKey: trimmedKey });
+      console.log(`API key saved to ${config.getConfigPath()}`);
+      return;
+    }
+
+    // Otherwise, proceed with OAuth flow
     const pkce = require("../lib/pkce");
     const authServer = require("../lib/auth-server");
 
@@ -1635,8 +1781,9 @@ program
 
 program
   .command("add-key <apiKey>")
-  .description("store API key")
+  .description("store API key (deprecated: use 'auth --set-key' instead)")
   .action(async (apiKey: string) => {
+    console.warn("Warning: 'add-key' is deprecated. Use 'auth --set-key <key>' instead.\n");
     config.writeConfig({ apiKey });
     console.log(`API key saved to ${config.getConfigPath()}`);
   });
@@ -1666,7 +1813,13 @@ program
     // Check both new config and legacy config
     const newConfigPath = config.getConfigPath();
     const hasNewConfig = fs.existsSync(newConfigPath);
-    const legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    let legacyPath: string;
+    try {
+      const { projectDir } = await resolveOrInitPaths();
+      legacyPath = path.resolve(projectDir, ".pgwatch-config");
+    } catch {
+      legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    }
     const hasLegacyConfig = fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile();
 
     if (!hasNewConfig && !hasLegacyConfig) {
@@ -1702,7 +1855,8 @@ mon
   .command("generate-grafana-password")
   .description("generate Grafana password for monitoring services")
   .action(async () => {
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const { projectDir } = await resolveOrInitPaths();
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
 
     try {
       // Generate secure password using openssl
@@ -1753,9 +1907,10 @@ mon
   .command("show-grafana-credentials")
   .description("show Grafana credentials for monitoring services")
   .action(async () => {
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const { projectDir } = await resolveOrInitPaths();
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     if (!fs.existsSync(cfgPath)) {
-      console.error("Configuration file not found. Run 'postgres-ai mon quickstart' first.");
+      console.error("Configuration file not found. Run 'postgres-ai mon local-install' first.");
       process.exitCode = 1;
       return;
     }

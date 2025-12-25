@@ -56,4 +56,6 @@ config/pgwatch-prometheus/sources.yml
 # Volume data (if accidentally committed)
 data/
 volumes/
-.pgwatch-config 
+.pgwatch-config
+
+.env

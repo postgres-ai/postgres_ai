@@ -1,24 +1,28 @@
 services:
+  # Config Initializer - Copies static configs from image to volume
+  config-init:
+    image: ${PGAI_REGISTRY:-postgresai}/postgres-ai-configs:${PGAI_TAG:?PGAI_TAG is required}
+    container_name: postgres-ai-config-init
+    volumes:
+      - postgres_ai_configs:/target
+    environment:
+      - TARGET_DIR=/target
+
   # Sources Generator - Generates sources.yml files from instances.yaml template
   sources-generator:
-    image: alpine:3.22.0
+    image: bash:5.2
     container_name: sources-generator
     working_dir: /app
     volumes:
-      - ./instances.yml:/app/instances.yaml
-      - ./config:/app/config
-    command: >
-      sh -c "
-      mkdir -p /app/config/pgwatch-postgres /app/config/pgwatch-prometheus &&
-      echo '# PGWatch Sources Configuration - PostgreSQL Instance' > /app/config/pgwatch-postgres/sources.yml &&
-      sed 's/~sink_type~/postgresql/g' /app/instances.yaml >> /app/config/pgwatch-postgres/sources.yml &&
-      echo '# PGWatch Sources Configuration - Prometheus Instance' > /app/config/pgwatch-prometheus/sources.yml &&
-      echo '' >> /app/config/pgwatch-prometheus/sources.yml &&
-      sed 's/~sink_type~/prometheus/g' /app/instances.yaml >> /app/config/pgwatch-prometheus/sources.yml &&
-      echo 'Generated sources.yml files for both postgres and prometheus'
-      "
+      - ./instances.yml:/app/instances.yaml:ro
+      - postgres_ai_configs:/postgres_ai_configs
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+    command:
+      ["bash", "/postgres_ai_configs/scripts/generate-pgwatch-sources.sh"]
 
-  # Target Database - The PostgreSQL database being monitored
+  # Target Database - The PostgreSQL database being monitored (demo only)
   target-db:
     image: postgres:15
     container_name: target-db
@@ -26,9 +30,11 @@ services:
       POSTGRES_DB: target_database
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    command:
+    entrypoint:
       [
-        "postgres",
+        "bash",
+        "/postgres_ai_configs/scripts/postgres-entrypoint.sh",
+        "target-db",
         "-c",
         "shared_preload_libraries=pg_stat_statements",
         "-c",
@@ -36,7 +42,10 @@ services:
       ]
     volumes:
       - target_db_data:/var/lib/postgresql/data
-      - ./config/target-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_ai_configs:/postgres_ai_configs:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   # Postgres Sink - Storage for metrics in PostgreSQL format
   # Note: pg_hba.conf is configured to allow passwordless connections (trust)
@@ -51,10 +60,18 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
+    entrypoint:
+      [
+        "bash",
+        "/postgres_ai_configs/scripts/postgres-entrypoint.sh",
+        "sink-postgres",
+      ]
     volumes:
       - sink_postgres_data:/var/lib/postgresql/data
-      - ./config/sink-postgres/00-configure-pg-hba.sh:/docker-entrypoint-initdb.d/00-configure-pg-hba.sh
-      - ./config/sink-postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_ai_configs:/postgres_ai_configs:ro
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   # VictoriaMetrics Sink - Storage for metrics in Prometheus format
   sink-prometheus:
@@ -64,14 +81,17 @@ services:
       - "${BIND_HOST:-}59090:9090"
     volumes:
       - victoria_metrics_data:/victoria-metrics-data
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - postgres_ai_configs:/postgres_ai_configs:ro
     command:
       - "-storageDataPath=/victoria-metrics-data"
       - "-retentionPeriod=336h"
       - "-httpListenAddr=:9090"
-      - "-promscrape.config=/etc/prometheus/prometheus.yml"
+      - "-promscrape.config=/postgres_ai_configs/prometheus/prometheus.yml"
       - "-promscrape.config.strictParse=false"
       - "-promscrape.maxScrapeSize=128000000"
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
@@ -79,17 +99,18 @@ services:
     container_name: pgwatch-postgres
     command:
       [
-        "--sources=/etc/pgwatch/sources.yml",
-        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sources=/postgres_ai_configs/pgwatch/sources.yml",
+        "--metrics=/postgres_ai_configs/pgwatch/metrics.yml",
         "--sink=postgresql://pgwatch@sink-postgres:5432/measurements?sslmode=disable",
         "--web-addr=:8080",
       ]
     depends_on:
-      - sources-generator
-      - sink-postgres
+      sources-generator:
+        condition: service_completed_successfully
+      sink-postgres:
+        condition: service_started
     volumes:
-      - ./config/pgwatch-postgres/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-postgres/metrics.yml:/etc/pgwatch/metrics.yml
+      - postgres_ai_configs:/postgres_ai_configs:ro
     restart: unless-stopped
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
@@ -98,17 +119,18 @@ services:
     container_name: pgwatch-prometheus
     command:
       [
-        "--sources=/etc/pgwatch/sources.yml",
-        "--metrics=/etc/pgwatch/metrics.yml",
+        "--sources=/postgres_ai_configs/pgwatch-prometheus/sources.yml",
+        "--metrics=/postgres_ai_configs/pgwatch-prometheus/metrics.yml",
         "--sink=prometheus://0.0.0.0:9091/pgwatch",
         "--web-addr=:8089",
       ]
     depends_on:
-      - sources-generator
-      - sink-prometheus
+      sources-generator:
+        condition: service_completed_successfully
+      sink-prometheus:
+        condition: service_started
     volumes:
-      - ./config/pgwatch-prometheus/sources.yml:/etc/pgwatch/sources.yml
-      - ./config/pgwatch-prometheus/metrics.yml:/etc/pgwatch/metrics.yml
+      - postgres_ai_configs:/postgres_ai_configs:ro
     restart: unless-stopped
 
   # Grafana with datasources - Visualization layer
@@ -119,6 +141,8 @@ services:
       GF_SECURITY_ADMIN_USER: monitor
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-demo}
       GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+      GF_PATHS_PROVISIONING: /postgres_ai_configs/grafana/provisioning
+      GF_PATHS_CONFIG: /postgres_ai_configs/grafana/provisioning/grafana.ini
       # OAuth configuration (disabled by default, enabled via Ansible)
       GF_AUTH_GENERIC_OAUTH_ENABLED: ${GRAFANA_OAUTH_ENABLED:-false}
       GF_AUTH_GENERIC_OAUTH_NAME: ${GRAFANA_OAUTH_NAME:-PostgresAI}
@@ -136,15 +160,17 @@ services:
       - "${GRAFANA_BIND_HOST:-}3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./config/grafana/provisioning/grafana.ini:/etc/grafana/grafana.ini
+      - postgres_ai_configs:/postgres_ai_configs:ro
     depends_on:
-      - sink-postgres
-      - sink-prometheus
+      config-init:
+        condition: service_completed_successfully
+      sink-postgres:
+        condition: service_started
+      sink-prometheus:
+        condition: service_started
     restart: unless-stopped
   monitoring_flask_backend:
-    image: postgresai/monitoring_flask_backend:latest
+    image: ${PGAI_REGISTRY:-postgresai}/monitoring-flask-backend:${PGAI_TAG:?PGAI_TAG is required}
     container_name: flask-pgss-api
     environment:
       - FLASK_ENV=production
@@ -152,51 +178,34 @@ services:
     depends_on:
       - sink-prometheus
     restart: unless-stopped
-  # PostgreSQL Reports Generator - Runs reports after 1 hour
+
+  # PostgreSQL Reports Generator - Runs reports after 30 minutes
   postgres-reports:
-    image: postgresai/reporter:1.0.3
+    image: ${PGAI_REGISTRY:-postgresai}/reporter:${PGAI_TAG:?PGAI_TAG is required}
     container_name: postgres-reports
     working_dir: /app
     volumes:
-      - ./reporter:/app/reporter
-      - ./.pgwatch-config:/app/.pgwatch-config
-      - ./instances.yml:/app/instances.yml
+      - ./.pgwatch-config:/app/.pgwatch-config:ro
+      - postgres_ai_configs:/postgres_ai_configs:ro
     environment:
       - PROMETHEUS_URL=http://sink-prometheus:9090
-      - PYTHONPATH=/app
+      # Optional overrides:
+      # - REPORTER_INITIAL_DELAY_SECONDS=1800
+      # - REPORTER_INTERVAL_SECONDS=86400
+      # - REPORTER_OUTPUT_TEMPLATE=/app/all_reports_%Y%m%d_%H%M%S.json
+      # - REPORTER_API_URL=https://postgres.ai/api/general
+      # - REPORTER_PROJECT_NAME=postgres-ai-monitoring
+      # - REPORTER_PGWATCH_CONFIG_PATH=/app/.pgwatch-config
     depends_on:
-      - sink-prometheus
-      - pgwatch-prometheus
-    command: >
-      sh -c "
-      echo 'Installing Python dependencies...' &&
-      pip install -r reporter/requirements.txt &&
-      pip install pyyaml &&
-      echo 'Waiting 30 minutes before generating reports...' &&
-      sleep 1800 &&
-      echo 'Starting PostgreSQL reports generation...' &&
-      while true; do
-        echo 'Extracting cluster and node name from instances.yml...' &&
-        echo 'Generating PostgreSQL reports...' &&
-        if [ -f /app/.pgwatch-config ] && grep -q '^api_key=' /app/.pgwatch-config; then
-          API_KEY=$$(grep '^api_key=' /app/.pgwatch-config | cut -d'=' -f2-) &&
-          python -m reporter.postgres_reports --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --token $$API_KEY
-        else
-          echo 'No API key configured, generating reports without upload...' &&
-          python -m reporter.postgres_reports --prometheus-url http://sink-prometheus:9090 --output /app/all_reports_$$(date +%Y%m%d_%H%M%S).json --no-upload
-        fi
-        status=$$?
-        if [ $$status -ne 0 ]; then
-          echo \"Report generation failed (exit $$status). Will retry after 24 hours.\"
-        else
-          echo 'Reports generated successfully.'
-        fi
-        echo 'Sleeping for 24 hours...' &&
-        sleep 86400
-      done
-      "
+      config-init:
+        condition: service_completed_successfully
+      sink-prometheus:
+        condition: service_started
+      pgwatch-prometheus:
+        condition: service_started
+    command: ["bash", "/postgres_ai_configs/scripts/postgres-reports.sh"]
 
-  # Self-monitoring components
+  # Self-monitoring components (Linux-only, will fail on macOS)
 
   # cAdvisor - Container metrics
   cadvisor:
@@ -237,6 +246,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_ai_configs:
   target_db_data:
   sink_postgres_data:
   victoria_metrics_data:

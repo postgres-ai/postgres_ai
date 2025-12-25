@@ -69,7 +69,29 @@ def test_format_report_data_structure(generator: PostgresReportGenerator) -> Non
     host = "db-1"
     payload = generator.format_report_data("A002", {"foo": "bar"}, host)
 
+    assert payload["version"] is None
+    assert payload["build_ts"] is None
     assert payload["checkId"] == "A002"
     # Newer reporter returns a 'nodes' structure instead of legacy 'hosts'.
     assert payload["nodes"]["primary"] == host
     assert payload["results"][host]["data"] == {"foo": "bar"}
+
+
+@pytest.mark.unit
+def test_format_report_data_includes_build_metadata_from_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    version_file = tmp_path / "VERSION"
+    build_ts_file = tmp_path / "BUILD_TS"
+    version_file.write_text("0.0.0-test\n", encoding="utf-8")
+    build_ts_file.write_text("2025-12-17 00:00:00 UTC\n", encoding="utf-8")
+
+    monkeypatch.setenv("PGAI_VERSION_FILE", str(version_file))
+    monkeypatch.setenv("PGAI_BUILD_TS_FILE", str(build_ts_file))
+
+    generator = PostgresReportGenerator(prometheus_url="http://test", postgres_sink_url="")
+    payload = generator.format_report_data("A002", {"foo": "bar"}, "db-1")
+
+    assert payload["version"] == "0.0.0-test"
+    assert payload["build_ts"] == "2025-12-17 00:00:00 UTC"

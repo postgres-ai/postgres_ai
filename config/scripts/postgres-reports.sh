@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+initial_delay_seconds="${REPORTER_INITIAL_DELAY_SECONDS:-1800}"
+interval_seconds="${REPORTER_INTERVAL_SECONDS:-86400}"
+
+prometheus_url="${PROMETHEUS_URL:-http://sink-prometheus:9090}"
+output_template="${REPORTER_OUTPUT_TEMPLATE:-/app/all_reports_%Y%m%d_%H%M%S.json}"
+
+pgwatch_config_path="${REPORTER_PGWATCH_CONFIG_PATH:-/app/.pgwatch-config}"
+api_url="${REPORTER_API_URL:-https://postgres.ai/api/general}"
+project_name="${REPORTER_PROJECT_NAME:-postgres-ai-monitoring}"
+
+sleep_seconds() {
+  local s
+  s="$1"
+  if [[ "${s}" =~ ^[0-9]+$ ]] && (( s > 0 )); then
+    sleep "${s}"
+  fi
+}
+
+read_api_key() {
+  local key
+  if [[ ! -f "${pgwatch_config_path}" ]]; then
+    return 1
+  fi
+  # Extract everything after first '=' to keep compatibility with values containing '='.
+  # Suppress stderr to avoid noise when file is unreadable.
+  key="$(
+    grep -E '^api_key=' "${pgwatch_config_path}" 2>/dev/null \
+      | head -n 1 \
+      | cut -d'=' -f2- \
+      | tr -d '\r'
+  )"
+  if [[ -n "${key:-}" ]]; then
+    printf '%s' "${key}"
+    return 0
+  fi
+  return 1
+}
+
+echo "postgres-reports: initial_delay_seconds=${initial_delay_seconds}, interval_seconds=${interval_seconds}"
+sleep_seconds "$initial_delay_seconds"
+
+while true; do
+  output_path="$(date -u +"${output_template}")"
+
+  if api_key="$(read_api_key)"; then
+    echo "postgres-reports: generating reports (upload enabled) -> ${output_path}"
+    python postgres_reports.py \
+      --prometheus-url "${prometheus_url}" \
+      --output "${output_path}" \
+      --api-url "${api_url}" \
+      --project-name "${project_name}" \
+      --token "${api_key}"
+  else
+    echo "postgres-reports: generating reports (no upload) -> ${output_path}"
+    python postgres_reports.py \
+      --prometheus-url "${prometheus_url}" \
+      --output "${output_path}" \
+      --no-upload
+  fi
+
+  echo "postgres-reports: sleeping ${interval_seconds}s"
+  sleep_seconds "${interval_seconds}"
+done
+
+

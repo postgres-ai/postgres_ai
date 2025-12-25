@@ -157,7 +157,7 @@ async function withTempPostgres(t) {
 async function runCliInit(args, env = {}) {
   const node = process.execPath;
   const cliPath = path.resolve(__dirname, "..", "dist", "bin", "postgres-ai.js");
-  const res = spawnSync(node, [cliPath, "init", ...args], {
+  const res = spawnSync(node, [cliPath, "prepare-db", ...args], {
     encoding: "utf8",
     env: { ...process.env, ...env },
   });
@@ -165,7 +165,7 @@ async function runCliInit(args, env = {}) {
 }
 
 test(
-  "integration: init supports URI / conninfo / psql-like connection styles",
+  "integration: prepare-db supports URI / conninfo / psql-like connection styles",
   { skip: !havePostgresBinaries() },
   async (t) => {
     const pg = await withTempPostgres(t);
@@ -207,7 +207,7 @@ test(
 );
 
 test(
-  "integration: init requires explicit monitoring password in non-interactive mode (unless --print-password)",
+  "integration: prepare-db requires explicit monitoring password in non-interactive mode (unless --print-password)",
   { skip: !havePostgresBinaries() },
   async (t) => {
     const pg = await withTempPostgres(t);
@@ -231,7 +231,7 @@ test(
 );
 
 test(
-  "integration: init fixes slightly-off permissions idempotently",
+  "integration: prepare-db fixes slightly-off permissions idempotently",
   { skip: !havePostgresBinaries() },
   async (t) => {
     const pg = await withTempPostgres(t);
@@ -285,7 +285,7 @@ test(
   }
 );
 
-test("integration: init reports nicely when lacking permissions", { skip: !havePostgresBinaries() }, async (t) => {
+test("integration: prepare-db reports nicely when lacking permissions", { skip: !havePostgresBinaries() }, async (t) => {
   const pg = await withTempPostgres(t);
   const { Client } = require("pg");
 
@@ -310,13 +310,13 @@ test("integration: init reports nicely when lacking permissions", { skip: !haveP
   const limitedUri = `postgresql://limited:${limitedPw}@127.0.0.1:${pg.port}/testdb`;
   const r = await runCliInit([limitedUri, "--password", "monpw", "--skip-optional-permissions"]);
   assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /Error: init:/);
+  assert.match(r.stderr, /Error: prepare-db:/);
   // Should include step context and hint.
   assert.match(r.stderr, /Failed at step "/);
   assert.match(r.stderr, /Fix: connect as a superuser/i);
 });
 
-test("integration: init --verify returns 0 when ok and non-zero when missing", { skip: !havePostgresBinaries() }, async (t) => {
+test("integration: prepare-db --verify returns 0 when ok and non-zero when missing", { skip: !havePostgresBinaries() }, async (t) => {
   const pg = await withTempPostgres(t);
   const { Client } = require("pg");
 
@@ -330,7 +330,7 @@ test("integration: init --verify returns 0 when ok and non-zero when missing", {
   {
     const r = await runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
     assert.equal(r.status, 0, r.stderr || r.stdout);
-    assert.match(r.stdout, /init verify: OK/i);
+    assert.match(r.stdout, /prepare-db verify: OK/i);
   }
 
   // Break a required privilege and ensure verify fails
@@ -345,12 +345,12 @@ test("integration: init --verify returns 0 when ok and non-zero when missing", {
   {
     const r = await runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
     assert.notEqual(r.status, 0);
-    assert.match(r.stderr, /init verify failed/i);
+    assert.match(r.stderr, /prepare-db verify failed/i);
     assert.match(r.stderr, /pg_catalog\.pg_index/i);
   }
 });
 
-test("integration: init --reset-password updates the monitoring role login password", { skip: !havePostgresBinaries() }, async (t) => {
+test("integration: prepare-db --reset-password updates the monitoring role login password", { skip: !havePostgresBinaries() }, async (t) => {
   const pg = await withTempPostgres(t);
   const { Client } = require("pg");
 
