@@ -18,6 +18,7 @@ import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from 
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
+import { createCheckupReport, uploadCheckupReportJson } from "../lib/checkup-api";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -607,6 +608,8 @@ program
   .option("--node-name <name>", "node name for reports", "node-01")
   .option("--output <path>", "output directory for JSON files")
   .option("--json", "output to stdout as JSON instead of files")
+  .option("--upload", "create a remote checkup report and upload JSON results (requires API key)", false)
+  .option("--project <project>", "project name or ID for remote upload (used with --upload; defaults to config defaultProject)")
   .addHelpText(
     "after",
     [
@@ -619,6 +622,9 @@ program
       "  postgresai checkup postgresql://user:pass@host:5432/db --check-id A003",
       "  postgresai checkup postgresql://user:pass@host:5432/db --json",
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --upload --project my_project",
+      "  postgresai set-default-project my_project",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --upload",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -626,6 +632,8 @@ program
     nodeName: string;
     output?: string;
     json?: boolean;
+    upload?: boolean;
+    project?: string;
   }, cmd: Command) => {
     if (!conn) {
       // No args — show help like other commands do (instead of a bare error).
@@ -659,6 +667,38 @@ program
       }
     }
 
+    // Preflight: validate upload flags/credentials BEFORE connecting / running checks.
+    // This allows "fast-fail" for missing API key / project name.
+    let uploadCfg:
+      | { apiKey: string; apiBaseUrl: string; project: string; epoch: number }
+      | undefined;
+    if (opts.upload) {
+      const rootOpts = program.opts() as CliOptions;
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("Error: API key is required for --upload");
+        console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
+        process.exitCode = 1;
+        return;
+      }
+
+      const cfg = config.readConfig();
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+      const project = ((opts.project || cfg.defaultProject) || "").trim();
+      if (!project) {
+        console.error("Error: --project is required (or set a default via 'postgresai set-default-project <project>')");
+        process.exitCode = 1;
+        return;
+      }
+      const epoch = Math.floor(Date.now() / 1000);
+      uploadCfg = {
+        apiKey,
+        apiBaseUrl,
+        project,
+        epoch,
+      };
+    }
+
     // Use the same SSL behavior as prepare-db:
     // - Default: sslmode=prefer (try SSL first, fallback to non-SSL)
     // - Respect PGSSLMODE env and ?sslmode=... in connection URI
@@ -676,6 +716,9 @@ program
       client = connResult.client as Client;
 
       let reports: Record<string, any>;
+      let uploadSummary:
+        | { project: string; reportId: number; uploaded: Array<{ checkId: string; filename: string; chunkId: number }> }
+        | undefined;
 
       if (opts.checkId === "ALL") {
         reports = await generateAllReports(client, opts.nodeName, (p) => {
@@ -695,6 +738,41 @@ program
         reports = { [checkId]: await generator(client, opts.nodeName) };
       }
 
+      // Optional: upload to PostgresAI API.
+      if (uploadCfg) {
+        spinner.update("Creating remote checkup report");
+        const created = await createCheckupReport({
+          apiKey: uploadCfg.apiKey,
+          apiBaseUrl: uploadCfg.apiBaseUrl,
+          project: uploadCfg.project,
+          epoch: uploadCfg.epoch,
+        });
+
+        const reportId = created.reportId;
+        // Keep upload progress out of stdout when --json is used.
+        const logUpload = (msg: string): void => {
+          if (opts.json) console.error(msg);
+        };
+        logUpload(`Created remote checkup report: ${reportId}`);
+
+        const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
+        for (const [checkId, report] of Object.entries(reports)) {
+          spinner.update(`Uploading ${checkId}.json`);
+          const jsonText = JSON.stringify(report, null, 2);
+          const r = await uploadCheckupReportJson({
+            apiKey: uploadCfg.apiKey,
+            apiBaseUrl: uploadCfg.apiBaseUrl,
+            reportId,
+            filename: `${checkId}.json`,
+            checkId,
+            jsonText,
+          });
+          uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
+        }
+        logUpload("Upload completed");
+        uploadSummary = { project: uploadCfg.project, reportId, uploaded };
+      }
+
       spinner.stop();
       // Output results
       if (opts.json) {
@@ -707,6 +785,16 @@ program
           const filePath = path.join(outDir, `${checkId}.json`);
           fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
           console.log(`✓ ${checkId}: ${filePath}`);
+        }
+      } else if (uploadSummary) {
+        // Default with --upload: show upload result instead of local-only summary.
+        console.log("\nCheckup report uploaded:");
+        console.log("======================\n");
+        console.log(`Project: ${uploadSummary.project}`);
+        console.log(`Report ID: ${uploadSummary.reportId}`);
+        console.log("");
+        for (const item of uploadSummary.uploaded) {
+          console.log(`${item.checkId}: ${item.filename} (chunk ${item.chunkId})`);
         }
       } else {
         // Default: print summary
