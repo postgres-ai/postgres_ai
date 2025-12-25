@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Callable
 
 import pytest
 
 from reporter.postgres_reports import PostgresReportGenerator
-from reporter.report_schemas import validate_report
+from reporter.report_schemas import validate_query_file, validate_report
 
 
 @pytest.fixture(name="generator")
@@ -520,5 +519,26 @@ def test_schema_k003(
 
     report = generator.generate_k003_top_queries_report("local", "node-1", time_range_minutes=60, limit=50)
     validate_report(report)
+
+
+@pytest.mark.unit
+def test_schema_query_file() -> None:
+    payload = {
+        "cluster_id": "prod",
+        "query_id": "qid_1",
+        "query_text": "SELECT 1",
+        "nodes": {"primary": "main", "standbys": ["replica-1", "replica-2"]},
+        "results": {
+            "main": {
+                "db1": {"metrics": {"calls": 1, "total_time": 2.5}},
+            },
+            "replica-1": {
+                "db1": {"metrics": {"calls": 0, "total_time": 0}},
+            },
+        },
+        "time_range": {"hours": 24, "start_time": "2025-01-01T00:00:00+00:00", "end_time": "2025-01-02T00:00:00+00:00"},
+        "timestamptz": "2025-01-02T00:00:00+00:00",
+    }
+    validate_query_file(payload)
 
 

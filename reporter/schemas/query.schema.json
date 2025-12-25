@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Per-query report file schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cluster_id", "query_id", "query_text", "nodes", "results", "timestamptz"],
+  "properties": {
+    "cluster_id": { "type": "string", "minLength": 1 },
+    "query_id": { "type": "string", "minLength": 1 },
+    "query_text": { "type": ["string", "null"] },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": { "$ref": "#/$defs/results" },
+    "time_range": { "$ref": "#/$defs/timeRange" },
+    "timestamptz": { "type": "string" }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": ["string", "null"] },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "timeRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hours", "start_time", "end_time"],
+      "properties": {
+        "hours": { "type": "integer", "minimum": 1 },
+        "start_time": { "type": "string" },
+        "end_time": { "type": "string" }
+      }
+    },
+    "metricValue": { "type": ["number", "integer"] },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/metricValue" }
+    },
+    "dbEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics"],
+      "properties": {
+        "metrics": { "$ref": "#/$defs/metrics" }
+      }
+    },
+    "nodeEntry": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/dbEntry" }
+    },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeEntry" }
+    }
+  }
+}
+
+

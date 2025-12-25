@@ -3776,11 +3776,24 @@ class PostgresReportGenerator:
         if not queryids_by_db:
             logger.warning("No queryids found in hourly reports")
             return []
-        
-        # Get node name if not specified
+
+        # Determine which nodes to include (match generate_all_reports logic)
         if node_name is None:
             nodes = self.get_all_nodes(cluster)
-            node_name = nodes.get('primary') or 'node-01'
+            nodes_to_process: List[str] = []
+            if nodes.get("primary"):
+                nodes_to_process.append(nodes["primary"])
+            nodes_to_process.extend(nodes.get("standbys", []))
+
+            # If no nodes found, fall back to default
+            if not nodes_to_process:
+                logger.warning(f"No nodes found in cluster '{cluster}', using default 'node-01'")
+                nodes_to_process = ["node-01"]
+                nodes = {"primary": "node-01", "standbys": []}
+        else:
+            # Single node (backward compatibility)
+            nodes_to_process = [node_name]
+            nodes = {"primary": node_name, "standbys": []}
         
         # Get query texts from sink - only for databases found in reports (memory optimization)
         db_names_list = list(queryids_by_db.keys())
@@ -3788,63 +3801,91 @@ class PostgresReportGenerator:
         query_texts = self.get_queryid_queries_from_sink(query_text_limit, db_names=db_names_list)
         
         query_files = []
-        total_queries = sum(len(qids) for qids in queryids_by_db.values())
-        processed = 0
-        
+        # Invert {db: set(queryid)} -> {queryid: set(db)}
+        dbs_by_queryid: Dict[str, set] = {}
         for db_name, queryids in queryids_by_db.items():
-            db_query_texts = query_texts.get(db_name, {})
-            
-            for queryid in queryids:
-                processed += 1
-                logger.info(f"Processing query {processed}/{total_queries}: {queryid[:20]}...")
-                
-                # Get query text
-                query_text = db_query_texts.get(queryid)
-                
-                # Get all metrics directly from Prometheus
-                metrics = self.get_query_metrics_from_prometheus(
-                    cluster, node_name, db_name, queryid, hours=hours
-                )
-                
-                # Build the query JSON
-                query_data = {
-                    "query_id": queryid,
-                    "query_text": query_text,
-                    "database": db_name,
-                    "cluster": cluster,
-                    "node_name": node_name,
-                    "metrics": metrics
-                }
-                
-                # Create filename: query_{queryid}.json
-                filename = f"query_{queryid}.json"
-                
-                if write_immediately:
-                    # Write to disk immediately to reduce memory usage
-                    with open(filename, "w") as f:
-                        json.dump(query_data, f, indent=2)
-                    logger.info(f"Generated query file: {filename}")
-                    
-                    # Upload if API credentials provided
-                    if api_url and token and report_id:
-                        self.upload_report_file(api_url, token, report_id, filename)
-                    
-                    # Only store filename, not data
-                    query_files.append({"filename": filename})
-                    
-                    # Free memory immediately after writing
-                    del query_data
-                    del metrics
-                else:
-                    # Store in memory (legacy behavior)
-                    query_files.append({
-                        "filename": filename,
-                        "data": query_data
-                    })
-                
-                # Free memory after each query to reduce peak memory usage
-                if processed % 10 == 0:
-                    gc.collect()
+            for qid in queryids:
+                if not qid:
+                    continue
+                dbs_by_queryid.setdefault(qid, set()).add(db_name)
+
+        total_queries = len(dbs_by_queryid)
+        processed = 0
+
+        # Process deterministically (helps debugging)
+        for queryid in sorted(dbs_by_queryid.keys()):
+            processed += 1
+            dbs_for_query = sorted(list(dbs_by_queryid[queryid]))
+            logger.info(f"Processing query {processed}/{total_queries}: {queryid[:20]}... (dbs={len(dbs_for_query)}, nodes={len(nodes_to_process)})")
+
+            # Query text is expected to be identical across DBs; pick first non-empty.
+            query_text = None
+            for db_name in dbs_for_query:
+                qt = (query_texts.get(db_name, {}) or {}).get(queryid)
+                if qt:
+                    query_text = qt
+                    break
+
+            # Build results: results[node_name][db_name] = {"metrics": {...}}
+            results_by_node: Dict[str, Dict[str, Any]] = {}
+            time_range = None
+
+            for n in nodes_to_process:
+                node_block: Dict[str, Any] = {}
+                for db_name in dbs_for_query:
+                    metrics = self.get_query_metrics_from_prometheus(
+                        cluster, n, db_name, queryid, hours=hours
+                    )
+                    # Pull out time_range once and keep per-db metrics clean
+                    if time_range is None and isinstance(metrics, dict):
+                        time_range = metrics.pop("time_range", None)
+                    elif isinstance(metrics, dict):
+                        metrics.pop("time_range", None)
+
+                    node_block[db_name] = {"metrics": metrics}
+                results_by_node[n] = node_block
+
+            # Create filename: {cluster}_query_{queryid}.json
+            filename = f"{cluster}_query_{queryid}.json"
+
+            # Build the final JSON object (keep timestamptz as the last field)
+            now = datetime.now(timezone.utc).isoformat()
+            query_data = {
+                "cluster_id": cluster,
+                "query_id": queryid,
+                "query_text": query_text,
+                "nodes": nodes,
+                "results": results_by_node,
+            }
+            if time_range:
+                query_data["time_range"] = time_range
+            query_data["timestamptz"] = now
+
+            if write_immediately:
+                # Write to disk immediately to reduce memory usage
+                with open(filename, "w") as f:
+                    json.dump(query_data, f, indent=2)
+                logger.info(f"Generated query file: {filename}")
+
+                # Upload if API credentials provided
+                if api_url and token and report_id:
+                    self.upload_report_file(api_url, token, report_id, filename)
+
+                # Only store filename, not data
+                query_files.append({"filename": filename})
+
+                # Free memory immediately after writing
+                del query_data
+            else:
+                # Store in memory (legacy behavior)
+                query_files.append({
+                    "filename": filename,
+                    "data": query_data
+                })
+
+            # Free memory periodically to reduce peak usage
+            if processed % 10 == 0:
+                gc.collect()
         
         # Final cleanup
         del query_texts

@@ -30,3 +30,21 @@ def validate_report(report: dict[str, Any]) -> None:
     Draft202012Validator(schema).validate(report)
 
 
+def query_schema_path() -> Path:
+    return schema_dir() / "query.schema.json"
+
+
+def load_query_schema() -> dict[str, Any]:
+    path = query_schema_path()
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def validate_query_file(payload: dict[str, Any]) -> None:
+    """
+    Validate per-query JSON files produced by PostgresReportGenerator.generate_per_query_jsons().
+    """
+    schema = load_query_schema()
+    Draft202012Validator(schema).validate(payload)
+
+
