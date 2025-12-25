@@ -22,6 +22,62 @@ import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checku
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
 
+function expandHomePath(p: string): string {
+  const s = (p || "").trim();
+  if (!s) return s;
+  if (s === "~") return os.homedir();
+  if (s.startsWith("~/") || s.startsWith("~\\")) {
+    return path.join(os.homedir(), s.slice(2));
+  }
+  return s;
+}
+
+function createTtySpinner(
+  enabled: boolean,
+  initialText: string
+): { update: (text: string) => void; stop: (finalText?: string) => void } {
+  if (!enabled) {
+    return {
+      update: () => {},
+      stop: () => {},
+    };
+  }
+
+  const frames = ["|", "/", "-", "\\"];
+  const startTs = Date.now();
+  let text = initialText;
+  let frameIdx = 0;
+  let stopped = false;
+
+  const render = (): void => {
+    if (stopped) return;
+    const elapsedSec = ((Date.now() - startTs) / 1000).toFixed(1);
+    const frame = frames[frameIdx % frames.length]!;
+    frameIdx += 1;
+    process.stdout.write(`\r\x1b[2K${frame} ${text} (${elapsedSec}s)`);
+  };
+
+  const timer = setInterval(render, 120);
+  render(); // immediate feedback
+
+  return {
+    update: (t: string) => {
+      text = t;
+      render();
+    },
+    stop: (finalText?: string) => {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(timer);
+      process.stdout.write("\r\x1b[2K");
+      if (finalText && finalText.trim()) {
+        process.stdout.write(finalText);
+      }
+      process.stdout.write("\n");
+    },
+  };
+}
+
 /**
  * CLI configuration options
  */
@@ -556,49 +612,85 @@ program
     nodeName: string;
     output?: string;
     json?: boolean;
-  }) => {
+  }, cmd: Command) => {
     if (!conn) {
-      console.error("Error: PostgreSQL connection string is required");
-      console.error("");
-      console.error("Usage: postgresai checkup <connection-string> [options]");
-      console.error("");
-      console.error("Example:");
-      console.error("  postgresai checkup postgresql://user:pass@host:5432/db");
+      // No args — show help like other commands do (instead of a bare error).
+      cmd.outputHelp();
       process.exitCode = 1;
       return;
     }
 
-    const client = new Client({ connectionString: conn });
+    // Preflight: validate/create output directory BEFORE connecting / running checks.
+    // This avoids waiting on network/DB work only to fail at the very end.
+    let outputPath: string | undefined;
+    if (opts.output && !opts.json) {
+      const outputDir = expandHomePath(opts.output);
+      outputPath = path.isAbsolute(outputDir) ? outputDir : path.resolve(process.cwd(), outputDir);
+      if (!fs.existsSync(outputPath)) {
+        try {
+          fs.mkdirSync(outputPath, { recursive: true });
+        } catch (e) {
+          const errAny = e as any;
+          const code = typeof errAny?.code === "string" ? errAny.code : "";
+          const msg = errAny instanceof Error ? errAny.message : String(errAny);
+          if (code === "EACCES" || code === "EPERM" || code === "ENOENT") {
+            console.error(`Error: Failed to create output directory: ${outputPath}`);
+            console.error(`Reason: ${msg}`);
+            console.error("Tip: choose a writable path, e.g. --output ./reports or --output ~/reports");
+            process.exitCode = 1;
+            return;
+          }
+          throw e;
+        }
+      }
+    }
+
+    // Use the same SSL behavior as prepare-db:
+    // - Default: sslmode=prefer (try SSL first, fallback to non-SSL)
+    // - Respect PGSSLMODE env and ?sslmode=... in connection URI
+    const adminConn = resolveAdminConnection({
+      conn,
+      envPassword: process.env.PGPASSWORD,
+    });
+    let client: Client | undefined;
+    const spinnerEnabled = !!process.stdout.isTTY && !opts.json;
+    const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {
-      await client.connect();
+      spinner.update("Connecting to Postgres");
+      const connResult = await connectWithSslFallback(Client, adminConn);
+      client = connResult.client as Client;
 
       let reports: Record<string, any>;
 
       if (opts.checkId === "ALL") {
-        reports = await generateAllReports(client, opts.nodeName);
+        reports = await generateAllReports(client, opts.nodeName, (p) => {
+          spinner.update(`Running ${p.checkId}: ${p.checkTitle} (${p.index}/${p.total})`);
+        });
       } else {
         const checkId = opts.checkId.toUpperCase();
         const generator = REPORT_GENERATORS[checkId];
         if (!generator) {
+          spinner.stop();
           console.error(`Unknown check ID: ${opts.checkId}`);
           console.error(`Available: ${Object.keys(CHECK_INFO).join(", ")}, ALL`);
           process.exitCode = 1;
           return;
         }
+        spinner.update(`Running ${checkId}: ${CHECK_INFO[checkId] || checkId}`);
         reports = { [checkId]: await generator(client, opts.nodeName) };
       }
 
+      spinner.stop();
       // Output results
       if (opts.json) {
         console.log(JSON.stringify(reports, null, 2));
       } else if (opts.output) {
         // Write to files
-        if (!fs.existsSync(opts.output)) {
-          fs.mkdirSync(opts.output, { recursive: true });
-        }
+        // outputPath is preflight-validated above
+        const outDir = outputPath || path.resolve(process.cwd(), expandHomePath(opts.output));
         for (const [checkId, report] of Object.entries(reports)) {
-          const filePath = path.join(opts.output, `${checkId}.json`);
+          const filePath = path.join(outDir, `${checkId}.json`);
           fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
           console.log(`✓ ${checkId}: ${filePath}`);
         }
@@ -632,11 +724,14 @@ program
         console.log("\nUse --json for full output or --output <dir> to save files");
       }
     } catch (error) {
+      spinner.stop();
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Error: ${message}`);
       process.exitCode = 1;
     } finally {
-      await client.end();
+      if (client) {
+        await client.end();
+      }
     }
   });
 
