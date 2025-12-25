@@ -31,6 +31,25 @@ export interface SettingInfo {
 }
 
 /**
+ * Altered setting (A007) - subset of SettingInfo
+ */
+export interface AlteredSetting {
+  value: string;
+  unit: string;
+  category: string;
+  pretty_value: string;
+}
+
+/**
+ * Cluster metric (A004)
+ */
+export interface ClusterMetric {
+  value: string;
+  unit: string;
+  description: string;
+}
+
+/**
  * Node result for reports
  */
 export interface NodeResult {
@@ -85,6 +104,28 @@ export const METRICS_SQL = {
     ORDER BY name
   `,
 
+  // Altered settings - non-default values only (A007)
+  alteredSettings: `
+    SELECT
+      name,
+      setting,
+      COALESCE(unit, '') as unit,
+      category,
+      CASE
+        WHEN unit = '8kB' THEN pg_size_pretty(setting::bigint * 8192)
+        WHEN unit = 'kB' THEN pg_size_pretty(setting::bigint * 1024)
+        WHEN unit = 'MB' THEN pg_size_pretty(setting::bigint * 1024 * 1024)
+        WHEN unit = 'B' THEN pg_size_pretty(setting::bigint)
+        WHEN unit = 'ms' THEN setting || ' ms'
+        WHEN unit = 's' THEN setting || ' s'
+        WHEN unit = 'min' THEN setting || ' min'
+        ELSE setting
+      END as pretty_value
+    FROM pg_settings
+    WHERE source <> 'default'
+    ORDER BY name
+  `,
+
   // Version info - extracts server_version and server_version_num
   version: `
     SELECT
@@ -92,6 +133,52 @@ export const METRICS_SQL = {
       setting
     FROM pg_settings
     WHERE name IN ('server_version', 'server_version_num')
+  `,
+
+  // Database sizes (A004)
+  databaseSizes: `
+    SELECT
+      datname,
+      pg_database_size(datname) as size_bytes
+    FROM pg_database
+    WHERE datistemplate = false
+    ORDER BY size_bytes DESC
+  `,
+
+  // Cluster statistics (A004)
+  clusterStats: `
+    SELECT
+      sum(numbackends) as total_connections,
+      sum(xact_commit) as total_commits,
+      sum(xact_rollback) as total_rollbacks,
+      sum(blks_read) as blocks_read,
+      sum(blks_hit) as blocks_hit,
+      sum(tup_returned) as tuples_returned,
+      sum(tup_fetched) as tuples_fetched,
+      sum(tup_inserted) as tuples_inserted,
+      sum(tup_updated) as tuples_updated,
+      sum(tup_deleted) as tuples_deleted,
+      sum(deadlocks) as total_deadlocks,
+      sum(temp_files) as temp_files_created,
+      sum(temp_bytes) as temp_bytes_written
+    FROM pg_stat_database
+    WHERE datname IS NOT NULL
+  `,
+
+  // Connection states (A004)
+  connectionStates: `
+    SELECT
+      COALESCE(state, 'null') as state,
+      count(*) as count
+    FROM pg_stat_activity
+    GROUP BY state
+  `,
+
+  // Uptime info (A004)
+  uptimeInfo: `
+    SELECT
+      pg_postmaster_start_time() as start_time,
+      current_timestamp - pg_postmaster_start_time() as uptime
   `,
 };
 
@@ -111,6 +198,16 @@ export function parseVersionNum(versionNum: string): { major: string; minor: str
   } catch {
     return { major: "", minor: "" };
   }
+}
+
+/**
+ * Format bytes to human readable string
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "kB", "MB", "GB", "TB", "PB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
 }
 
 /**
@@ -159,6 +256,171 @@ export async function getSettings(client: Client): Promise<Record<string, Settin
   }
 
   return settings;
+}
+
+/**
+ * Get altered (non-default) PostgreSQL settings
+ */
+export async function getAlteredSettings(client: Client): Promise<Record<string, AlteredSetting>> {
+  const result = await client.query(METRICS_SQL.alteredSettings);
+  const settings: Record<string, AlteredSetting> = {};
+
+  for (const row of result.rows) {
+    settings[row.name] = {
+      value: row.setting,
+      unit: row.unit,
+      category: row.category,
+      pretty_value: row.pretty_value,
+    };
+  }
+
+  return settings;
+}
+
+/**
+ * Get database sizes
+ */
+export async function getDatabaseSizes(client: Client): Promise<Record<string, number>> {
+  const result = await client.query(METRICS_SQL.databaseSizes);
+  const sizes: Record<string, number> = {};
+
+  for (const row of result.rows) {
+    sizes[row.datname] = parseInt(row.size_bytes, 10);
+  }
+
+  return sizes;
+}
+
+/**
+ * Get cluster general info metrics
+ */
+export async function getClusterInfo(client: Client): Promise<Record<string, ClusterMetric>> {
+  const info: Record<string, ClusterMetric> = {};
+
+  // Get cluster statistics
+  const statsResult = await client.query(METRICS_SQL.clusterStats);
+  if (statsResult.rows.length > 0) {
+    const stats = statsResult.rows[0];
+
+    info.total_connections = {
+      value: String(stats.total_connections || 0),
+      unit: "connections",
+      description: "Total active database connections",
+    };
+
+    info.total_commits = {
+      value: String(stats.total_commits || 0),
+      unit: "transactions",
+      description: "Total committed transactions",
+    };
+
+    info.total_rollbacks = {
+      value: String(stats.total_rollbacks || 0),
+      unit: "transactions",
+      description: "Total rolled back transactions",
+    };
+
+    const blocksHit = parseInt(stats.blocks_hit || "0", 10);
+    const blocksRead = parseInt(stats.blocks_read || "0", 10);
+    const totalBlocks = blocksHit + blocksRead;
+    const cacheHitRatio = totalBlocks > 0 ? ((blocksHit / totalBlocks) * 100).toFixed(2) : "0.00";
+
+    info.cache_hit_ratio = {
+      value: cacheHitRatio,
+      unit: "%",
+      description: "Buffer cache hit ratio",
+    };
+
+    info.blocks_read = {
+      value: String(blocksRead),
+      unit: "blocks",
+      description: "Total disk blocks read",
+    };
+
+    info.blocks_hit = {
+      value: String(blocksHit),
+      unit: "blocks",
+      description: "Total buffer cache hits",
+    };
+
+    info.tuples_returned = {
+      value: String(stats.tuples_returned || 0),
+      unit: "rows",
+      description: "Total rows returned by queries",
+    };
+
+    info.tuples_fetched = {
+      value: String(stats.tuples_fetched || 0),
+      unit: "rows",
+      description: "Total rows fetched by queries",
+    };
+
+    info.tuples_inserted = {
+      value: String(stats.tuples_inserted || 0),
+      unit: "rows",
+      description: "Total rows inserted",
+    };
+
+    info.tuples_updated = {
+      value: String(stats.tuples_updated || 0),
+      unit: "rows",
+      description: "Total rows updated",
+    };
+
+    info.tuples_deleted = {
+      value: String(stats.tuples_deleted || 0),
+      unit: "rows",
+      description: "Total rows deleted",
+    };
+
+    info.total_deadlocks = {
+      value: String(stats.total_deadlocks || 0),
+      unit: "deadlocks",
+      description: "Total deadlocks detected",
+    };
+
+    info.temp_files_created = {
+      value: String(stats.temp_files_created || 0),
+      unit: "files",
+      description: "Total temporary files created",
+    };
+
+    const tempBytes = parseInt(stats.temp_bytes_written || "0", 10);
+    info.temp_bytes_written = {
+      value: formatBytes(tempBytes),
+      unit: "bytes",
+      description: "Total temporary file bytes written",
+    };
+  }
+
+  // Get connection states
+  const connResult = await client.query(METRICS_SQL.connectionStates);
+  for (const row of connResult.rows) {
+    const stateKey = `connections_${row.state.replace(/\s+/g, "_")}`;
+    info[stateKey] = {
+      value: String(row.count),
+      unit: "connections",
+      description: `Connections in '${row.state}' state`,
+    };
+  }
+
+  // Get uptime info
+  const uptimeResult = await client.query(METRICS_SQL.uptimeInfo);
+  if (uptimeResult.rows.length > 0) {
+    const uptime = uptimeResult.rows[0];
+    info.start_time = {
+      value: uptime.start_time.toISOString(),
+      unit: "timestamp",
+      description: "PostgreSQL server start time",
+    };
+    info.uptime = {
+      value: uptime.uptime,
+      unit: "interval",
+      description: "Server uptime",
+    };
+  }
+
+  return info;
 }
 
 /**
@@ -216,6 +478,42 @@ export async function generateA003(client: Client, nodeName: string = "node-01")
 }
 
 /**
+ * Generate A004 report - Cluster information
+ */
+export async function generateA004(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("A004", "Cluster information", nodeName);
+  const generalInfo = await getClusterInfo(client);
+  const databaseSizes = await getDatabaseSizes(client);
+  const postgresVersion = await getPostgresVersion(client);
+
+  report.results[nodeName] = {
+    data: {
+      general_info: generalInfo,
+      database_sizes: databaseSizes,
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate A007 report - Altered settings
+ */
+export async function generateA007(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("A007", "Altered settings", nodeName);
+  const alteredSettings = await getAlteredSettings(client);
+  const postgresVersion = await getPostgresVersion(client);
+
+  report.results[nodeName] = {
+    data: alteredSettings,
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Generate A013 report - Postgres minor version
  */
 export async function generateA013(client: Client, nodeName: string = "node-01"): Promise<Report> {
@@ -237,6 +535,8 @@ export async function generateA013(client: Client, nodeName: string = "node-01")
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
   A002: generateA002,
   A003: generateA003,
+  A004: generateA004,
+  A007: generateA007,
   A013: generateA013,
 };
 
@@ -246,6 +546,8 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
 export const CHECK_INFO: Record<string, string> = {
   A002: "Postgres major version",
   A003: "Postgres settings",
+  A004: "Cluster information",
+  A007: "Altered settings",
   A013: "Postgres minor version",
 };
 
