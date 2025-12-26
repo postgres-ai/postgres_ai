@@ -99,6 +99,23 @@ export interface NonIndexedForeignKey {
 }
 
 /**
+ * Redundant index entry (H004)
+ */
+export interface RedundantIndex {
+  schema_name: string;
+  table_name: string;
+  index_name: string;
+  access_method: string;
+  reason: string;
+  index_size_bytes: number;
+  index_size_pretty: string;
+  table_size_bytes: number;
+  table_size_pretty: string;
+  index_usage: number;
+  supports_fk: boolean;
+}
+
+/**
  * Node result for reports
  */
 export interface NodeResult {
@@ -379,6 +396,120 @@ export const METRICS_SQL = {
         AND ifk.fk_name = fk.fk_name
     )
     ORDER BY pg_relation_size(t.oid) DESC
+    LIMIT 50
+  `,
+
+  // Redundant indexes (H004) - indexes covered by other indexes
+  redundantIndexes: `
+    WITH fk_indexes AS (
+      SELECT
+        n.nspname as schema_name,
+        ci.relname as index_name,
+        cr.relname as table_name,
+        (confrelid::regclass)::text as fk_table_ref,
+        array_to_string(indclass, ', ') as opclasses
+      FROM pg_index i
+      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
+      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
+      JOIN pg_namespace n ON n.oid = ci.relnamespace
+      JOIN pg_constraint cn ON cn.conrelid = cr.oid
+      LEFT JOIN pg_stat_all_indexes si ON si.indexrelid = i.indexrelid
+      WHERE cn.contype = 'f'
+        AND i.indisunique = false
+        AND cn.conkey IS NOT NULL
+        AND ci.relpages > 0
+        AND COALESCE(si.idx_scan, 0) < 10
+    ),
+    index_data AS (
+      SELECT
+        i.*,
+        ci.oid as index_oid,
+        indkey::text as columns,
+        array_to_string(indclass, ', ') as opclasses
+      FROM pg_index i
+      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
+      WHERE indisvalid = true AND ci.relpages > 0
+    ),
+    redundant_indexes AS (
+      SELECT
+        i2.indexrelid as index_id,
+        tnsp.nspname as schema_name,
+        trel.relname as table_name,
+        pg_relation_size(trel.oid) as table_size_bytes,
+        irel.relname as index_name,
+        am1.amname as access_method,
+        (i1.indexrelid::regclass)::text as reason,
+        pg_relation_size(i2.indexrelid) as index_size_bytes,
+        COALESCE(s.idx_scan, 0) as index_usage,
+        i2.opclasses
+      FROM (
+        SELECT indrelid, indexrelid, opclasses, indclass, indexprs, indpred, indisprimary, indisunique, columns
+        FROM index_data
+        ORDER BY indexrelid
+      ) AS i1
+      JOIN index_data AS i2 ON (
+        i1.indrelid = i2.indrelid
+        AND i1.indexrelid <> i2.indexrelid
+      )
+      INNER JOIN pg_opclass op1 ON i1.indclass[0] = op1.oid
+      INNER JOIN pg_opclass op2 ON i2.indclass[0] = op2.oid
+      INNER JOIN pg_am am1 ON op1.opcmethod = am1.oid
+      INNER JOIN pg_am am2 ON op2.opcmethod = am2.oid
+      LEFT JOIN pg_stat_all_indexes s ON s.indexrelid = i2.indexrelid
+      JOIN pg_class trel ON trel.oid = i2.indrelid
+      JOIN pg_namespace tnsp ON trel.relnamespace = tnsp.oid
+      JOIN pg_class irel ON irel.oid = i2.indexrelid
+      WHERE NOT i2.indisprimary
+        AND NOT i2.indisunique
+        AND am1.amname = am2.amname
+        AND i1.columns LIKE (i2.columns || '%')
+        AND i1.opclasses LIKE (i2.opclasses || '%')
+        AND pg_get_expr(i1.indexprs, i1.indrelid) IS NOT DISTINCT FROM pg_get_expr(i2.indexprs, i2.indrelid)
+        AND pg_get_expr(i1.indpred, i1.indrelid) IS NOT DISTINCT FROM pg_get_expr(i2.indpred, i2.indrelid)
+        AND tnsp.nspname NOT IN ('pg_catalog', 'information_schema')
+    ),
+    redundant_with_fk AS (
+      SELECT
+        ri.*,
+        (
+          SELECT COUNT(1) > 0
+          FROM fk_indexes fi
+          WHERE fi.fk_table_ref = ri.table_name
+            AND fi.opclasses LIKE (ri.opclasses || '%')
+        ) as supports_fk
+      FROM redundant_indexes ri
+    ),
+    numbered AS (
+      SELECT ROW_NUMBER() OVER () as num, r.*
+      FROM redundant_with_fk r
+    ),
+    with_links AS (
+      SELECT
+        n1.*,
+        n2.num as r_num
+      FROM numbered n1
+      LEFT JOIN numbered n2 ON n2.index_id = (
+        SELECT indexrelid FROM pg_index WHERE indexrelid::regclass::text = n1.reason
+      ) AND (
+        SELECT indexrelid FROM pg_index WHERE indexrelid::regclass::text = n2.reason
+      ) = n1.index_id
+    ),
+    deduped AS (
+      SELECT * FROM with_links
+      WHERE num < r_num OR r_num IS NULL
+    )
+    SELECT DISTINCT ON (index_id)
+      schema_name,
+      table_name,
+      index_name,
+      access_method,
+      reason,
+      index_size_bytes,
+      table_size_bytes,
+      index_usage,
+      supports_fk
+    FROM deduped
+    ORDER BY index_id, index_size_bytes DESC
     LIMIT 50
   `,
 };
@@ -680,6 +811,26 @@ export async function getNonIndexedForeignKeys(client: Client): Promise<NonIndex
 }
 
 /**
+ * Get redundant indexes (H004)
+ */
+export async function getRedundantIndexes(client: Client): Promise<RedundantIndex[]> {
+  const result = await client.query(METRICS_SQL.redundantIndexes);
+  return result.rows.map((row) => ({
+    schema_name: row.schema_name,
+    table_name: row.table_name,
+    index_name: row.index_name,
+    access_method: row.access_method,
+    reason: row.reason,
+    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
+    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
+    table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
+    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
+    index_usage: parseInt(row.index_usage, 10) || 0,
+    supports_fk: row.supports_fk === true || row.supports_fk === "t",
+  }));
+}
+
+/**
  * Create base report structure
  */
 export function createBaseReport(
@@ -897,6 +1048,31 @@ export async function generateH003(client: Client, nodeName: string = "node-01")
 }
 
 /**
+ * Generate H004 report - Redundant indexes
+ */
+export async function generateH004(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("H004", "Redundant indexes", nodeName);
+  const redundantIndexes = await getRedundantIndexes(client);
+  const postgresVersion = await getPostgresVersion(client);
+
+  // Calculate totals
+  const totalCount = redundantIndexes.length;
+  const totalSizeBytes = redundantIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
+
+  report.results[nodeName] = {
+    data: {
+      redundant_indexes: redundantIndexes,
+      total_count: totalCount,
+      total_size_bytes: totalSizeBytes,
+      total_size_pretty: formatBytes(totalSizeBytes),
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Available report generators
  */
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
@@ -908,6 +1084,7 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   H001: generateH001,
   H002: generateH002,
   H003: generateH003,
+  H004: generateH004,
 };
 
 /**
@@ -922,6 +1099,7 @@ export const CHECK_INFO: Record<string, string> = {
   H001: "Invalid indexes",
   H002: "Unused indexes",
   H003: "Non-indexed foreign keys",
+  H004: "Redundant indexes",
 };
 
 /**
