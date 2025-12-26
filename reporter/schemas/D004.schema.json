@@ -7,6 +7,7 @@
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "D004" },
     "checkTitle": { "const": "pg_stat_statements and pg_stat_kcache settings" },
     "timestamptz": { "type": "string" },
