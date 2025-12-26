@@ -110,6 +110,27 @@ def test_settings_metric_numeric_value_uses_correct_source_for_lock_timeout(metr
         f"CASE expression for lock_timeout should appear at least twice (for tag_setting_value and numeric_value), found {occurrences}"
 
 
+@pytest.mark.unit
+def test_settings_metric_is_default_uses_boot_val_for_lock_timeout(metrics_config: dict) -> None:
+    """
+    Test that is_default compares reset_val with boot_val for lock_timeout.
+
+    When pgwatch sets lock_timeout during collection, the source becomes 'session',
+    which would incorrectly report is_default=0. Instead, we should compare
+    reset_val with boot_val to determine if the configured value is the default.
+
+    See: https://gitlab.com/postgres-ai/postgres_ai/-/issues/61
+    """
+    sql = metrics_config["metrics"]["settings"]["sqls"][11]
+
+    # Verify is_default uses boot_val comparison for lock_timeout
+    assert "boot_val" in sql, "SQL should reference boot_val column for is_default comparison"
+
+    # Check for the specific pattern that handles lock_timeout specially
+    assert "case when name = 'lock_timeout' then" in sql and "boot_val" in sql, \
+        "SQL should use special handling for lock_timeout in is_default calculation"
+
+
 @pytest.mark.integration
 @pytest.mark.requires_postgres
 def test_settings_metric_lock_timeout_returns_actual_value() -> None:
