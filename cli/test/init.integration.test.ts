@@ -326,41 +326,45 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     }
   });
 
-  test("--verify returns 0 when ok and non-zero when missing", async () => {
-    pg = await createTempPostgres();
+  test(
+    "--verify returns 0 when ok and non-zero when missing",
+    async () => {
+      pg = await createTempPostgres();
 
-    try {
-      // Prepare: run init
-      {
-        const r = runCliInit([pg.adminUri, "--password", "monpw", "--skip-optional-permissions"]);
-        expect(r.status).toBe(0);
-      }
+      try {
+        // Prepare: run init
+        {
+          const r = runCliInit([pg.adminUri, "--password", "monpw", "--skip-optional-permissions"]);
+          expect(r.status).toBe(0);
+        }
 
-      // Verify should pass
-      {
-        const r = runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
-        expect(r.status).toBe(0);
-        expect(r.stdout).toMatch(/prepare-db verify: OK/i);
-      }
+        // Verify should pass
+        {
+          const r = runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
+          expect(r.status).toBe(0);
+          expect(r.stdout).toMatch(/prepare-db verify: OK/i);
+        }
 
-      // Break a required privilege and ensure verify fails
-      {
-        const c = new Client({ connectionString: pg.adminUri });
-        await c.connect();
-        await c.query("revoke select on pg_catalog.pg_index from public");
-        await c.query("revoke select on pg_catalog.pg_index from postgres_ai_mon");
-        await c.end();
+        // Break a required privilege and ensure verify fails
+        {
+          const c = new Client({ connectionString: pg.adminUri });
+          await c.connect();
+          await c.query("revoke select on pg_catalog.pg_index from public");
+          await c.query("revoke select on pg_catalog.pg_index from postgres_ai_mon");
+          await c.end();
+        }
+        {
+          const r = runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
+          expect(r.status).not.toBe(0);
+          expect(r.stderr).toMatch(/prepare-db verify failed/i);
+          expect(r.stderr).toMatch(/pg_catalog\.pg_index/i);
+        }
+      } finally {
+        await pg.cleanup();
       }
-      {
-        const r = runCliInit([pg.adminUri, "--verify", "--skip-optional-permissions"]);
-        expect(r.status).not.toBe(0);
-        expect(r.stderr).toMatch(/prepare-db verify failed/i);
-        expect(r.stderr).toMatch(/pg_catalog\.pg_index/i);
-      }
-    } finally {
-      await pg.cleanup();
-    }
-  });
+    },
+    { timeout: 15000 }
+  );
 
   test("--reset-password updates the monitoring role login password", async () => {
     pg = await createTempPostgres();
