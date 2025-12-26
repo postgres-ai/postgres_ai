@@ -202,7 +202,10 @@ describe("H004 schema validation", () => {
           table_size_bytes: "16777216",
           index_usage: "0",
           supports_fk: false,
-          index_definition: "CREATE INDEX orders_user_id_idx ON public.orders USING btree (user_id)"
+          index_definition: "CREATE INDEX orders_user_id_idx ON public.orders USING btree (user_id)",
+          covering_indexes_json: JSON.stringify([
+            { index_name: "public.orders_user_id_created_idx", index_definition: "CREATE INDEX orders_user_id_created_idx ON public.orders USING btree (user_id, created_at)" }
+          ])
         },
       ],
     });

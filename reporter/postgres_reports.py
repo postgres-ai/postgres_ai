@@ -875,6 +875,15 @@ class PostgresReportGenerator:
                                                                                                             {}).get(
                         'result') else False
 
+                    # Build covering_indexes array from the reason field
+                    # The reason field contains comma-separated covering index names
+                    covering_indexes = []
+                    for covering_name in [r.strip() for r in reason.split(',') if r.strip()]:
+                        covering_indexes.append({
+                            "index_name": covering_name,
+                            "index_definition": index_definitions.get(covering_name, 'Definition not available')
+                        })
+
                     redundant_index = {
                         "schema_name": schema_name,
                         "table_name": table_name,
@@ -888,7 +897,8 @@ class PostgresReportGenerator:
                         "supports_fk": supports_fk,
                         "index_definition": index_definitions.get(index_name, 'Definition not available'),
                         "index_size_pretty": self.format_bytes(index_size_bytes),
-                        "table_size_pretty": self.format_bytes(table_size_bytes)
+                        "table_size_pretty": self.format_bytes(table_size_bytes),
+                        "covering_indexes": covering_indexes
                     }
 
                     redundant_indexes.append(redundant_index)

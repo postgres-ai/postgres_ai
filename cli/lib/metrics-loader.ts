@@ -418,7 +418,13 @@ redundant_indexes_tmp_num as (
     formated_schema_name as tag_schema_name,
     formated_table_name as tag_table_name,
     formated_relation_name as tag_relation_name,
-    supports_fk::int as supports_fk
+    supports_fk::int as supports_fk,
+    json_agg(
+      distinct jsonb_build_object(
+        'index_name', reason,
+        'index_definition', main_index_def
+      )
+    )::text as covering_indexes_json
   from redundant_indexes_cut_grouped
   group by
     index_id,
