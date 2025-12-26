@@ -42,10 +42,12 @@
     "redundantToIndex": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["index_name", "index_definition"],
+      "required": ["index_name", "index_definition", "index_size_bytes", "index_size_pretty"],
       "properties": {
         "index_name": { "type": "string" },
-        "index_definition": { "type": "string" }
+        "index_definition": { "type": "string" },
+        "index_size_bytes": { "type": "number" },
+        "index_size_pretty": { "type": "string" }
       }
     },
     "redundantIndex": {

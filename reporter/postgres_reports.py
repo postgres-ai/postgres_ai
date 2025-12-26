@@ -878,11 +878,15 @@ class PostgresReportGenerator:
                     # Build redundant_to array from the reason field
                     # The reason field contains comma-separated index names
                     # (the indexes that make this index redundant)
+                    # Note: In full mode, index sizes for redundant_to are not available
+                    # (would require additional Prometheus queries). Use express mode for sizes.
                     redundant_to = []
                     for idx_name in [r.strip() for r in reason.split(',') if r.strip()]:
                         redundant_to.append({
                             "index_name": idx_name,
-                            "index_definition": index_definitions.get(idx_name, 'Definition not available')
+                            "index_definition": index_definitions.get(idx_name, 'Definition not available'),
+                            "index_size_bytes": 0,
+                            "index_size_pretty": "N/A"
                         })
 
                     redundant_index = {

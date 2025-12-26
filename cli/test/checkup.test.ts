@@ -841,7 +841,7 @@ describe("H004 - Redundant indexes", () => {
           supports_fk: false,
           index_definition: "CREATE INDEX orders_user_id_idx ON public.orders USING btree (user_id)",
           redundant_to_json: JSON.stringify([
-            { index_name: "public.orders_user_id_created_idx", index_definition: "CREATE INDEX orders_user_id_created_idx ON public.orders USING btree (user_id, created_at)" }
+            { index_name: "public.orders_user_id_created_idx", index_definition: "CREATE INDEX orders_user_id_created_idx ON public.orders USING btree (user_id, created_at)", index_size_bytes: 1048576 }
           ]),
         },
       ],
@@ -856,11 +856,13 @@ describe("H004 - Redundant indexes", () => {
     expect(indexes[0].supports_fk).toBe(false);
     expect(indexes[0].index_definition).toBeTruthy();
     expect(indexes[0].relation_name).toBe("orders");
-    // Verify redundant_to is populated with definitions
+    // Verify redundant_to is populated with definitions and sizes
     expect(indexes[0].redundant_to).toBeInstanceOf(Array);
     expect(indexes[0].redundant_to.length).toBe(1);
     expect(indexes[0].redundant_to[0].index_name).toBe("public.orders_user_id_created_idx");
     expect(indexes[0].redundant_to[0].index_definition).toContain("CREATE INDEX");
+    expect(indexes[0].redundant_to[0].index_size_bytes).toBe(1048576);
+    expect(indexes[0].redundant_to[0].index_size_pretty).toBe("1.00 MiB");
   });
 
   test("generateH004 creates report with redundant indexes", async () => {
@@ -885,7 +887,7 @@ describe("H004 - Redundant indexes", () => {
             supports_fk: false,
             index_definition: "CREATE INDEX products_category_idx ON public.products USING btree (category)",
             redundant_to_json: JSON.stringify([
-              { index_name: "public.products_category_name_idx", index_definition: "CREATE INDEX products_category_name_idx ON public.products USING btree (category, name)" }
+              { index_name: "public.products_category_name_idx", index_definition: "CREATE INDEX products_category_name_idx ON public.products USING btree (category, name)", index_size_bytes: 2097152 }
             ]),
           },
         ],
@@ -931,7 +933,7 @@ describe("H004 - Redundant indexes", () => {
             supports_fk: false,
             index_definition: "CREATE INDEX products_category_idx ON public.products USING btree (category)",
             redundant_to_json: JSON.stringify([
-              { index_name: "public.products_category_name_idx", index_definition: "CREATE INDEX products_category_name_idx ON public.products USING btree (category, name)" }
+              { index_name: "public.products_category_name_idx", index_definition: "CREATE INDEX products_category_name_idx ON public.products USING btree (category, name)", index_size_bytes: 2097152 }
             ]),
           },
         ],

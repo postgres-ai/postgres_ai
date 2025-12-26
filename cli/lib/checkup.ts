@@ -134,6 +134,8 @@ export interface StatsReset {
 export interface RedundantToIndex {
   index_name: string;
   index_definition: string;
+  index_size_bytes: number;
+  index_size_pretty: string;
 }
 
 export interface RedundantIndex {
@@ -534,10 +536,15 @@ export async function getRedundantIndexes(client: Client): Promise<RedundantInde
       const jsonStr = String(transformed.redundant_to_json || "[]");
       const parsed = JSON.parse(jsonStr);
       if (Array.isArray(parsed)) {
-        redundantTo = parsed.map((item: any) => ({
-          index_name: String(item.index_name || ""),
-          index_definition: String(item.index_definition || ""),
-        }));
+        redundantTo = parsed.map((item: any) => {
+          const sizeBytes = parseInt(String(item.index_size_bytes || 0), 10);
+          return {
+            index_name: String(item.index_name || ""),
+            index_definition: String(item.index_definition || ""),
+            index_size_bytes: sizeBytes,
+            index_size_pretty: formatBytes(sizeBytes),
+          };
+        });
       }
     } catch {
       // If JSON parsing fails, leave as empty array

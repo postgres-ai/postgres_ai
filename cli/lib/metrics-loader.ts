@@ -336,7 +336,7 @@ index_data as (
     (i1.indexrelid::regclass)::text as reason,
     i1.indexrelid as reason_index_id,
     pg_get_indexdef(i1.indexrelid) main_index_def,
-    pg_size_pretty(pg_relation_size(i1.indexrelid)) main_index_size,
+    pg_relation_size(i1.indexrelid) main_index_size_bytes,
     pg_get_indexdef(i2.indexrelid) index_def,
     pg_relation_size(i2.indexrelid) index_size_bytes,
     s.idx_scan as index_usage,
@@ -422,7 +422,8 @@ redundant_indexes_tmp_num as (
     json_agg(
       distinct jsonb_build_object(
         'index_name', reason,
-        'index_definition', main_index_def
+        'index_definition', main_index_def,
+        'index_size_bytes', main_index_size_bytes
       )
     )::text as redundant_to_json
   from redundant_indexes_cut_grouped
