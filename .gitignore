@@ -9,6 +9,10 @@ Thumbs.db
 
 # IDE and editor files
 .vscode/
+# Keep an example debug config in git:
+!.vscode/
+.vscode/*
+!.vscode/launch.example.json
 .idea/
 *.swp
 *.swo
@@ -17,6 +21,9 @@ Thumbs.db
 # Docker generated files
 .env.local
 .env.*.local
+
+# Compose local override (auto-loaded by docker compose) - dev-only
+docker-compose.override.yml
 
 # Logs
 *.log
@@ -27,6 +34,9 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# Local report outputs (dev-only)
+dev_reports/
 
 # Python artifacts
 __pycache__/
