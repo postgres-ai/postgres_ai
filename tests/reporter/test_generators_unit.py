@@ -884,6 +884,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_k005_wal_bytes_report",
         "generate_k006_shared_read_report",
         "generate_k007_shared_hit_report",
+        "generate_k008_shared_hit_read_report",
         "generate_m001_mean_time_report",
         "generate_m002_rows_report",
         "generate_m003_io_time_report",

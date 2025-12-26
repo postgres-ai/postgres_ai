@@ -275,7 +275,7 @@ postgres_ai monitoring generates automated health check reports based on [postgr
 | Check ID | Title |
 |----------|-------|
 | K001 | Globally aggregated query metrics |
-| K003 | Top queries by total_time |
+| K003 | Top queries by total time (total_exec_time + total_plan_time) |
 | K004 | Top queries by temp bytes written |
 | K005 | Top queries by WAL generation |
 | K006 | Top queries by shared blocks read |
