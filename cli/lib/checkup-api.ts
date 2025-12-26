@@ -118,14 +118,12 @@ export async function createCheckupReport(params: {
   apiKey: string;
   apiBaseUrl: string;
   project: string;
-  epoch: number;
   status?: string;
 }): Promise<{ reportId: number }> {
-  const { apiKey, apiBaseUrl, project, epoch, status } = params;
+  const { apiKey, apiBaseUrl, project, status } = params;
   const bodyObj: Record<string, unknown> = {
     access_token: apiKey,
     project,
-    epoch,
   };
   if (status) bodyObj.status = status;
 
