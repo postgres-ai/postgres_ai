@@ -792,12 +792,10 @@ program
           console.error(`Warning: Failed to save generated default project: ${message}`);
         }
       }
-      const epoch = Math.floor(Date.now() / 1000);
       uploadCfg = {
         apiKey,
         apiBaseUrl,
         project,
-        epoch,
       };
     }
 
@@ -847,7 +845,6 @@ program
           apiKey: uploadCfg.apiKey,
           apiBaseUrl: uploadCfg.apiBaseUrl,
           project: uploadCfg.project,
-          epoch: uploadCfg.epoch,
         });
 
         const reportId = created.reportId;
