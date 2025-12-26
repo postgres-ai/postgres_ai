@@ -696,7 +696,7 @@ program
     "--project <project>",
     "project name or ID for remote upload (used with --upload; defaults to config defaultProject; auto-generated on first run)"
   )
-  .option("--json", "output JSON to stdout")
+  .option("--json", "output JSON to stdout (implies --no-upload)")
   .addHelpText(
     "after",
     [
@@ -729,8 +729,9 @@ program
       return;
     }
 
-    const shouldUpload = opts.upload !== false; // default: enabled
     const shouldPrintJson = !!opts.json;
+    // `--json` implies "local output" mode — do not upload by default.
+    const shouldUpload = opts.upload !== false && !shouldPrintJson;
     const generateDefaultProjectName = (): string => {
       // Must start with a letter; use only letters/numbers/underscores.
       return `project_${crypto.randomBytes(6).toString("hex")}`;
