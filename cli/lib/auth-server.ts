@@ -14,6 +14,7 @@ export interface CallbackResult {
 export interface CallbackServer {
   server: { stop: () => void };
   promise: Promise<CallbackResult>;
+  ready: Promise<number>; // Resolves with actual port when server is listening
   getPort: () => number;
 }
 
@@ -38,9 +39,12 @@ function escapeHtml(str: string | null): string {
  * @param port - Port to listen on (0 for random available port)
  * @param expectedState - Expected state parameter for CSRF protection
  * @param timeoutMs - Timeout in milliseconds
- * @returns Server object with promise and getPort function
+ * @returns Server object with promise, ready promise, and getPort function
  *
  * @remarks
+ * The `ready` promise resolves with the actual port once the server is listening.
+ * Callers should await `ready` before using `getPort()` when using port 0.
+ *
  * The server stops asynchronously ~100ms after the callback resolves/rejects.
  * This delay ensures the HTTP response is fully sent before closing the connection.
  * Callers should not attempt to reuse the same port immediately after the promise
@@ -55,11 +59,18 @@ export function createCallbackServer(
   let actualPort = port;
   let resolveCallback: (value: CallbackResult) => void;
   let rejectCallback: (reason: Error) => void;
+  let resolveReady: (port: number) => void;
+  let rejectReady: (reason: Error) => void;
   let serverInstance: http.Server | null = null;
 
   const promise = new Promise<CallbackResult>((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
+  });
+
+  const ready = new Promise<number>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
   });
 
   const stopServer = () => {
@@ -223,16 +234,32 @@ export function createCallbackServer(
     `);
   });
 
+  // Handle server errors (e.g., EADDRINUSE)
+  serverInstance.on("error", (err: NodeJS.ErrnoException) => {
+    clearTimeout(timeout);
+    if (err.code === "EADDRINUSE") {
+      rejectReady(new Error(`Port ${port} is already in use`));
+    } else {
+      rejectReady(new Error(`Server error: ${err.message}`));
+    }
+    if (!resolved) {
+      resolved = true;
+      rejectCallback(err);
+    }
+  });
+
   serverInstance.listen(port, "127.0.0.1", () => {
     const address = serverInstance?.address();
     if (address && typeof address === "object") {
       actualPort = address.port;
     }
+    resolveReady(actualPort);
   });
 
   return {
     server: { stop: stopServer },
     promise,
+    ready,
     getPort: () => actualPort,
   };
 }

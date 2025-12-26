@@ -1622,9 +1622,8 @@ auth
       const requestedPort = opts.port || 0; // 0 = OS assigns available port
       const callbackServer = authServer.createCallbackServer(requestedPort, params.state, 120000); // 2 minute timeout
 
-      // Wait a bit for server to start and get port
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const actualPort = callbackServer.getPort();
+      // Wait for server to start and get the actual port
+      const actualPort = await callbackServer.ready;
       const redirectUri = `http://localhost:${actualPort}/callback`;
 
       console.log(`Callback server listening on port ${actualPort}`);
