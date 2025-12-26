@@ -7,6 +7,7 @@ import * as yaml from "js-yaml";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as crypto from "node:crypto";
 import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
@@ -1978,7 +1979,6 @@ auth
           headers: {
             "Content-Type": "application/json",
           },
-<<<<<<< HEAD
           body: initData,
         });
       } catch (err) {
