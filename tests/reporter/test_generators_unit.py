@@ -904,7 +904,14 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
     reports = generator.generate_all_reports("local", "node-1")
 
     # All report types should be generated
-    expected_report_codes = {'A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002', 'H004', 'K001', 'K003'}
+    expected_report_codes = {
+        'A002', 'A003', 'A004', 'A007',
+        'D004', 'F001', 'F004', 'F005', 'G001',
+        'H001', 'H002', 'H004',
+        'K001', 'K003', 'K004', 'K005', 'K006', 'K007',
+        'M001', 'M002', 'M003',
+        'N001',
+    }
     assert set(reports.keys()) == expected_report_codes
 
     # All builders should be called
