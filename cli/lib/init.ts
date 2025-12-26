@@ -159,13 +159,21 @@ export type InitPlan = {
   steps: InitStep[];
 };
 
-function packageRootDirFromCompiled(): string {
-  // dist/lib/init.js -> <pkg>/dist/lib ; package root is ../..
-  return path.resolve(__dirname, "..", "..");
-}
-
 function sqlDir(): string {
-  return path.join(packageRootDirFromCompiled(), "sql");
+  // Handle both development and production paths
+  // Development: lib/init.ts -> ../sql
+  // Production (bundled): dist/bin/postgres-ai.js -> ../sql (copied during build)
+  const candidates = [
+    path.resolve(__dirname, "..", "sql"),       // bundled: dist/bin -> dist/sql
+    path.resolve(__dirname, "..", "..", "sql"), // dev from lib: lib -> ../sql
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error(`SQL directory not found. Searched: ${candidates.join(", ")}`);
 }
 
 function loadSqlTemplate(filename: string): string {
