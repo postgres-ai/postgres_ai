@@ -363,7 +363,7 @@ test("cli: auth --set-key stores key without OAuth", () => {
     fs.mkdirSync(postgresaiDir, { recursive: true });
     
     // Set XDG_CONFIG_HOME to redirect config to temp dir
-    const r = runCli(["auth", "--set-key", "test-api-key-12345"], {
+    const r = runCli(["auth", "login", "--set-key", "test-api-key-12345"], {
       XDG_CONFIG_HOME: tmpDir,
       // Also clear HOME to prevent fallbacks
       HOME: tmpDir,
@@ -384,8 +384,8 @@ test("cli: auth --set-key stores key without OAuth", () => {
   }
 });
 
-test("cli: auth --help shows --set-key option", () => {
-  const r = runCli(["auth", "--help"]);
+test("cli: auth login --help shows --set-key option", () => {
+  const r = runCli(["auth", "login", "--help"]);
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /--set-key/);
 });

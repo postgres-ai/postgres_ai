@@ -181,11 +181,11 @@ cli:node:smoke:
     - command -v postgres-ai && postgres-ai --help
     - command -v postgresai && postgresai --help
     - rm -f .pgwatch-config
-    - node ./cli/dist/bin/postgres-ai.js add-key "test_key_1234567890"
-    - node ./cli/dist/bin/postgres-ai.js show-key | grep -E "\*{2,}|[0-9]{4}$"
+    - node ./cli/dist/bin/postgres-ai.js auth login --set-key "test_key_1234567890"
+    - node ./cli/dist/bin/postgres-ai.js auth show-key | grep -E "\*{2,}|[0-9]{4}$"
     - test -f ~/.config/postgresai/config.json
     - grep -q 'test_key' ~/.config/postgresai/config.json
-    - node ./cli/dist/bin/postgres-ai.js remove-key
+    - node ./cli/dist/bin/postgres-ai.js auth remove-key
     - if grep -q 'apiKey' ~/.config/postgresai/config.json; then echo 'key not removed' && exit 1; fi
     - node ./cli/dist/bin/postgres-ai.js mon targets list | head -n 1 || true
     - node ./cli/dist/bin/postgres-ai.js mon targets add 'postgresql://user:pass@host:5432/db' ci-test || true
