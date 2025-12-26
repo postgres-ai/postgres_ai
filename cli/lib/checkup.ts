@@ -1,10 +1,40 @@
 /**
- * Express checkup module - generates JSON reports directly from PostgreSQL
- * without going through Prometheus.
- *
- * IMPORTANT: SQL queries for H001, H002, H004 are loaded from config/pgwatch-prometheus/metrics.yml
- * to avoid code duplication. DO NOT copy-paste metric extraction SQL here.
- * Use getMetricSql() from metrics-loader.ts instead.
+ * Express Checkup Module
+ * ======================
+ * Generates JSON health check reports directly from PostgreSQL without Prometheus.
+ * 
+ * ARCHITECTURAL DECISIONS
+ * -----------------------
+ * 
+ * 1. SINGLE SOURCE OF TRUTH FOR SQL QUERIES
+ *    All SQL queries MUST be loaded from config/pgwatch-prometheus/metrics.yml
+ *    via getMetricSql() from metrics-loader.ts.
+ * 
+ *    DO NOT copy-paste or inline SQL queries in this file!
+ * 
+ *    The metrics.yml file is the single source of truth for metric extraction
+ *    logic, shared between:
+ *    - Full-fledged monitoring (Prometheus/pgwatch)
+ *    - Express checkup (this CLI tool)
+ * 
+ *    This ensures consistency and avoids maintenance burden of duplicate queries.
+ * 
+ * 2. JSON SCHEMA COMPLIANCE
+ *    All generated reports MUST comply with JSON schemas in reporter/schemas/.
+ *    These schemas define the expected format for both:
+ *    - Full-fledged monitoring reporter output
+ *    - Express checkup output
+ * 
+ *    Before adding or modifying a report, verify the corresponding schema exists
+ *    and ensure the output matches. Run schema validation tests to confirm.
+ * 
+ * ADDING NEW REPORTS
+ * ------------------
+ * 1. Add/verify the metric exists in config/pgwatch-prometheus/metrics.yml
+ * 2. Add the metric name mapping to METRIC_NAMES in metrics-loader.ts
+ * 3. Verify JSON schema exists in reporter/schemas/{CHECK_ID}.schema.json
+ * 4. Implement the generator function using getMetricSql()
+ * 5. Add schema validation test in test/schema-validation.test.ts
  */
 
 import { Client } from "pg";
