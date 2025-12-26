@@ -2,8 +2,22 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003, M001, M002, M003, N001)
-by querying Prometheus metrics using PromQL queries.
+This script generates JSON reports containing Observations for specific PostgreSQL
+check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004,
+K001, K003, M001, M002, M003, N001) by querying Prometheus metrics using PromQL.
+
+IMPORTANT: Scope of this module
+-------------------------------
+This module ONLY generates JSON reports with raw Observations (data collected
+from Prometheus/PostgreSQL). The following are explicitly OUT OF SCOPE:
+
+  - Converting JSON reports to other formats (Markdown, HTML, PDF, etc.)
+  - Generating Conclusions based on Observations
+  - Generating Recommendations based on Conclusions
+  - Any report rendering or presentation logic
+
+These responsibilities are handled by separate components in the system.
+The JSON output from this module serves as input for downstream processing.
 """
 
 __version__ = "1.0.2"
