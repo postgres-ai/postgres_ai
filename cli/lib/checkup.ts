@@ -143,73 +143,73 @@ export const METRICS_SQL = {
   // From metrics.yml: settings metric
   // Queries pg_settings for all configuration parameters
   settings: `
-    SELECT
+    select
       name,
       setting,
-      COALESCE(unit, '') as unit,
+      coalesce(unit, '') as unit,
       category,
       context,
       vartype,
-      CASE
-        WHEN unit = '8kB' THEN pg_size_pretty(setting::bigint * 8192)
-        WHEN unit = 'kB' THEN pg_size_pretty(setting::bigint * 1024)
-        WHEN unit = 'MB' THEN pg_size_pretty(setting::bigint * 1024 * 1024)
-        WHEN unit = 'B' THEN pg_size_pretty(setting::bigint)
-        WHEN unit = 'ms' THEN setting || ' ms'
-        WHEN unit = 's' THEN setting || ' s'
-        WHEN unit = 'min' THEN setting || ' min'
-        ELSE setting
-      END as pretty_value,
+      case
+        when unit = '8kB' then pg_size_pretty(setting::bigint * 8192)
+        when unit = 'kB' then pg_size_pretty(setting::bigint * 1024)
+        when unit = 'MB' then pg_size_pretty(setting::bigint * 1024 * 1024)
+        when unit = 'B' then pg_size_pretty(setting::bigint)
+        when unit = 'ms' then setting || ' ms'
+        when unit = 's' then setting || ' s'
+        when unit = 'min' then setting || ' min'
+        else setting
+      end as pretty_value,
       source,
-      CASE WHEN source <> 'default' THEN 0 ELSE 1 END as is_default
-    FROM pg_settings
-    ORDER BY name
+      case when source <> 'default' then 0 else 1 end as is_default
+    from pg_settings
+    order by name
   `,
 
   // Altered settings - non-default values only (A007)
   alteredSettings: `
-    SELECT
+    select
       name,
       setting,
-      COALESCE(unit, '') as unit,
+      coalesce(unit, '') as unit,
       category,
-      CASE
-        WHEN unit = '8kB' THEN pg_size_pretty(setting::bigint * 8192)
-        WHEN unit = 'kB' THEN pg_size_pretty(setting::bigint * 1024)
-        WHEN unit = 'MB' THEN pg_size_pretty(setting::bigint * 1024 * 1024)
-        WHEN unit = 'B' THEN pg_size_pretty(setting::bigint)
-        WHEN unit = 'ms' THEN setting || ' ms'
-        WHEN unit = 's' THEN setting || ' s'
-        WHEN unit = 'min' THEN setting || ' min'
-        ELSE setting
-      END as pretty_value
-    FROM pg_settings
-    WHERE source <> 'default'
-    ORDER BY name
+      case
+        when unit = '8kB' then pg_size_pretty(setting::bigint * 8192)
+        when unit = 'kB' then pg_size_pretty(setting::bigint * 1024)
+        when unit = 'MB' then pg_size_pretty(setting::bigint * 1024 * 1024)
+        when unit = 'B' then pg_size_pretty(setting::bigint)
+        when unit = 'ms' then setting || ' ms'
+        when unit = 's' then setting || ' s'
+        when unit = 'min' then setting || ' min'
+        else setting
+      end as pretty_value
+    from pg_settings
+    where source <> 'default'
+    order by name
   `,
 
   // Version info - extracts server_version and server_version_num
   version: `
-    SELECT
+    select
       name,
       setting
-    FROM pg_settings
-    WHERE name IN ('server_version', 'server_version_num')
+    from pg_settings
+    where name in ('server_version', 'server_version_num')
   `,
 
   // Database sizes (A004)
   databaseSizes: `
-    SELECT
+    select
       datname,
       pg_database_size(datname) as size_bytes
-    FROM pg_database
-    WHERE datistemplate = false
-    ORDER BY size_bytes DESC
+    from pg_database
+    where datistemplate = false
+    order by size_bytes desc
   `,
 
   // Cluster statistics (A004)
   clusterStats: `
-    SELECT
+    select
       sum(numbackends) as total_connections,
       sum(xact_commit) as total_commits,
       sum(xact_rollback) as total_rollbacks,
@@ -223,22 +223,22 @@ export const METRICS_SQL = {
       sum(deadlocks) as total_deadlocks,
       sum(temp_files) as temp_files_created,
       sum(temp_bytes) as temp_bytes_written
-    FROM pg_stat_database
-    WHERE datname IS NOT NULL
+    from pg_stat_database
+    where datname is not null
   `,
 
   // Connection states (A004)
   connectionStates: `
-    SELECT
-      COALESCE(state, 'null') as state,
+    select
+      coalesce(state, 'null') as state,
       count(*) as count
-    FROM pg_stat_activity
-    GROUP BY state
+    from pg_stat_activity
+    group by state
   `,
 
   // Uptime info (A004)
   uptimeInfo: `
-    SELECT
+    select
       pg_postmaster_start_time() as start_time,
       current_timestamp - pg_postmaster_start_time() as uptime
   `,
@@ -246,88 +246,88 @@ export const METRICS_SQL = {
   // Invalid indexes (H001) - indexes where indisvalid = false
   // Matches H001.schema.json invalidIndex structure
   invalidIndexes: `
-    WITH fk_indexes AS (
-      SELECT
+    with fk_indexes as (
+      select
         n.nspname as schema_name,
         ci.relname as index_name,
         cr.relname as table_name,
         (confrelid::regclass)::text as fk_table_ref,
         array_to_string(indclass, ', ') as opclasses
-      FROM pg_index i
-      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
-      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
-      JOIN pg_namespace n ON n.oid = ci.relnamespace
-      JOIN pg_constraint cn ON cn.conrelid = cr.oid
-      WHERE cn.contype = 'f'
-        AND i.indisunique = false
+      from pg_index i
+      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
+      join pg_namespace n on n.oid = ci.relnamespace
+      join pg_constraint cn on cn.conrelid = cr.oid
+      where cn.contype = 'f'
+        and i.indisunique = false
     )
-    SELECT
+    select
       n.nspname as schema_name,
       t.relname as table_name,
       i.relname as index_name,
-      COALESCE(NULLIF(quote_ident(n.nspname), 'public') || '.', '') || quote_ident(t.relname) as relation_name,
+      coalesce(nullif(quote_ident(n.nspname), 'public') || '.', '') || quote_ident(t.relname) as relation_name,
       pg_relation_size(i.oid) as index_size_bytes,
       (
-        SELECT COUNT(1) > 0
-        FROM fk_indexes fi
-        WHERE fi.fk_table_ref = t.relname
-          AND fi.schema_name = n.nspname
+        select count(1) > 0
+        from fk_indexes fi
+        where fi.fk_table_ref = t.relname
+          and fi.schema_name = n.nspname
       ) as supports_fk
-    FROM pg_index idx
-    JOIN pg_class i ON i.oid = idx.indexrelid
-    JOIN pg_class t ON t.oid = idx.indrelid
-    JOIN pg_namespace n ON n.oid = t.relnamespace
-    WHERE idx.indisvalid = false
-      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-    ORDER BY pg_relation_size(i.oid) DESC
+    from pg_index idx
+    join pg_class i on i.oid = idx.indexrelid
+    join pg_class t on t.oid = idx.indrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where idx.indisvalid = false
+      and n.nspname not in ('pg_catalog', 'information_schema')
+    order by pg_relation_size(i.oid) desc
   `,
 
   // Unused indexes (H002) - indexes with zero scans, excluding unique/PK indexes
   // Matches H002.schema.json unusedIndex structure
   unusedIndexes: `
-    WITH fk_indexes AS (
-      SELECT
+    with fk_indexes as (
+      select
         n.nspname as schema_name,
         ci.relname as index_name,
         cr.relname as table_name,
         (confrelid::regclass)::text as fk_table_ref,
         array_to_string(indclass, ', ') as opclasses
-      FROM pg_index i
-      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
-      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
-      JOIN pg_namespace n ON n.oid = ci.relnamespace
-      JOIN pg_constraint cn ON cn.conrelid = cr.oid
-      LEFT JOIN pg_stat_all_indexes si ON si.indexrelid = i.indexrelid
-      WHERE cn.contype = 'f'
-        AND i.indisunique = false
-        AND cn.conkey IS NOT NULL
-        AND ci.relpages > 0
-        AND COALESCE(si.idx_scan, 0) < 10
+      from pg_index i
+      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
+      join pg_namespace n on n.oid = ci.relnamespace
+      join pg_constraint cn on cn.conrelid = cr.oid
+      left join pg_stat_all_indexes si on si.indexrelid = i.indexrelid
+      where cn.contype = 'f'
+        and i.indisunique = false
+        and cn.conkey is not null
+        and ci.relpages > 0
+        and coalesce(si.idx_scan, 0) < 10
     ),
-    indexes AS (
-      SELECT
+    indexes as (
+      select
         i.indrelid,
         i.indexrelid,
         n.nspname as schema_name,
         cr.relname as table_name,
         ci.relname as index_name,
         pg_get_indexdef(i.indexrelid) as index_definition,
-        COALESCE(si.idx_scan, 0) as idx_scan,
+        coalesce(si.idx_scan, 0) as idx_scan,
         pg_relation_size(i.indexrelid) as index_size_bytes,
-        (CASE WHEN a.amname = 'btree' THEN true ELSE false END) as idx_is_btree,
+        (case when a.amname = 'btree' then true else false end) as idx_is_btree,
         array_to_string(i.indclass, ', ') as opclasses
-      FROM pg_index i
-      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
-      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
-      JOIN pg_namespace n ON n.oid = ci.relnamespace
-      JOIN pg_am a ON ci.relam = a.oid
-      LEFT JOIN pg_stat_all_indexes si ON si.indexrelid = i.indexrelid
-      WHERE i.indisunique = false
-        AND i.indisvalid = true
-        AND ci.relpages > 0
-        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+      from pg_index i
+      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
+      join pg_namespace n on n.oid = ci.relnamespace
+      join pg_am a on ci.relam = a.oid
+      left join pg_stat_all_indexes si on si.indexrelid = i.indexrelid
+      where i.indisunique = false
+        and i.indisvalid = true
+        and ci.relpages > 0
+        and n.nspname not in ('pg_catalog', 'information_schema')
     )
-    SELECT
+    select
       'Never Used Indexes' as reason,
       i.schema_name,
       i.table_name,
@@ -337,134 +337,136 @@ export const METRICS_SQL = {
       i.index_size_bytes,
       i.idx_is_btree,
       (
-        SELECT COUNT(1) > 0
-        FROM fk_indexes fi
-        WHERE fi.fk_table_ref = i.table_name
-          AND fi.schema_name = i.schema_name
-          AND fi.opclasses LIKE (i.opclasses || '%')
+        select count(1) > 0
+        from fk_indexes fi
+        where fi.fk_table_ref = i.table_name
+          and fi.schema_name = i.schema_name
+          and fi.opclasses like (i.opclasses || '%')
       ) as supports_fk
-    FROM indexes i
-    WHERE i.idx_scan = 0
-      AND i.idx_is_btree
-    ORDER BY i.index_size_bytes DESC
-    LIMIT 50
+    from indexes i
+    where i.idx_scan = 0
+      and i.idx_is_btree
+    order by i.index_size_bytes desc
+    limit 50
   `,
 
   // Stats reset info for H002
   statsReset: `
-    SELECT
-      EXTRACT(EPOCH FROM stats_reset) as stats_reset_epoch,
+    select
+      extract(epoch from stats_reset) as stats_reset_epoch,
       stats_reset::text as stats_reset_time,
-      EXTRACT(DAY FROM (now() - stats_reset))::integer as days_since_reset,
-      EXTRACT(EPOCH FROM pg_postmaster_start_time()) as postmaster_startup_epoch,
+      extract(day from (now() - stats_reset))::integer as days_since_reset,
+      extract(epoch from pg_postmaster_start_time()) as postmaster_startup_epoch,
       pg_postmaster_start_time()::text as postmaster_startup_time
-    FROM pg_stat_database
-    WHERE datname = current_database()
+    from pg_stat_database
+    where datname = current_database()
   `,
 
   // Redundant indexes (H004) - indexes covered by other indexes
   // Matches H004.schema.json redundantIndex structure
   redundantIndexes: `
-    WITH fk_indexes AS (
-      SELECT
+    with fk_indexes as (
+      select
         n.nspname as schema_name,
         ci.relname as index_name,
         cr.relname as table_name,
         (confrelid::regclass)::text as fk_table_ref,
         array_to_string(indclass, ', ') as opclasses
-      FROM pg_index i
-      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
-      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
-      JOIN pg_namespace n ON n.oid = ci.relnamespace
-      JOIN pg_constraint cn ON cn.conrelid = cr.oid
-      LEFT JOIN pg_stat_all_indexes si ON si.indexrelid = i.indexrelid
-      WHERE cn.contype = 'f'
-        AND i.indisunique = false
-        AND cn.conkey IS NOT NULL
-        AND ci.relpages > 0
-        AND COALESCE(si.idx_scan, 0) < 10
+      from pg_index i
+      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
+      join pg_namespace n on n.oid = ci.relnamespace
+      join pg_constraint cn on cn.conrelid = cr.oid
+      left join pg_stat_all_indexes si on si.indexrelid = i.indexrelid
+      where cn.contype = 'f'
+        and i.indisunique = false
+        and cn.conkey is not null
+        and ci.relpages > 0
+        and coalesce(si.idx_scan, 0) < 10
     ),
-    index_data AS (
-      SELECT
+    index_data as (
+      select
         i.*,
         ci.oid as index_oid,
         indkey::text as columns,
         array_to_string(indclass, ', ') as opclasses
-      FROM pg_index i
-      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
-      WHERE indisvalid = true AND ci.relpages > 0
+      from pg_index i
+      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
+      where indisvalid = true
+        and ci.relpages > 0
     ),
-    redundant_indexes AS (
-      SELECT
+    redundant_indexes as (
+      select
         i2.indexrelid as index_id,
         tnsp.nspname as schema_name,
         trel.relname as table_name,
-        COALESCE(NULLIF(quote_ident(tnsp.nspname), 'public') || '.', '') || quote_ident(trel.relname) as relation_name,
+        coalesce(nullif(quote_ident(tnsp.nspname), 'public') || '.', '') || quote_ident(trel.relname) as relation_name,
         pg_relation_size(trel.oid) as table_size_bytes,
         irel.relname as index_name,
         am1.amname as access_method,
         (i1.indexrelid::regclass)::text as reason,
         pg_relation_size(i2.indexrelid) as index_size_bytes,
-        COALESCE(s.idx_scan, 0) as index_usage,
+        coalesce(s.idx_scan, 0) as index_usage,
         pg_get_indexdef(i2.indexrelid) as index_definition,
         i2.opclasses
-      FROM (
-        SELECT indrelid, indexrelid, opclasses, indclass, indexprs, indpred, indisprimary, indisunique, columns
-        FROM index_data
-        ORDER BY indexrelid
-      ) AS i1
-      JOIN index_data AS i2 ON (
+      from (
+        select indrelid, indexrelid, opclasses, indclass, indexprs, indpred, indisprimary, indisunique, columns
+        from index_data
+        order by indexrelid
+      ) as i1
+      join index_data as i2 on (
         i1.indrelid = i2.indrelid
-        AND i1.indexrelid <> i2.indexrelid
+        and i1.indexrelid <> i2.indexrelid
       )
-      INNER JOIN pg_opclass op1 ON i1.indclass[0] = op1.oid
-      INNER JOIN pg_opclass op2 ON i2.indclass[0] = op2.oid
-      INNER JOIN pg_am am1 ON op1.opcmethod = am1.oid
-      INNER JOIN pg_am am2 ON op2.opcmethod = am2.oid
-      LEFT JOIN pg_stat_all_indexes s ON s.indexrelid = i2.indexrelid
-      JOIN pg_class trel ON trel.oid = i2.indrelid
-      JOIN pg_namespace tnsp ON trel.relnamespace = tnsp.oid
-      JOIN pg_class irel ON irel.oid = i2.indexrelid
-      WHERE NOT i2.indisprimary
-        AND NOT i2.indisunique
-        AND am1.amname = am2.amname
-        AND i1.columns LIKE (i2.columns || '%')
-        AND i1.opclasses LIKE (i2.opclasses || '%')
-        AND pg_get_expr(i1.indexprs, i1.indrelid) IS NOT DISTINCT FROM pg_get_expr(i2.indexprs, i2.indrelid)
-        AND pg_get_expr(i1.indpred, i1.indrelid) IS NOT DISTINCT FROM pg_get_expr(i2.indpred, i2.indrelid)
-        AND tnsp.nspname NOT IN ('pg_catalog', 'information_schema')
+      inner join pg_opclass op1 on i1.indclass[0] = op1.oid
+      inner join pg_opclass op2 on i2.indclass[0] = op2.oid
+      inner join pg_am am1 on op1.opcmethod = am1.oid
+      inner join pg_am am2 on op2.opcmethod = am2.oid
+      left join pg_stat_all_indexes s on s.indexrelid = i2.indexrelid
+      join pg_class trel on trel.oid = i2.indrelid
+      join pg_namespace tnsp on trel.relnamespace = tnsp.oid
+      join pg_class irel on irel.oid = i2.indexrelid
+      where not i2.indisprimary
+        and not i2.indisunique
+        and am1.amname = am2.amname
+        and i1.columns like (i2.columns || '%')
+        and i1.opclasses like (i2.opclasses || '%')
+        and pg_get_expr(i1.indexprs, i1.indrelid) is not distinct from pg_get_expr(i2.indexprs, i2.indrelid)
+        and pg_get_expr(i1.indpred, i1.indrelid) is not distinct from pg_get_expr(i2.indpred, i2.indrelid)
+        and tnsp.nspname not in ('pg_catalog', 'information_schema')
     ),
-    redundant_with_fk AS (
-      SELECT
+    redundant_with_fk as (
+      select
         ri.*,
         (
-          SELECT COUNT(1) > 0
-          FROM fk_indexes fi
-          WHERE fi.fk_table_ref = ri.table_name
-            AND fi.opclasses LIKE (ri.opclasses || '%')
+          select count(1) > 0
+          from fk_indexes fi
+          where fi.fk_table_ref = ri.table_name
+            and fi.opclasses like (ri.opclasses || '%')
         ) as supports_fk
-      FROM redundant_indexes ri
+      from redundant_indexes ri
     ),
-    numbered AS (
-      SELECT ROW_NUMBER() OVER () as num, r.*
-      FROM redundant_with_fk r
+    numbered as (
+      select row_number() over () as num, r.*
+      from redundant_with_fk r
     ),
-    with_links AS (
-      SELECT
+    with_links as (
+      select
         n1.*,
         n2.num as r_num
-      FROM numbered n1
-      LEFT JOIN numbered n2 ON n2.index_id = (
-        SELECT indexrelid FROM pg_index WHERE indexrelid::regclass::text = n1.reason
-      ) AND (
-        SELECT indexrelid FROM pg_index WHERE indexrelid::regclass::text = n2.reason
+      from numbered n1
+      left join numbered n2 on n2.index_id = (
+        select indexrelid from pg_index where indexrelid::regclass::text = n1.reason
+      ) and (
+        select indexrelid from pg_index where indexrelid::regclass::text = n2.reason
       ) = n1.index_id
     ),
-    deduped AS (
-      SELECT * FROM with_links
-      WHERE num < r_num OR r_num IS NULL
+    deduped as (
+      select * from with_links
+      where num < r_num
+        or r_num is null
     )
-    SELECT DISTINCT ON (index_id)
+    select distinct on (index_id)
       schema_name,
       table_name,
       index_name,
@@ -476,9 +478,9 @@ export const METRICS_SQL = {
       index_usage,
       supports_fk,
       index_definition
-    FROM deduped
-    ORDER BY index_id, index_size_bytes DESC
-    LIMIT 50
+    from deduped
+    order by index_id, index_size_bytes desc
+    limit 50
   `,
 };
 

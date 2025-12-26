@@ -44,7 +44,7 @@ function createMockClient(options: {
 
   return {
     query: async (sql: string) => {
-      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("ORDER BY")) {
+      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("order by")) {
         return { rows: versionRows };
       }
       if (sql.includes("current_database()") && sql.includes("pg_database_size")) {
@@ -65,7 +65,7 @@ function createMockClient(options: {
       if (sql.includes("Never Used Indexes") && sql.includes("idx_scan = 0")) {
         return { rows: unusedIndexesRows };
       }
-      if (sql.includes("redundant_indexes") && sql.includes("columns LIKE")) {
+      if (sql.includes("redundant_indexes") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
       }
       throw new Error(`Unexpected query: ${sql}`);

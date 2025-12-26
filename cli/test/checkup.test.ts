@@ -46,15 +46,15 @@ function createMockClient(versionRows: any[], settingsRows: any[], options: Mock
   return {
     query: async (sql: string) => {
       // Version query (used by many reports)
-      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("ORDER BY")) {
+      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("order by")) {
         return { rows: versionRows };
       }
       // Full settings query (A003)
-      if (sql.includes("pg_settings") && sql.includes("ORDER BY") && sql.includes("is_default")) {
+      if (sql.includes("pg_settings") && sql.includes("order by") && sql.includes("is_default")) {
         return { rows: settingsRows };
       }
       // Altered settings query (A007)
-      if (sql.includes("pg_settings") && sql.includes("WHERE source <> 'default'")) {
+      if (sql.includes("pg_settings") && sql.includes("where source <> 'default'")) {
         return { rows: alteredSettingsRows };
       }
       // Database sizes (A004)
@@ -96,7 +96,7 @@ function createMockClient(versionRows: any[], settingsRows: any[], options: Mock
         return { rows: unusedIndexesRows };
       }
       // Redundant indexes (H004)
-      if (sql.includes("redundant_indexes") && sql.includes("columns LIKE")) {
+      if (sql.includes("redundant_indexes") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
       }
       throw new Error(`Unexpected query: ${sql}`);
@@ -307,7 +307,7 @@ describe("METRICS_SQL", () => {
   test("redundantIndexes queries for covered indexes", () => {
     expect(checkup.METRICS_SQL.redundantIndexes).toContain("pg_index");
     expect(checkup.METRICS_SQL.redundantIndexes).toContain("redundant_indexes");
-    expect(checkup.METRICS_SQL.redundantIndexes).toContain("columns LIKE");
+    expect(checkup.METRICS_SQL.redundantIndexes).toContain("columns like");
   });
 });
 
