@@ -40,6 +40,8 @@
     "@types/bun": "^1.1.14",
     "@types/js-yaml": "^4.0.9",
     "@types/pg": "^8.15.6",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "typescript": "^5.3.3"
   },
   "publishConfig": {
