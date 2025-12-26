@@ -22,7 +22,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\" && cp -r sql dist/",
+    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\"",
     "prepublishOnly": "npm run build",
     "start": "bun ./bin/postgres-ai.ts --help",
     "start:node": "node ./dist/bin/postgres-ai.js --help",
@@ -33,12 +33,10 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
     "commander": "^12.1.0",
-    "js-yaml": "^4.1.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
-    "@types/js-yaml": "^4.0.9",
     "@types/pg": "^8.15.6",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
