@@ -268,12 +268,21 @@ test(
       );
       assert.equal(idxOk.rows[0].ok, true);
       const viewOk = await c.query(
-        "select has_table_privilege('postgres_ai_mon', 'public.pg_statistic', 'SELECT') as ok"
+        "select has_table_privilege('postgres_ai_mon', 'postgres_ai.pg_statistic', 'SELECT') as ok"
       );
       assert.equal(viewOk.rows[0].ok, true);
+      const explainFnOk = await c.query(
+        "select has_function_privilege('postgres_ai_mon', 'postgres_ai.explain_generic(text, text, text)', 'EXECUTE') as ok"
+      );
+      assert.equal(explainFnOk.rows[0].ok, true);
+      const tableDescribeFnOk = await c.query(
+        "select has_function_privilege('postgres_ai_mon', 'postgres_ai.table_describe(text)', 'EXECUTE') as ok"
+      );
+      assert.equal(tableDescribeFnOk.rows[0].ok, true);
       const sp = await c.query("select rolconfig from pg_roles where rolname='postgres_ai_mon'");
       assert.ok(Array.isArray(sp.rows[0].rolconfig));
       assert.ok(sp.rows[0].rolconfig.some((v) => String(v).includes("search_path=")));
+      assert.ok(sp.rows[0].rolconfig.some((v) => String(v).includes("postgres_ai")));
       await c.end();
     }
 
@@ -377,6 +386,150 @@ test("integration: prepare-db --reset-password updates the monitoring role login
     assert.equal(ok.rows[0].ok, 1);
     await c.end();
   }
+});
+
+test("integration: table_describe works with different object types", { skip: !havePostgresBinaries() }, async (t) => {
+  const pg = await withTempPostgres(t);
+  const { Client } = require("pg");
+
+  // Run init first
+  {
+    const r = await runCliInit([pg.adminUri, "--password", "pw1", "--skip-optional-permissions"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+  }
+
+  const c = new Client({ connectionString: pg.adminUri });
+  await c.connect();
+
+  // Create test objects
+  await c.query(`
+    -- Regular table with various features
+    create table test_table (
+      id serial primary key,
+      name text not null,
+      email text unique,
+      status text default 'active' check (status in ('active', 'inactive')),
+      created_at timestamptz default now()
+    );
+    create index test_table_name_idx on test_table(name);
+
+    -- Another table with FK
+    create table test_child (
+      id serial primary key,
+      parent_id int references test_table(id)
+    );
+
+    -- Partitioned table
+    create table test_partitioned (
+      id serial,
+      created_at date not null,
+      data text
+    ) partition by range (created_at);
+
+    create table test_partitioned_2024 partition of test_partitioned
+      for values from ('2024-01-01') to ('2025-01-01');
+    create table test_partitioned_2025 partition of test_partitioned
+      for values from ('2025-01-01') to ('2026-01-01');
+
+    -- View
+    create view test_view as select id, name from test_table where status = 'active';
+
+    -- Materialized view
+    create materialized view test_matview as select id, name from test_table;
+    create unique index test_matview_id_idx on test_matview(id);
+
+    -- Sequence (for error test)
+    create sequence test_seq;
+  `);
+
+  // Test regular table
+  {
+    const res = await c.query("select postgres_ai.table_describe('test_table')");
+    const output = res.rows[0].result;
+    assert.match(output, /Table: "public"\."test_table"/);
+    assert.match(output, /Type: table/);
+    assert.match(output, /relpages:/);
+    assert.match(output, /reltuples:/);
+    assert.match(output, /Columns:/);
+    assert.match(output, /id integer NOT NULL/);
+    assert.match(output, /name text NOT NULL/);
+    assert.match(output, /email text/);
+    assert.match(output, /status text.*DEFAULT/);
+    assert.match(output, /Indexes:/);
+    assert.match(output, /PRIMARY KEY:/);
+    assert.match(output, /UNIQUE:/);
+    assert.match(output, /INDEX:.*test_table_name_idx/);
+    assert.match(output, /Constraints:/);
+    assert.match(output, /CHECK:/);
+    assert.match(output, /Referenced by:/);
+    assert.match(output, /test_child/);
+  }
+
+  // Test partitioned table
+  {
+    const res = await c.query("select postgres_ai.table_describe('test_partitioned')");
+    const output = res.rows[0].result;
+    assert.match(output, /Type: partitioned table/);
+    assert.match(output, /Partitioning:/);
+    assert.match(output, /RANGE BY/);
+    assert.match(output, /test_partitioned_2024/);
+    assert.match(output, /test_partitioned_2025/);
+    assert.match(output, /Total partitions: 2/);
+  }
+
+  // Test partition
+  {
+    const res = await c.query("select postgres_ai.table_describe('test_partitioned_2024')");
+    const output = res.rows[0].result;
+    assert.match(output, /Type: table/);
+    assert.match(output, /Partition of:/);
+    assert.match(output, /test_partitioned/);
+    assert.match(output, /FOR VALUES/);
+  }
+
+  // Test view
+  {
+    const res = await c.query("select postgres_ai.table_describe('test_view')");
+    const output = res.rows[0].result;
+    assert.match(output, /Type: view/);
+    assert.match(output, /Columns:/);
+    assert.match(output, /Definition:/);
+    assert.match(output, /SELECT.*FROM.*test_table/i);
+    // Views should NOT have Indexes or Constraints sections
+    assert.doesNotMatch(output, /^Indexes:/m);
+    assert.doesNotMatch(output, /^Constraints:/m);
+  }
+
+  // Test materialized view
+  {
+    const res = await c.query("select postgres_ai.table_describe('test_matview')");
+    const output = res.rows[0].result;
+    assert.match(output, /Type: materialized view/);
+    assert.match(output, /Columns:/);
+    assert.match(output, /Definition:/);
+    assert.match(output, /Indexes:/);
+    assert.match(output, /UNIQUE:.*test_matview_id_idx/);
+    // Mat views should NOT have Constraints section
+    assert.doesNotMatch(output, /^Constraints:/m);
+  }
+
+  // Test sequence (should error)
+  {
+    await assert.rejects(
+      c.query("select postgres_ai.table_describe('test_seq')"),
+      /table_describe does not support sequences/
+    );
+  }
+
+  // Test index (should error)
+  {
+    await assert.rejects(
+      c.query("select postgres_ai.table_describe('test_table_name_idx')"),
+      /table_describe does not support indexes/
+    );
+  }
+
+  await c.end();
 });
 
 

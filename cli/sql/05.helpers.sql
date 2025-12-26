@@ -1,0 +1,415 @@
+-- Helper functions for postgres_ai monitoring user (template-filled by cli/lib/init.ts)
+-- These functions use SECURITY DEFINER to allow the monitoring user to perform
+-- operations they don't have direct permissions for.
+
+/*
+ * pgai_explain_generic
+ *
+ * Function to get generic explain plans with optional HypoPG index testing.
+ * Requires: PostgreSQL 16+ (for generic_plan option), HypoPG extension (optional).
+ *
+ * Usage examples:
+ *   -- Basic generic plan
+ *   select postgres_ai.explain_generic('select * from users where id = $1');
+ *
+ *   -- JSON format
+ *   select postgres_ai.explain_generic('select * from users where id = $1', 'json');
+ *
+ *   -- Test a hypothetical index
+ *   select postgres_ai.explain_generic(
+ *     'select * from users where email = $1',
+ *     'text',
+ *     'create index on users (email)'
+ *   );
+ */
+create or replace function postgres_ai.explain_generic(
+  in query text,
+  in format text default 'text',
+  in hypopg_index text default null,
+  out result text
+)
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_line record;
+  v_lines text[] := '{}';
+  v_explain_query text;
+  v_hypo_result record;
+  v_version int;
+  v_hypopg_available boolean;
+begin
+  -- Check PostgreSQL version (generic_plan requires 16+)
+  select current_setting('server_version_num')::int into v_version;
+
+  if v_version < 160000 then
+    raise exception 'generic_plan requires PostgreSQL 16+, current version: %',
+      current_setting('server_version');
+  end if;
+
+  -- Check if HypoPG extension is available
+  if hypopg_index is not null then
+    select exists(
+      select 1 from pg_extension where extname = 'hypopg'
+    ) into v_hypopg_available;
+
+    if not v_hypopg_available then
+      raise exception 'HypoPG extension is required for hypothetical index testing but is not installed';
+    end if;
+
+    -- Create hypothetical index
+    select * into v_hypo_result from hypopg_create_index(hypopg_index);
+    raise notice 'Created hypothetical index: % (oid: %)',
+      v_hypo_result.indexname, v_hypo_result.indexrelid;
+  end if;
+
+  -- Build and execute explain query based on format
+  -- Output is preserved exactly as EXPLAIN returns it
+  begin
+    if lower(format) = 'json' then
+      v_explain_query := 'explain (verbose, settings, generic_plan, format json) ' || query;
+      execute v_explain_query into result;
+    else
+      v_explain_query := 'explain (verbose, settings, generic_plan) ' || query;
+      for v_line in execute v_explain_query loop
+        v_lines := array_append(v_lines, v_line."QUERY PLAN");
+      end loop;
+      result := array_to_string(v_lines, e'\n');
+    end if;
+  exception when others then
+    -- Clean up hypothetical index before re-raising
+    if hypopg_index is not null then
+      perform hypopg_reset();
+    end if;
+    raise;
+  end;
+
+  -- Clean up hypothetical index
+  if hypopg_index is not null then
+    perform hypopg_reset();
+  end if;
+end;
+$$;
+
+comment on function postgres_ai.explain_generic(text, text, text) is
+  'Returns generic EXPLAIN plan with optional HypoPG index testing (requires PG16+)';
+
+-- Grant execute to the monitoring user
+grant execute on function postgres_ai.explain_generic(text, text, text) to {{ROLE_IDENT}};
+
+/*
+ * table_describe
+ *
+ * Collects comprehensive information about a table for LLM analysis.
+ * Returns a compact text format with:
+ * - Table metadata (type, size estimates)
+ * - Columns (name, type, nullable, default)
+ * - Indexes
+ * - Constraints (PK, FK, unique, check)
+ * - Maintenance stats (vacuum/analyze times)
+ *
+ * Usage:
+ *   select postgres_ai.table_describe('public.users');
+ *   select postgres_ai.table_describe('my_table');  -- uses search_path
+ */
+create or replace function postgres_ai.table_describe(
+  in table_name text,
+  out result text
+)
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_oid oid;
+  v_schema text;
+  v_table text;
+  v_relkind char;
+  v_relpages int;
+  v_reltuples float;
+  v_lines text[] := '{}';
+  v_line text;
+  v_rec record;
+  v_constraint_count int := 0;
+begin
+  -- Resolve table name to OID (handles schema-qualified and search_path)
+  v_oid := table_name::regclass::oid;
+
+  -- Get basic table info
+  select
+    n.nspname,
+    c.relname,
+    c.relkind,
+    c.relpages,
+    c.reltuples
+  into v_schema, v_table, v_relkind, v_relpages, v_reltuples
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where c.oid = v_oid;
+
+  -- Validate object type - only tables, views, and materialized views are supported
+  if v_relkind not in ('r', 'p', 'v', 'm', 'f') then
+    raise exception 'table_describe does not support % (relkind=%)',
+      case v_relkind
+        when 'i' then 'indexes'
+        when 'I' then 'partitioned indexes'
+        when 'S' then 'sequences'
+        when 't' then 'TOAST tables'
+        when 'c' then 'composite types'
+        else format('objects of type "%s"', v_relkind)
+      end,
+      v_relkind;
+  end if;
+
+  -- Header
+  v_lines := array_append(v_lines, format('Table: %I.%I', v_schema, v_table));
+  v_lines := array_append(v_lines, format('Type: %s | relpages: %s | reltuples: %s',
+    case v_relkind
+      when 'r' then 'table'
+      when 'p' then 'partitioned table'
+      when 'v' then 'view'
+      when 'm' then 'materialized view'
+      when 'f' then 'foreign table'
+    end,
+    v_relpages,
+    case when v_reltuples < 0 then '-1' else v_reltuples::bigint::text end
+  ));
+
+  -- Vacuum/analyze stats (only for tables and materialized views, not views)
+  if v_relkind in ('r', 'p', 'm', 'f') then
+    select
+      format('Vacuum: %s (auto: %s) | Analyze: %s (auto: %s)',
+        coalesce(to_char(last_vacuum at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS UTC'), 'never'),
+        coalesce(to_char(last_autovacuum at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS UTC'), 'never'),
+        coalesce(to_char(last_analyze at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS UTC'), 'never'),
+        coalesce(to_char(last_autoanalyze at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS UTC'), 'never')
+      )
+    into v_line
+    from pg_stat_all_tables
+    where relid = v_oid;
+
+    if v_line is not null then
+      v_lines := array_append(v_lines, v_line);
+    end if;
+  end if;
+
+  v_lines := array_append(v_lines, '');
+
+  -- Columns
+  v_lines := array_append(v_lines, 'Columns:');
+  for v_rec in
+    select
+      a.attname,
+      format_type(a.atttypid, a.atttypmod) as data_type,
+      a.attnotnull,
+      (select pg_get_expr(d.adbin, d.adrelid, true)
+       from pg_attrdef d
+       where d.adrelid = a.attrelid and d.adnum = a.attnum and a.atthasdef) as default_val,
+      a.attidentity,
+      a.attgenerated
+    from pg_attribute a
+    where a.attrelid = v_oid
+      and a.attnum > 0
+      and not a.attisdropped
+    order by a.attnum
+  loop
+    v_line := format('  %s %s', v_rec.attname, v_rec.data_type);
+
+    if v_rec.attnotnull then
+      v_line := v_line || ' NOT NULL';
+    end if;
+
+    if v_rec.attidentity = 'a' then
+      v_line := v_line || ' GENERATED ALWAYS AS IDENTITY';
+    elsif v_rec.attidentity = 'd' then
+      v_line := v_line || ' GENERATED BY DEFAULT AS IDENTITY';
+    elsif v_rec.attgenerated = 's' then
+      v_line := v_line || format(' GENERATED ALWAYS AS (%s) STORED', v_rec.default_val);
+    elsif v_rec.default_val is not null then
+      v_line := v_line || format(' DEFAULT %s', v_rec.default_val);
+    end if;
+
+    v_lines := array_append(v_lines, v_line);
+  end loop;
+
+  -- View definition (for views and materialized views)
+  if v_relkind in ('v', 'm') then
+    v_lines := array_append(v_lines, '');
+    v_lines := array_append(v_lines, 'Definition:');
+    v_line := pg_get_viewdef(v_oid, true);
+    if v_line is not null then
+      -- Indent the view definition
+      v_line := '  ' || replace(v_line, e'\n', e'\n  ');
+      v_lines := array_append(v_lines, v_line);
+    end if;
+  end if;
+
+  -- Indexes (tables, partitioned tables, and materialized views can have indexes)
+  if v_relkind in ('r', 'p', 'm') then
+    v_lines := array_append(v_lines, '');
+    v_lines := array_append(v_lines, 'Indexes:');
+    for v_rec in
+      select
+        i.relname as index_name,
+        pg_get_indexdef(i.oid) as index_def,
+        ix.indisprimary,
+        ix.indisunique
+      from pg_index ix
+      join pg_class i on i.oid = ix.indexrelid
+      where ix.indrelid = v_oid
+      order by ix.indisprimary desc, ix.indisunique desc, i.relname
+    loop
+      v_line := '  ';
+      if v_rec.indisprimary then
+        v_line := v_line || 'PRIMARY KEY: ';
+      elsif v_rec.indisunique then
+        v_line := v_line || 'UNIQUE: ';
+      else
+        v_line := v_line || 'INDEX: ';
+      end if;
+      -- Extract just the column part from index definition
+      v_line := v_line || v_rec.index_name || ' ' ||
+        regexp_replace(v_rec.index_def, '^CREATE.*INDEX.*ON.*USING\s+\w+\s*', '');
+      v_lines := array_append(v_lines, v_line);
+    end loop;
+
+    if not exists (select 1 from pg_index where indrelid = v_oid) then
+      v_lines := array_append(v_lines, '  (none)');
+    end if;
+  end if;
+
+  -- Constraints (only tables can have constraints)
+  if v_relkind in ('r', 'p', 'f') then
+    v_lines := array_append(v_lines, '');
+    v_lines := array_append(v_lines, 'Constraints:');
+    v_constraint_count := 0;
+
+    for v_rec in
+      select
+        conname,
+        contype,
+        pg_get_constraintdef(oid, true) as condef
+      from pg_constraint
+      where conrelid = v_oid
+        and contype != 'p'  -- skip primary key (shown with indexes)
+      order by
+        case contype when 'f' then 1 when 'u' then 2 when 'c' then 3 else 4 end,
+        conname
+    loop
+      v_constraint_count := v_constraint_count + 1;
+      v_line := '  ';
+      case v_rec.contype
+        when 'f' then v_line := v_line || 'FK: ';
+        when 'u' then v_line := v_line || 'UNIQUE: ';
+        when 'c' then v_line := v_line || 'CHECK: ';
+        else v_line := v_line || v_rec.contype || ': ';
+      end case;
+      v_line := v_line || v_rec.conname || ' ' || v_rec.condef;
+      v_lines := array_append(v_lines, v_line);
+    end loop;
+
+    if v_constraint_count = 0 then
+      v_lines := array_append(v_lines, '  (none)');
+    end if;
+
+    -- Foreign keys referencing this table
+    v_lines := array_append(v_lines, '');
+    v_lines := array_append(v_lines, 'Referenced by:');
+    v_constraint_count := 0;
+
+    for v_rec in
+      select
+        conname,
+        conrelid::regclass::text as from_table,
+        pg_get_constraintdef(oid, true) as condef
+      from pg_constraint
+      where confrelid = v_oid
+        and contype = 'f'
+      order by conrelid::regclass::text, conname
+    loop
+      v_constraint_count := v_constraint_count + 1;
+      v_lines := array_append(v_lines, format('  %s.%s %s',
+        v_rec.from_table, v_rec.conname, v_rec.condef));
+    end loop;
+
+    if v_constraint_count = 0 then
+      v_lines := array_append(v_lines, '  (none)');
+    end if;
+  end if;
+
+  -- Partition info (if partitioned table or partition)
+  if v_relkind = 'p' then
+    -- This is a partitioned table - show partition key and partitions
+    v_lines := array_append(v_lines, '');
+    v_lines := array_append(v_lines, 'Partitioning:');
+
+    select format('  %s BY %s',
+      case partstrat
+        when 'r' then 'RANGE'
+        when 'l' then 'LIST'
+        when 'h' then 'HASH'
+        else partstrat
+      end,
+      pg_get_partkeydef(v_oid)
+    )
+    into v_line
+    from pg_partitioned_table
+    where partrelid = v_oid;
+
+    if v_line is not null then
+      v_lines := array_append(v_lines, v_line);
+    end if;
+
+    -- List partitions
+    v_constraint_count := 0;
+    for v_rec in
+      select
+        c.oid::regclass::text as partition_name,
+        pg_get_expr(c.relpartbound, c.oid) as partition_bound,
+        c.relpages,
+        c.reltuples
+      from pg_inherits i
+      join pg_class c on c.oid = i.inhrelid
+      where i.inhparent = v_oid
+      order by c.oid::regclass::text
+    loop
+      v_constraint_count := v_constraint_count + 1;
+      v_lines := array_append(v_lines, format('  %s: %s (relpages: %s, reltuples: %s)',
+        v_rec.partition_name, v_rec.partition_bound,
+        v_rec.relpages,
+        case when v_rec.reltuples < 0 then '-1' else v_rec.reltuples::bigint::text end
+      ));
+    end loop;
+
+    v_lines := array_append(v_lines, format('  Total partitions: %s', v_constraint_count));
+
+  elsif exists (select 1 from pg_inherits where inhrelid = v_oid) then
+    -- This is a partition - show parent and bound
+    v_lines := array_append(v_lines, '');
+    v_lines := array_append(v_lines, 'Partition of:');
+
+    select format('  %s FOR VALUES %s',
+      i.inhparent::regclass::text,
+      pg_get_expr(c.relpartbound, c.oid)
+    )
+    into v_line
+    from pg_inherits i
+    join pg_class c on c.oid = i.inhrelid
+    where i.inhrelid = v_oid;
+
+    if v_line is not null then
+      v_lines := array_append(v_lines, v_line);
+    end if;
+  end if;
+
+  result := array_to_string(v_lines, e'\n');
+end;
+$$;
+
+comment on function postgres_ai.table_describe(text) is
+  'Returns comprehensive table information in compact text format for LLM analysis';
+
+grant execute on function postgres_ai.table_describe(text) to {{ROLE_IDENT}};
+
+

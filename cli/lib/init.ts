@@ -485,6 +485,12 @@ end $$;`;
     sql: applyTemplate(loadSqlTemplate("02.permissions.sql"), vars),
   });
 
+  // Helper functions (SECURITY DEFINER) for plan analysis and table info
+  steps.push({
+    name: "05.helpers",
+    sql: applyTemplate(loadSqlTemplate("05.helpers.sql"), vars),
+  });
+
   if (params.includeOptionalPermissions) {
     steps.push(
       {
@@ -511,78 +517,70 @@ export async function applyInitPlan(params: {
   const applied: string[] = [];
   const skippedOptional: string[] = [];
 
-  // Apply non-optional steps in a single transaction.
-  await params.client.query("begin;");
-  try {
-    for (const step of params.plan.steps.filter((s) => !s.optional)) {
-      try {
-        await params.client.query(step.sql, step.params as any);
-        applied.push(step.name);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        const errAny = e as any;
-        const wrapped: any = new Error(`Failed at step "${step.name}": ${msg}`);
-        // Preserve useful Postgres error fields so callers can provide better hints / diagnostics.
-        const pgErrorFields = [
-          "code",
-          "detail",
-          "hint",
-          "position",
-          "internalPosition",
-          "internalQuery",
-          "where",
-          "schema",
-          "table",
-          "column",
-          "dataType",
-          "constraint",
-          "file",
-          "line",
-          "routine",
-        ] as const;
-        if (errAny && typeof errAny === "object") {
-          for (const field of pgErrorFields) {
-            if (errAny[field] !== undefined) wrapped[field] = errAny[field];
-          }
-        }
-        if (e instanceof Error && e.stack) {
-          wrapped.stack = e.stack;
-        }
-        throw wrapped;
-      }
-    }
-    await params.client.query("commit;");
-  } catch (e) {
-    // Rollback errors should never mask the original failure.
+  // Helper to wrap a step execution in begin/commit
+  const executeStep = async (step: InitStep): Promise<void> => {
+    await params.client.query("begin;");
     try {
-      await params.client.query("rollback;");
-    } catch {
-      // ignore
+      await params.client.query(step.sql, step.params as any);
+      await params.client.query("commit;");
+    } catch (e) {
+      // Rollback errors should never mask the original failure.
+      try {
+        await params.client.query("rollback;");
+      } catch {
+        // ignore
+      }
+      throw e;
     }
-    throw e;
+  };
+
+  // Apply non-optional steps, each in its own transaction
+  for (const step of params.plan.steps.filter((s) => !s.optional)) {
+    try {
+      await executeStep(step);
+      applied.push(step.name);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const errAny = e as any;
+      const wrapped: any = new Error(`Failed at step "${step.name}": ${msg}`);
+      // Preserve useful Postgres error fields so callers can provide better hints / diagnostics.
+      const pgErrorFields = [
+        "code",
+        "detail",
+        "hint",
+        "position",
+        "internalPosition",
+        "internalQuery",
+        "where",
+        "schema",
+        "table",
+        "column",
+        "dataType",
+        "constraint",
+        "file",
+        "line",
+        "routine",
+      ] as const;
+      if (errAny && typeof errAny === "object") {
+        for (const field of pgErrorFields) {
+          if (errAny[field] !== undefined) wrapped[field] = errAny[field];
+        }
+      }
+      if (e instanceof Error && e.stack) {
+        wrapped.stack = e.stack;
+      }
+      throw wrapped;
+    }
   }
 
-  // Apply optional steps outside of the transaction so a failure doesn't abort everything.
+  // Apply optional steps, each in its own transaction (failure doesn't abort)
   for (const step of params.plan.steps.filter((s) => s.optional)) {
     try {
-      // Run each optional step in its own mini-transaction to avoid partial application.
-      await params.client.query("begin;");
-      try {
-        await params.client.query(step.sql, step.params as any);
-        await params.client.query("commit;");
-        applied.push(step.name);
-      } catch {
-        try {
-          await params.client.query("rollback;");
-        } catch {
-          // ignore rollback errors
-        }
-        skippedOptional.push(step.name);
-        // best-effort: ignore
-      }
+      await executeStep(step);
+      applied.push(step.name);
     } catch {
-      // If we can't even begin/commit, treat as skipped.
       skippedOptional.push(step.name);
+      // best-effort: ignore
     }
   }
 
@@ -642,16 +640,25 @@ export async function verifyInitSetup(params: {
       missingRequired.push("SELECT on pg_catalog.pg_index");
     }
 
-    const viewExistsRes = await params.client.query("select to_regclass('public.pg_statistic') is not null as ok");
+    // Check postgres_ai schema exists and is usable
+    const schemaExistsRes = await params.client.query(
+      "select has_schema_privilege($1, 'postgres_ai', 'USAGE') as ok",
+      [role]
+    );
+    if (!schemaExistsRes.rows?.[0]?.ok) {
+      missingRequired.push("USAGE on schema postgres_ai");
+    }
+
+    const viewExistsRes = await params.client.query("select to_regclass('postgres_ai.pg_statistic') is not null as ok");
     if (!viewExistsRes.rows?.[0]?.ok) {
-      missingRequired.push("view public.pg_statistic exists");
+      missingRequired.push("view postgres_ai.pg_statistic exists");
     } else {
       const viewPrivRes = await params.client.query(
-        "select has_table_privilege($1, 'public.pg_statistic', 'SELECT') as ok",
+        "select has_table_privilege($1, 'postgres_ai.pg_statistic', 'SELECT') as ok",
         [role]
       );
       if (!viewPrivRes.rows?.[0]?.ok) {
-        missingRequired.push("SELECT on view public.pg_statistic");
+        missingRequired.push("SELECT on view postgres_ai.pg_statistic");
       }
     }
 
@@ -669,11 +676,28 @@ export async function verifyInitSetup(params: {
     if (typeof spLine !== "string" || !spLine) {
       missingRequired.push("role search_path is set");
     } else {
-      // We accept any ordering as long as public and pg_catalog are included.
+      // We accept any ordering as long as postgres_ai, public, and pg_catalog are included.
       const sp = spLine.toLowerCase();
-      if (!sp.includes("public") || !sp.includes("pg_catalog")) {
-        missingRequired.push("role search_path includes public and pg_catalog");
+      if (!sp.includes("postgres_ai") || !sp.includes("public") || !sp.includes("pg_catalog")) {
+        missingRequired.push("role search_path includes postgres_ai, public and pg_catalog");
       }
+    }
+
+    // Check for helper functions
+    const explainFnRes = await params.client.query(
+      "select has_function_privilege($1, 'postgres_ai.explain_generic(text, text, text)', 'EXECUTE') as ok",
+      [role]
+    );
+    if (!explainFnRes.rows?.[0]?.ok) {
+      missingRequired.push("EXECUTE on postgres_ai.explain_generic(text, text, text)");
+    }
+
+    const tableDescribeFnRes = await params.client.query(
+      "select has_function_privilege($1, 'postgres_ai.table_describe(text)', 'EXECUTE') as ok",
+      [role]
+    );
+    if (!tableDescribeFnRes.rows?.[0]?.ok) {
+      missingRequired.push("EXECUTE on postgres_ai.table_describe(text)");
     }
 
     if (params.includeOptionalPermissions) {
