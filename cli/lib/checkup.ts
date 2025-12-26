@@ -86,19 +86,6 @@ export interface UnusedIndex {
 }
 
 /**
- * Non-indexed foreign key entry (H003)
- */
-export interface NonIndexedForeignKey {
-  schema_name: string;
-  table_name: string;
-  fk_name: string;
-  fk_definition: string;
-  table_size_bytes: number;
-  table_size_pretty: string;
-  referenced_table: string;
-}
-
-/**
  * Redundant index entry (H004)
  */
 export interface RedundantIndex {
@@ -343,59 +330,6 @@ export const METRICS_SQL = {
     WHERE i.idx_scan = 0
       AND i.idx_is_btree
     ORDER BY i.index_size_bytes DESC
-    LIMIT 50
-  `,
-
-  // Non-indexed foreign keys (H003)
-  nonIndexedForeignKeys: `
-    WITH fk_list AS (
-      SELECT
-        n.nspname as schema_name,
-        t.relname as table_name,
-        c.conname as fk_name,
-        pg_get_constraintdef(c.oid) as fk_definition,
-        c.conkey as fk_columns,
-        c.confrelid as ref_table_oid
-      FROM pg_constraint c
-      JOIN pg_class t ON t.oid = c.conrelid
-      JOIN pg_namespace n ON n.oid = t.relnamespace
-      WHERE c.contype = 'f'
-        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-    ),
-    indexed_fks AS (
-      SELECT DISTINCT
-        fk.schema_name,
-        fk.table_name,
-        fk.fk_name
-      FROM fk_list fk
-      JOIN pg_index idx ON idx.indrelid = (
-        SELECT oid FROM pg_class 
-        WHERE relname = fk.table_name 
-          AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = fk.schema_name)
-      )
-      WHERE fk.fk_columns::text[] <@ (
-        SELECT array_agg(a ORDER BY ord)
-        FROM unnest(idx.indkey) WITH ORDINALITY AS u(a, ord)
-        WHERE a != 0
-      )
-    )
-    SELECT
-      fk.schema_name,
-      fk.table_name,
-      fk.fk_name,
-      fk.fk_definition,
-      pg_relation_size(t.oid) as table_size_bytes,
-      (SELECT relname FROM pg_class WHERE oid = fk.ref_table_oid) as referenced_table
-    FROM fk_list fk
-    JOIN pg_class t ON t.relname = fk.table_name
-      AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = fk.schema_name)
-    WHERE NOT EXISTS (
-      SELECT 1 FROM indexed_fks ifk
-      WHERE ifk.schema_name = fk.schema_name
-        AND ifk.table_name = fk.table_name
-        AND ifk.fk_name = fk.fk_name
-    )
-    ORDER BY pg_relation_size(t.oid) DESC
     LIMIT 50
   `,
 
@@ -795,22 +729,6 @@ export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
 }
 
 /**
- * Get non-indexed foreign keys (H003)
- */
-export async function getNonIndexedForeignKeys(client: Client): Promise<NonIndexedForeignKey[]> {
-  const result = await client.query(METRICS_SQL.nonIndexedForeignKeys);
-  return result.rows.map((row) => ({
-    schema_name: row.schema_name,
-    table_name: row.table_name,
-    fk_name: row.fk_name,
-    fk_definition: row.fk_definition,
-    table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
-    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
-    referenced_table: row.referenced_table,
-  }));
-}
-
-/**
  * Get redundant indexes (H004)
  */
 export async function getRedundantIndexes(client: Client): Promise<RedundantIndex[]> {
@@ -1026,28 +944,6 @@ export async function generateH002(client: Client, nodeName: string = "node-01")
 }
 
 /**
- * Generate H003 report - Non-indexed foreign keys
- */
-export async function generateH003(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("H003", "Non-indexed foreign keys", nodeName);
-  const nonIndexedFKs = await getNonIndexedForeignKeys(client);
-  const postgresVersion = await getPostgresVersion(client);
-
-  // Calculate totals
-  const totalCount = nonIndexedFKs.length;
-
-  report.results[nodeName] = {
-    data: {
-      non_indexed_fks: nonIndexedFKs,
-      total_count: totalCount,
-    },
-    postgres_version: postgresVersion,
-  };
-
-  return report;
-}
-
-/**
  * Generate H004 report - Redundant indexes
  */
 export async function generateH004(client: Client, nodeName: string = "node-01"): Promise<Report> {
@@ -1083,7 +979,6 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   A013: generateA013,
   H001: generateH001,
   H002: generateH002,
-  H003: generateH003,
   H004: generateH004,
 };
 
@@ -1098,7 +993,6 @@ export const CHECK_INFO: Record<string, string> = {
   A013: "Postgres minor version",
   H001: "Invalid indexes",
   H002: "Unused indexes",
-  H003: "Non-indexed foreign keys",
   H004: "Redundant indexes",
 };
 

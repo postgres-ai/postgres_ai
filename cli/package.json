@@ -22,7 +22,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && bun build ./lib/checkup.ts --outfile ./dist/lib/checkup.js --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\" && cp -r sql dist/",
+    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\" && cp -r sql dist/",
     "prepublishOnly": "npm run build",
     "start": "bun ./bin/postgres-ai.ts --help",
     "start:node": "node ./dist/bin/postgres-ai.js --help",
