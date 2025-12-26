@@ -22,6 +22,19 @@
   "links": [],
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 7,
+      "panels": [],
+      "title": "Size stats",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "P7A0D6631BB10B34F"
@@ -39,7 +52,458 @@
             "axisPlacement": "auto",
             "axisSoftMin": 0,
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "pgwatch_pg_class_relation_size_bytes{relkind=\"105\", cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\", relname=\"$index_name\"}",
+          "interval": "20",
+          "legendFormat": "Size",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Index size",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 2,
+      "panels": [],
+      "title": "Index usage stats",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
             "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_stat_all_indexes_idx_scan{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\", indexrelname=\"$index_name\"}[$__rate_interval])",
+          "interval": "20",
+          "legendFormat": "Scans",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Index scans",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_stat_all_indexes_idx_tup_read{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\", indexrelname=\"$index_name\"}[$__rate_interval])",
+          "interval": "20",
+          "legendFormat": "Tuples read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_stat_all_indexes_idx_tup_fetch{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\", indexrelname=\"$index_name\"}[$__rate_interval])",
+          "interval": "20",
+          "legendFormat": "Tuples fetched",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Tuples read and fetched",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 9,
+      "panels": [],
+      "title": "IO stats",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_indexes_idx_blks_read{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\", indexrelname=\"$index_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", setting_name=\"block_size\"}[1d])",
+          "interval": "20",
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "irate(pgwatch_pg_statio_all_indexes_idx_blks_hit{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\", indexrelname=\"$index_name\"}[$__rate_interval]) * on() group_left() last_over_time(pgwatch_settings_numeric_value{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", setting_name=\"block_size\"}[1d])",
+          "interval": "20",
+          "legendFormat": "Hit",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Index reads and hits (bytes)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 8,
+      "panels": [],
+      "title": "Estimated bloat stats",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P7A0D6631BB10B34F"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -164,7 +628,7 @@
         "h": 18,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 34
       },
       "id": 1,
       "options": {
@@ -267,16 +731,16 @@
     "list": [
       {
         "current": {
-          "text": "workloaddb",
-          "value": "workloaddb"
+          "text": "default",
+          "value": "default"
         },
-        "definition": "label_values(pgwatch_pg_index_pilot_best_ratio,datname)",
-        "label": "DB name",
-        "name": "datname",
+        "definition": "label_values(pgwatch_db_size_size_b,cluster)",
+        "label": "Cluster name",
+        "name": "cluster_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_pg_index_pilot_best_ratio,datname)",
+          "query": "label_values(pgwatch_db_size_size_b,cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -285,15 +749,52 @@
       },
       {
         "current": {
-          "text": "test_pilot",
-          "value": "test_pilot"
+          "text": "postgres_ai",
+          "value": "postgres_ai"
         },
-        "definition": "label_values(pgwatch_pg_index_pilot_estimated_tuples,schemaname)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
+        "label": "Node name",
+        "name": "node_name",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "workloaddb",
+          "value": "workloaddb"
+        },
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "label": "DB name",
+        "name": "datname",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "public",
+          "value": "public"
+        },
+        "definition": "label_values(pgwatch_pg_stat_all_indexes_idx_scan{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\"},schemaname)",
+        "label": "Schema name",
         "name": "schema_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_pg_index_pilot_estimated_tuples,schemaname)",
+          "query": "label_values(pgwatch_pg_stat_all_indexes_idx_scan{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\"},schemaname)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -305,12 +806,13 @@
           "text": "items_email_idx",
           "value": "items_email_idx"
         },
-        "definition": "label_values(pgwatch_pg_index_pilot_estimated_tuples{schemaname=\"$schema_name\"},indexrelname)",
+        "definition": "label_values(pgwatch_pg_stat_all_indexes_idx_scan{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\"},indexrelname)",
+        "label": "Index name",
         "name": "index_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_pg_index_pilot_estimated_tuples{schemaname=\"$schema_name\"},indexrelname)",
+          "query": "label_values(pgwatch_pg_stat_all_indexes_idx_scan{cluster=\"$cluster_name\", node_name=\"$node_name\", datname=\"$datname\", schemaname=\"$schema_name\"},indexrelname)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -327,5 +829,5 @@
   "timezone": "browser",
   "title": "11. Single index analysis",
   "uid": "aa0128c5-c5a0-4418-a99e-c941af10426e",
-  "version": 4
+  "version": 6
 }
