@@ -112,12 +112,24 @@ export function getMetricSql(metricName: string, pgMajorVersion: number = 16): s
 }
 
 /**
- * Metric names in metrics.yml that correspond to health checks
+ * Metric names in metrics.yml that correspond to express report checks.
+ * These map check IDs to metric names in config/pgwatch-prometheus/metrics.yml.
  */
 export const METRIC_NAMES = {
+  // Index health checks
   H001: "pg_invalid_indexes",
   H002: "unused_indexes", 
   H004: "redundant_indexes",
+  // Express report metrics
+  version: "express_version",
+  settings: "express_settings",
+  alteredSettings: "express_altered_settings",
+  databaseSizes: "express_database_sizes",
+  clusterStats: "express_cluster_stats",
+  connectionStates: "express_connection_states",
+  uptimeInfo: "express_uptime",
+  statsReset: "express_stats_reset",
+  currentDatabase: "express_current_database",
 } as const;
 
 /**
