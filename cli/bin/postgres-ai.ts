@@ -1914,11 +1914,21 @@ auth
         return;
       }
       
+      // Read existing config to check for defaultProject before updating
+      const existingConfig = config.readConfig();
+      const existingProject = existingConfig.defaultProject;
+      
       config.writeConfig({ apiKey: trimmedKey });
-      // When API key is set directly, invalidate org/project selection
-      // as it likely belongs to a different account/session.
-      config.deleteConfigKeys(["orgId", "defaultProject"]);
+      // When API key is set directly, only clear orgId (org selection may differ).
+      // Preserve defaultProject to avoid orphaning historical reports.
+      // If the new key lacks access to the project, upload will fail with a clear error.
+      config.deleteConfigKeys(["orgId"]);
+      
       console.log(`API key saved to ${config.getConfigPath()}`);
+      if (existingProject) {
+        console.log(`Note: Your default project "${existingProject}" has been preserved.`);
+        console.log(`      If this key belongs to a different account, use --project to specify a new one.`);
+      }
       return;
     }
 
