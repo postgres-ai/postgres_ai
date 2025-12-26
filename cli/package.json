@@ -33,10 +33,12 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
     "commander": "^12.1.0",
+    "js-yaml": "^4.1.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
+    "@types/js-yaml": "^4.0.9",
     "@types/pg": "^8.15.6",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
