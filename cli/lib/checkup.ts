@@ -186,11 +186,15 @@ export function parseVersionNum(versionNum: string): { major: string; minor: str
 }
 
 /**
- * Format bytes to human readable string
+ * Format bytes to human readable string using binary units (1024-based).
+ * Uses IEC standard: KiB, MiB, GiB, etc.
+ * 
+ * Note: PostgreSQL's pg_size_pretty() uses kB/MB/GB with 1024 base (technically
+ * incorrect SI usage), but we follow IEC binary units per project style guide.
  */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
-  const units = ["B", "kB", "MB", "GB", "TB", "PB"];
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
 }
