@@ -149,6 +149,23 @@ test("buildInitPlan includes optional steps when enabled", async () => {
   assert.ok(plan.steps.some((s) => s.optional));
 });
 
+test("buildInitPlan includes helpers step with explain_generic and table_describe functions", async () => {
+  const plan = await init.buildInitPlan({
+    database: "mydb",
+    monitoringUser: DEFAULT_MONITORING_USER,
+    monitoringPassword: "pw",
+    includeOptionalPermissions: false,
+  });
+
+  const helpersStep = plan.steps.find((s) => s.name === "05.helpers");
+  assert.ok(helpersStep, "05.helpers step should exist");
+  assert.match(helpersStep.sql, /postgres_ai\.explain_generic/i);
+  assert.match(helpersStep.sql, /postgres_ai\.table_describe/i);
+  assert.match(helpersStep.sql, /security definer/i);
+  assert.match(helpersStep.sql, /grant execute on function.*explain_generic/i);
+  assert.match(helpersStep.sql, /grant execute on function.*table_describe/i);
+});
+
 test("resolveAdminConnection accepts positional URI", () => {
   const r = init.resolveAdminConnection({ conn: "postgresql://u:p@h:5432/d" });
   assert.ok(r.clientConfig.connectionString);
@@ -236,7 +253,41 @@ test("applyInitPlan preserves Postgres error fields on step failures", async () 
     }
   );
 
+  // Each step gets its own begin/commit (or rollback on failure)
   assert.deepEqual(calls, ["begin;", "select 1", "rollback;"]);
+});
+
+test("applyInitPlan wraps each step in its own transaction", async () => {
+  const plan = {
+    monitoringUser: DEFAULT_MONITORING_USER,
+    database: "mydb",
+    steps: [
+      { name: "01.role", sql: "select 1" },
+      { name: "02.permissions", sql: "select 2" },
+    ],
+  };
+
+  const calls = [];
+  const client = {
+    query: async (sql) => {
+      calls.push(sql);
+      if (sql === "begin;") return { rowCount: 1 };
+      if (sql === "commit;") return { rowCount: 1 };
+      if (sql === "select 1") return { rowCount: 1 };
+      if (sql === "select 2") return { rowCount: 1 };
+      throw new Error(`unexpected sql: ${sql}`);
+    },
+  };
+
+  const result = await init.applyInitPlan({ client, plan });
+  assert.deepEqual(result.applied, ["01.role", "02.permissions"]);
+  assert.deepEqual(result.skippedOptional, []);
+
+  // Each step should have its own begin/commit
+  assert.deepEqual(calls, [
+    "begin;", "select 1", "commit;",
+    "begin;", "select 2", "commit;",
+  ]);
 });
 
 test("verifyInitSetup runs inside a repeatable read snapshot and rolls back", async () => {
@@ -252,7 +303,7 @@ test("verifyInitSetup runs inside a repeatable read snapshot and rolls back", as
         return { rowCount: 1, rows: [] };
       }
       if (String(sql).includes("select rolconfig")) {
-        return { rowCount: 1, rows: [{ rolconfig: ['search_path="$user", public, pg_catalog'] }] };
+        return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, "$user", public, pg_catalog'] }] };
       }
       if (String(sql).includes("from pg_catalog.pg_roles")) {
         return { rowCount: 1, rows: [] };
@@ -266,13 +317,19 @@ test("verifyInitSetup runs inside a repeatable read snapshot and rolls back", as
       if (String(sql).includes("has_table_privilege") && String(sql).includes("pg_catalog.pg_index")) {
         return { rowCount: 1, rows: [{ ok: true }] };
       }
-      if (String(sql).includes("to_regclass('public.pg_statistic')")) {
+      if (String(sql).includes("to_regclass('postgres_ai.pg_statistic')")) {
         return { rowCount: 1, rows: [{ ok: true }] };
       }
-      if (String(sql).includes("has_table_privilege") && String(sql).includes("public.pg_statistic")) {
+      if (String(sql).includes("has_table_privilege") && String(sql).includes("postgres_ai.pg_statistic")) {
         return { rowCount: 1, rows: [{ ok: true }] };
       }
       if (String(sql).includes("has_schema_privilege")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("has_function_privilege") && String(sql).includes("postgres_ai.explain_generic")) {
+        return { rowCount: 1, rows: [{ ok: true }] };
+      }
+      if (String(sql).includes("has_function_privilege") && String(sql).includes("postgres_ai.table_describe")) {
         return { rowCount: 1, rows: [{ ok: true }] };
       }
 
