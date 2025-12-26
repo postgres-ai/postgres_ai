@@ -362,18 +362,23 @@ metrics:
       This metric collects various PostgreSQL server settings and configurations.
       It provides insights into the server's configuration, including version, memory settings, and other important parameters.
       This metric is useful for monitoring server settings and ensuring optimal performance.
+      Note: For lock_timeout and statement_timeout, we use reset_val instead of setting because
+      pgwatch overrides these during metric collection, which would mask the actual configured values.
     sqls:
       11: |-
         select /* pgwatch_generated */
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
           name as tag_setting_name,
-          setting as tag_setting_value,
+          -- Use reset_val for lock_timeout/statement_timeout because pgwatch overrides them during
+          -- collection (lock_timeout=100ms, statement_timeout per-metric), masking actual config.
+          case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end as tag_setting_value,
           unit as tag_unit,
           category as tag_category,
           vartype as tag_vartype,
-          case when setting ~ '^-?[0-9]+$' then setting::bigint else null end as numeric_value,
-          case when source <> 'default' then 0 else 1 end as is_default,
+          case when (case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end) ~ '^-?[0-9]+$' then (case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end)::bigint else null end as numeric_value,
+          -- For these settings, compare reset_val with boot_val since source becomes 'session' during collection
+          case when name in ('lock_timeout', 'statement_timeout') then (case when reset_val = boot_val then 1 else 0 end) else (case when source <> 'default' then 0 else 1 end) end as is_default,
           1 as configured
         from pg_settings
     gauges:
