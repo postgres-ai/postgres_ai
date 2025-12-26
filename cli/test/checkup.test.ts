@@ -21,9 +21,9 @@ function runCli(args: string[], env: Record<string, string> = {}) {
 
 // Mock client for testing report generators
 interface MockClientOptions {
-  alteredSettingsRows?: any[];
+  settingsRows?: any[];  // Settings metric rows (tag_setting_name, tag_setting_value, etc.)
   databaseSizesRows?: any[];
-  clusterStatsRows?: any[];
+  dbStatsRows?: any[];  // db_stats metric rows (numbackends, xact_commit, etc.)
   connectionStatesRows?: any[];
   uptimeRows?: any[];
   invalidIndexesRows?: any[];
@@ -31,11 +31,11 @@ interface MockClientOptions {
   redundantIndexesRows?: any[];
 }
 
-function createMockClient(versionRows: any[], settingsRows: any[], options: MockClientOptions = {}) {
+function createMockClient(versionRows: any[], _legacySettingsRows: any[], options: MockClientOptions = {}) {
   const {
-    alteredSettingsRows = [],
+    settingsRows = [],
     databaseSizesRows = [],
-    clusterStatsRows = [],
+    dbStatsRows = [],
     connectionStatesRows = [],
     uptimeRows = [],
     invalidIndexesRows = [],
@@ -45,58 +45,59 @@ function createMockClient(versionRows: any[], settingsRows: any[], options: Mock
 
   return {
     query: async (sql: string) => {
-      // Version query (used by many reports)
-      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("order by")) {
+      // Version query (simple inline - used by getPostgresVersion)
+      if (sql.includes("server_version") && sql.includes("server_version_num") && sql.includes("pg_settings") && !sql.includes("tag_setting_name")) {
         return { rows: versionRows };
       }
-      // Full settings query (A003)
-      if (sql.includes("pg_settings") && sql.includes("order by") && sql.includes("is_default")) {
+      // Settings metric query (from metrics.yml - has tag_setting_name, tag_setting_value)
+      if (sql.includes("tag_setting_name") && sql.includes("tag_setting_value") && sql.includes("pg_settings")) {
         return { rows: settingsRows };
       }
-      // Altered settings query (A007)
-      if (sql.includes("pg_settings") && sql.includes("where source <> 'default'")) {
-        return { rows: alteredSettingsRows };
-      }
-      // Database sizes (A004)
-      if (sql.includes("pg_database") && sql.includes("pg_database_size") && !sql.includes("current_database")) {
+      // Database sizes (simple inline - lists all databases)
+      if (sql.includes("pg_database") && sql.includes("pg_database_size") && sql.includes("datistemplate")) {
         return { rows: databaseSizesRows };
       }
-      // Current database info (H001, H002, H004)
-      if (sql.includes("current_database()") && sql.includes("pg_database_size")) {
-        return { rows: [{ datname: "testdb", size_bytes: "1073741824" }] };
+      // db_size metric (current database size from metrics.yml)
+      if (sql.includes("pg_database_size(current_database())") && sql.includes("size_b")) {
+        return { rows: [{ tag_datname: "testdb", size_b: "1073741824" }] };
       }
-      // Stats reset info (H002)
-      if (sql.includes("stats_reset") && sql.includes("pg_stat_database")) {
+      // db_stats metric (from metrics.yml)
+      if (sql.includes("pg_stat_database") && sql.includes("xact_commit") && sql.includes("pg_control_system")) {
+        return { rows: dbStatsRows };
+      }
+      // Stats reset metric (from metrics.yml)
+      if (sql.includes("stats_reset") && sql.includes("pg_stat_database") && sql.includes("seconds_since_reset")) {
         return { rows: [{ 
+          tag_database_name: "testdb",
           stats_reset_epoch: "1704067200", 
-          stats_reset_time: "2024-01-01 00:00:00+00",
-          days_since_reset: "30",
+          seconds_since_reset: "2592000"  // 30 days in seconds
+        }] };
+      }
+      // Postmaster startup time (simple inline - used by getStatsReset)
+      if (sql.includes("pg_postmaster_start_time") && sql.includes("postmaster_startup_epoch")) {
+        return { rows: [{ 
           postmaster_startup_epoch: "1704067200",
           postmaster_startup_time: "2024-01-01 00:00:00+00"
         }] };
       }
-      // Cluster stats (A004)
-      if (sql.includes("pg_stat_database") && sql.includes("xact_commit")) {
-        return { rows: clusterStatsRows };
-      }
-      // Connection states (A004)
-      if (sql.includes("pg_stat_activity") && sql.includes("state")) {
+      // Connection states (simple inline)
+      if (sql.includes("pg_stat_activity") && sql.includes("state") && sql.includes("group by")) {
         return { rows: connectionStatesRows };
       }
-      // Uptime info (A004)
-      if (sql.includes("pg_postmaster_start_time")) {
+      // Uptime info (simple inline)
+      if (sql.includes("pg_postmaster_start_time()") && sql.includes("uptime") && !sql.includes("postmaster_startup_epoch")) {
         return { rows: uptimeRows };
       }
-      // Invalid indexes (H001)
-      if (sql.includes("indisvalid = false")) {
+      // Invalid indexes (H001) - from metrics.yml
+      if (sql.includes("indisvalid = false") && sql.includes("fk_indexes")) {
         return { rows: invalidIndexesRows };
       }
-      // Unused indexes (H002)
+      // Unused indexes (H002) - from metrics.yml
       if (sql.includes("Never Used Indexes") && sql.includes("idx_scan = 0")) {
         return { rows: unusedIndexesRows };
       }
-      // Redundant indexes (H004)
-      if (sql.includes("redundant_indexes") && sql.includes("columns like")) {
+      // Redundant indexes (H004) - from metrics.yml
+      if (sql.includes("redundant_indexes_grouped") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
       }
       // D004: pg_stat_statements extension check
@@ -348,33 +349,34 @@ describe("Report generators with mock client", () => {
   });
 
   test("getSettings transforms rows to keyed object", async () => {
-    const mockClient = createMockClient([], [
-      {
-        name: "shared_buffers",
-        setting: "16384",
-        unit: "8kB",
-        category: "Resource Usage / Memory",
-        context: "postmaster",
-        vartype: "integer",
-        pretty_value: "128 MB",
-      },
-      {
-        name: "work_mem",
-        setting: "4096",
-        unit: "kB",
-        category: "Resource Usage / Memory",
-        context: "user",
-        vartype: "integer",
-        pretty_value: "4 MB",
-      },
-    ]);
+    const mockClient = createMockClient([], [], {
+      settingsRows: [
+        {
+          tag_setting_name: "shared_buffers",
+          tag_setting_value: "16384",
+          tag_unit: "8kB",
+          tag_category: "Resource Usage / Memory",
+          tag_vartype: "integer",
+          is_default: 1,
+        },
+        {
+          tag_setting_name: "work_mem",
+          tag_setting_value: "4096",
+          tag_unit: "kB",
+          tag_category: "Resource Usage / Memory",
+          tag_vartype: "integer",
+          is_default: 1,
+        },
+      ],
+    });
 
     const settings = await checkup.getSettings(mockClient as any);
     expect("shared_buffers" in settings).toBe(true);
     expect("work_mem" in settings).toBe(true);
     expect(settings.shared_buffers.setting).toBe("16384");
     expect(settings.shared_buffers.unit).toBe("8kB");
-    expect(settings.work_mem.pretty_value).toBe("4 MB");
+    // pretty_value is now computed from unit
+    expect(settings.work_mem.pretty_value).toBe("4.00 MiB");
   });
 
   test("generateA002 creates report with version data", async () => {
@@ -398,17 +400,19 @@ describe("Report generators with mock client", () => {
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [
-        {
-          name: "shared_buffers",
-          setting: "16384",
-          unit: "8kB",
-          category: "Resource Usage / Memory",
-          context: "postmaster",
-          vartype: "integer",
-          pretty_value: "128 MB",
-        },
-      ]
+      [],
+      {
+        settingsRows: [
+          {
+            tag_setting_name: "shared_buffers",
+            tag_setting_value: "16384",
+            tag_unit: "8kB",
+            tag_category: "Resource Usage / Memory",
+            tag_vartype: "integer",
+            is_default: 1,
+          },
+        ],
+      }
     );
 
     const report = await checkup.generateA003(mockClient as any, "test-node");
@@ -441,23 +445,35 @@ describe("Report generators with mock client", () => {
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [
-        {
-          name: "shared_buffers",
-          setting: "16384",
-          unit: "8kB",
-          category: "Resource Usage / Memory",
-          context: "postmaster",
-          vartype: "integer",
-          pretty_value: "128 MB",
-        },
-      ],
+      [],
       {
-        alteredSettingsRows: [
-          { name: "shared_buffers", setting: "16384", unit: "8kB", category: "Resource Usage / Memory", pretty_value: "128 MB" },
+        settingsRows: [
+          {
+            tag_setting_name: "shared_buffers",
+            tag_setting_value: "16384",
+            tag_unit: "8kB",
+            tag_category: "Resource Usage / Memory",
+            tag_vartype: "integer",
+            is_default: 0, // Non-default for A007
+          },
         ],
         databaseSizesRows: [{ datname: "postgres", size_bytes: "1073741824" }],
-        clusterStatsRows: [{ total_connections: 5, total_commits: 100, total_rollbacks: 1, blocks_read: 1000, blocks_hit: 9000, tuples_returned: 500, tuples_fetched: 400, tuples_inserted: 50, tuples_updated: 30, tuples_deleted: 10, total_deadlocks: 0, temp_files_created: 0, temp_bytes_written: 0 }],
+        dbStatsRows: [{ 
+          numbackends: 5, 
+          xact_commit: 100, 
+          xact_rollback: 1, 
+          blks_read: 1000, 
+          blks_hit: 9000, 
+          tup_returned: 500, 
+          tup_fetched: 400, 
+          tup_inserted: 50, 
+          tup_updated: 30, 
+          tup_deleted: 10, 
+          deadlocks: 0, 
+          temp_files: 0, 
+          temp_bytes: 0,
+          postmaster_uptime_s: 864000 
+        }],
         connectionStatesRows: [{ state: "active", count: 2 }, { state: "idle", count: 3 }],
         uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
         invalidIndexesRows: [],
@@ -490,17 +506,19 @@ describe("Report generators with mock client", () => {
 describe("A007 - Altered settings", () => {
   test("getAlteredSettings returns non-default settings", async () => {
     const mockClient = createMockClient([], [], {
-      alteredSettingsRows: [
-        { name: "shared_buffers", setting: "256MB", unit: "", category: "Resource Usage / Memory", pretty_value: "256 MB" },
-        { name: "work_mem", setting: "64MB", unit: "", category: "Resource Usage / Memory", pretty_value: "64 MB" },
+      settingsRows: [
+        { tag_setting_name: "shared_buffers", tag_setting_value: "256MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0 },
+        { tag_setting_name: "work_mem", tag_setting_value: "64MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0 },
+        { tag_setting_name: "default_setting", tag_setting_value: "on", tag_unit: "", tag_category: "Other", tag_vartype: "bool", is_default: 1 },
       ],
     });
 
     const settings = await checkup.getAlteredSettings(mockClient as any);
     expect("shared_buffers" in settings).toBe(true);
     expect("work_mem" in settings).toBe(true);
+    expect("default_setting" in settings).toBe(false);  // Should be filtered out
     expect(settings.shared_buffers.value).toBe("256MB");
-    expect(settings.work_mem.pretty_value).toBe("64 MB");
+    expect(settings.work_mem.value).toBe("64MB");
   });
 
   test("generateA007 creates report with altered settings", async () => {
@@ -511,8 +529,8 @@ describe("A007 - Altered settings", () => {
       ],
       [],
       {
-        alteredSettingsRows: [
-          { name: "max_connections", setting: "200", unit: "", category: "Connections and Authentication", pretty_value: "200" },
+        settingsRows: [
+          { tag_setting_name: "max_connections", tag_setting_value: "200", tag_unit: "", tag_category: "Connections and Authentication", tag_vartype: "integer", is_default: 0 },
         ],
       }
     );
@@ -547,20 +565,21 @@ describe("A004 - Cluster information", () => {
 
   test("getClusterInfo returns cluster metrics", async () => {
     const mockClient = createMockClient([], [], {
-      clusterStatsRows: [{
-        total_connections: 10,
-        total_commits: 1000,
-        total_rollbacks: 5,
-        blocks_read: 500,
-        blocks_hit: 9500,
-        tuples_returned: 5000,
-        tuples_fetched: 4000,
-        tuples_inserted: 100,
-        tuples_updated: 50,
-        tuples_deleted: 25,
-        total_deadlocks: 0,
-        temp_files_created: 2,
-        temp_bytes_written: 1048576,
+      dbStatsRows: [{
+        numbackends: 10,
+        xact_commit: 1000,
+        xact_rollback: 5,
+        blks_read: 500,
+        blks_hit: 9500,
+        tup_returned: 5000,
+        tup_fetched: 4000,
+        tup_inserted: 100,
+        tup_updated: 50,
+        tup_deleted: 25,
+        deadlocks: 0,
+        temp_files: 2,
+        temp_bytes: 1048576,
+        postmaster_uptime_s: 2592000,  // 30 days
       }],
       connectionStatesRows: [
         { state: "active", count: 3 },
@@ -594,20 +613,21 @@ describe("A004 - Cluster information", () => {
         databaseSizesRows: [
           { datname: "postgres", size_bytes: "1073741824" },
         ],
-        clusterStatsRows: [{
-          total_connections: 5,
-          total_commits: 100,
-          total_rollbacks: 1,
-          blocks_read: 100,
-          blocks_hit: 900,
-          tuples_returned: 500,
-          tuples_fetched: 400,
-          tuples_inserted: 50,
-          tuples_updated: 30,
-          tuples_deleted: 10,
-          total_deadlocks: 0,
-          temp_files_created: 0,
-          temp_bytes_written: 0,
+        dbStatsRows: [{
+          numbackends: 5,
+          xact_commit: 100,
+          xact_rollback: 1,
+          blks_read: 100,
+          blks_hit: 900,
+          tup_returned: 500,
+          tup_fetched: 400,
+          tup_inserted: 50,
+          tup_updated: 30,
+          tup_deleted: 10,
+          deadlocks: 0,
+          temp_files: 0,
+          temp_bytes: 0,
+          postmaster_uptime_s: 864000,
         }],
         connectionStatesRows: [{ state: "active", count: 2 }],
         uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
@@ -1015,4 +1035,5 @@ describe("checkup-api", () => {
     expect(text).toMatch(/Hint:/);
   });
 });
+
 

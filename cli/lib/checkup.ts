@@ -7,17 +7,11 @@
  * -----------------------
  * 
  * 1. SINGLE SOURCE OF TRUTH FOR SQL QUERIES
- *    All SQL queries MUST be loaded from config/pgwatch-prometheus/metrics.yml
- *    via getMetricSql() from metrics-loader.ts.
- * 
- *    DO NOT copy-paste or inline SQL queries in this file!
- * 
- *    The metrics.yml file is the single source of truth for metric extraction
- *    logic, shared between:
- *    - Full-fledged monitoring (Prometheus/pgwatch)
- *    - Express checkup (this CLI tool)
- * 
- *    This ensures consistency and avoids maintenance burden of duplicate queries.
+ *    Complex metrics (index health, settings, db_stats) are loaded from 
+ *    config/pgwatch-prometheus/metrics.yml via getMetricSql() from metrics-loader.ts.
+ *    
+ *    Simple queries (version, database list, connection states, uptime) use
+ *    inline SQL as they're trivial and CLI-specific.
  * 
  * 2. JSON SCHEMA COMPLIANCE
  *    All generated reports MUST comply with JSON schemas in reporter/schemas/.
@@ -213,12 +207,48 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
+ * Format a setting value to human-readable form based on its unit
+ */
+function formatSettingValue(setting: string, unit: string | null): string {
+  if (!unit) return setting;
+  
+  try {
+    const numValue = parseInt(setting, 10);
+    if (isNaN(numValue)) return setting;
+    
+    switch (unit) {
+      case "8kB":
+        return formatBytes(numValue * 8192);
+      case "kB":
+        return formatBytes(numValue * 1024);
+      case "MB":
+        return formatBytes(numValue * 1024 * 1024);
+      case "B":
+        return formatBytes(numValue);
+      case "ms":
+        return `${setting} ms`;
+      case "s":
+        return `${setting} s`;
+      case "min":
+        return `${setting} min`;
+      default:
+        return setting;
+    }
+  } catch {
+    return setting;
+  }
+}
+
+/**
  * Get PostgreSQL version information
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_version)
+ * Uses simple inline SQL (trivial query, CLI-specific)
  */
 export async function getPostgresVersion(client: Client): Promise<PostgresVersion> {
-  const sql = getMetricSql(METRIC_NAMES.version);
-  const result = await client.query(sql);
+  const result = await client.query(`
+    select name, setting
+    from pg_settings
+    where name in ('server_version', 'server_version_num')
+  `);
 
   let version = "";
   let serverVersionNum = "";
@@ -243,21 +273,28 @@ export async function getPostgresVersion(client: Client): Promise<PostgresVersio
 
 /**
  * Get all PostgreSQL settings
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_settings)
+ * Uses 'settings' metric from metrics.yml
  */
-export async function getSettings(client: Client): Promise<Record<string, SettingInfo>> {
-  const sql = getMetricSql(METRIC_NAMES.settings);
+export async function getSettings(client: Client, pgMajorVersion: number = 16): Promise<Record<string, SettingInfo>> {
+  const sql = getMetricSql(METRIC_NAMES.settings, pgMajorVersion);
   const result = await client.query(sql);
   const settings: Record<string, SettingInfo> = {};
 
   for (const row of result.rows) {
-    settings[row.name] = {
-      setting: row.setting,
-      unit: row.unit || "",
-      category: row.category,
-      context: row.context,
-      vartype: row.vartype,
-      pretty_value: row.pretty_value,
+    // The settings metric uses tag_setting_name, tag_setting_value, etc.
+    const name = row.tag_setting_name;
+    const settingValue = row.tag_setting_value;
+    const unit = row.tag_unit || "";
+    const category = row.tag_category || "";
+    const vartype = row.tag_vartype || "";
+    
+    settings[name] = {
+      setting: settingValue,
+      unit,
+      category,
+      context: "", // Not available in the monitoring metric
+      vartype,
+      pretty_value: formatSettingValue(settingValue, unit || null),
     };
   }
 
@@ -266,32 +303,46 @@ export async function getSettings(client: Client): Promise<Record<string, Settin
 
 /**
  * Get altered (non-default) PostgreSQL settings
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_altered_settings)
+ * Uses 'settings' metric from metrics.yml and filters for non-default
  */
-export async function getAlteredSettings(client: Client): Promise<Record<string, AlteredSetting>> {
-  const sql = getMetricSql(METRIC_NAMES.alteredSettings);
+export async function getAlteredSettings(client: Client, pgMajorVersion: number = 16): Promise<Record<string, AlteredSetting>> {
+  const sql = getMetricSql(METRIC_NAMES.settings, pgMajorVersion);
   const result = await client.query(sql);
   const settings: Record<string, AlteredSetting> = {};
 
   for (const row of result.rows) {
-    settings[row.name] = {
-      value: row.setting,
-      unit: row.unit || "",
-      category: row.category,
-      pretty_value: row.pretty_value,
-    };
+    // Filter for non-default settings (is_default = 0 means non-default)
+    if (row.is_default === 0 || row.is_default === false) {
+      const name = row.tag_setting_name;
+      const settingValue = row.tag_setting_value;
+      const unit = row.tag_unit || "";
+      const category = row.tag_category || "";
+      
+      settings[name] = {
+        value: settingValue,
+        unit,
+        category,
+        pretty_value: formatSettingValue(settingValue, unit || null),
+      };
+    }
   }
 
   return settings;
 }
 
 /**
- * Get database sizes
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_database_sizes)
+ * Get database sizes (all non-template databases)
+ * Uses simple inline SQL (lists all databases, CLI-specific)
  */
 export async function getDatabaseSizes(client: Client): Promise<Record<string, number>> {
-  const sql = getMetricSql(METRIC_NAMES.databaseSizes);
-  const result = await client.query(sql);
+  const result = await client.query(`
+    select
+      datname,
+      pg_database_size(datname) as size_bytes
+    from pg_database
+    where datistemplate = false
+    order by size_bytes desc
+  `);
   const sizes: Record<string, number> = {};
 
   for (const row of result.rows) {
@@ -303,37 +354,37 @@ export async function getDatabaseSizes(client: Client): Promise<Record<string, n
 
 /**
  * Get cluster general info metrics
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_cluster_stats, express_connection_states, express_uptime)
+ * Uses 'db_stats' metric and inline SQL for connection states/uptime
  */
-export async function getClusterInfo(client: Client): Promise<Record<string, ClusterMetric>> {
+export async function getClusterInfo(client: Client, pgMajorVersion: number = 16): Promise<Record<string, ClusterMetric>> {
   const info: Record<string, ClusterMetric> = {};
 
-  // Get cluster statistics
-  const clusterStatsSql = getMetricSql(METRIC_NAMES.clusterStats);
-  const statsResult = await client.query(clusterStatsSql);
+  // Get database statistics from db_stats metric
+  const dbStatsSql = getMetricSql(METRIC_NAMES.dbStats, pgMajorVersion);
+  const statsResult = await client.query(dbStatsSql);
   if (statsResult.rows.length > 0) {
     const stats = statsResult.rows[0];
 
     info.total_connections = {
-      value: String(stats.total_connections || 0),
+      value: String(stats.numbackends || 0),
       unit: "connections",
-      description: "Total active database connections",
+      description: "Current database connections",
     };
 
     info.total_commits = {
-      value: String(stats.total_commits || 0),
+      value: String(stats.xact_commit || 0),
       unit: "transactions",
       description: "Total committed transactions",
     };
 
     info.total_rollbacks = {
-      value: String(stats.total_rollbacks || 0),
+      value: String(stats.xact_rollback || 0),
       unit: "transactions",
       description: "Total rolled back transactions",
     };
 
-    const blocksHit = parseInt(stats.blocks_hit || "0", 10);
-    const blocksRead = parseInt(stats.blocks_read || "0", 10);
+    const blocksHit = parseInt(stats.blks_hit || "0", 10);
+    const blocksRead = parseInt(stats.blks_read || "0", 10);
     const totalBlocks = blocksHit + blocksRead;
     const cacheHitRatio = totalBlocks > 0 ? ((blocksHit / totalBlocks) * 100).toFixed(2) : "0.00";
 
@@ -356,58 +407,76 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
     };
 
     info.tuples_returned = {
-      value: String(stats.tuples_returned || 0),
+      value: String(stats.tup_returned || 0),
       unit: "rows",
       description: "Total rows returned by queries",
     };
 
     info.tuples_fetched = {
-      value: String(stats.tuples_fetched || 0),
+      value: String(stats.tup_fetched || 0),
       unit: "rows",
       description: "Total rows fetched by queries",
     };
 
     info.tuples_inserted = {
-      value: String(stats.tuples_inserted || 0),
+      value: String(stats.tup_inserted || 0),
       unit: "rows",
       description: "Total rows inserted",
     };
 
     info.tuples_updated = {
-      value: String(stats.tuples_updated || 0),
+      value: String(stats.tup_updated || 0),
       unit: "rows",
       description: "Total rows updated",
     };
 
     info.tuples_deleted = {
-      value: String(stats.tuples_deleted || 0),
+      value: String(stats.tup_deleted || 0),
       unit: "rows",
       description: "Total rows deleted",
     };
 
     info.total_deadlocks = {
-      value: String(stats.total_deadlocks || 0),
+      value: String(stats.deadlocks || 0),
       unit: "deadlocks",
       description: "Total deadlocks detected",
     };
 
     info.temp_files_created = {
-      value: String(stats.temp_files_created || 0),
+      value: String(stats.temp_files || 0),
       unit: "files",
       description: "Total temporary files created",
     };
 
-    const tempBytes = parseInt(stats.temp_bytes_written || "0", 10);
+    const tempBytes = parseInt(stats.temp_bytes || "0", 10);
     info.temp_bytes_written = {
       value: formatBytes(tempBytes),
       unit: "bytes",
       description: "Total temporary file bytes written",
     };
+
+    // Uptime from db_stats
+    if (stats.postmaster_uptime_s) {
+      const uptimeSeconds = parseInt(stats.postmaster_uptime_s, 10);
+      const days = Math.floor(uptimeSeconds / 86400);
+      const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+      const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+      info.uptime = {
+        value: `${days} days ${hours}:${String(minutes).padStart(2, "0")}:${String(uptimeSeconds % 60).padStart(2, "0")}`,
+        unit: "interval",
+        description: "Server uptime",
+      };
+    }
   }
 
-  // Get connection states
-  const connStatesSql = getMetricSql(METRIC_NAMES.connectionStates);
-  const connResult = await client.query(connStatesSql);
+  // Get connection states (simple inline SQL)
+  const connResult = await client.query(`
+    select
+      coalesce(state, 'null') as state,
+      count(*) as count
+    from pg_stat_activity
+    group by state
+  `);
   for (const row of connResult.rows) {
     const stateKey = `connections_${row.state.replace(/\s+/g, "_")}`;
     info[stateKey] = {
@@ -417,12 +486,14 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
     };
   }
 
-  // Get uptime info
-  const uptimeSql = getMetricSql(METRIC_NAMES.uptimeInfo);
-  const uptimeResult = await client.query(uptimeSql);
+  // Get uptime info (simple inline SQL)
+  const uptimeResult = await client.query(`
+    select
+      pg_postmaster_start_time() as start_time,
+      current_timestamp - pg_postmaster_start_time() as uptime
+  `);
   if (uptimeResult.rows.length > 0) {
     const uptime = uptimeResult.rows[0];
-    // pg returns timestamps as strings by default; handle both string and Date
     const startTime = uptime.start_time instanceof Date
       ? uptime.start_time.toISOString()
       : String(uptime.start_time);
@@ -431,11 +502,13 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
       unit: "timestamp",
       description: "PostgreSQL server start time",
     };
-    info.uptime = {
-      value: uptime.uptime,
-      unit: "interval",
-      description: "Server uptime",
-    };
+    if (!info.uptime) {
+      info.uptime = {
+        value: String(uptime.uptime),
+        unit: "interval",
+        description: "Server uptime",
+      };
+    }
   }
 
   return info;
@@ -445,8 +518,8 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
  * Get invalid indexes (H001)
  * SQL loaded from config/pgwatch-prometheus/metrics.yml (pg_invalid_indexes)
  */
-export async function getInvalidIndexes(client: Client): Promise<InvalidIndex[]> {
-  const sql = getMetricSql(METRIC_NAMES.H001);
+export async function getInvalidIndexes(client: Client, pgMajorVersion: number = 16): Promise<InvalidIndex[]> {
+  const sql = getMetricSql(METRIC_NAMES.H001, pgMajorVersion);
   const result = await client.query(sql);
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
@@ -467,8 +540,8 @@ export async function getInvalidIndexes(client: Client): Promise<InvalidIndex[]>
  * Get unused indexes (H002)
  * SQL loaded from config/pgwatch-prometheus/metrics.yml (unused_indexes)
  */
-export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
-  const sql = getMetricSql(METRIC_NAMES.H002);
+export async function getUnusedIndexes(client: Client, pgMajorVersion: number = 16): Promise<UnusedIndex[]> {
+  const sql = getMetricSql(METRIC_NAMES.H002, pgMajorVersion);
   const result = await client.query(sql);
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
@@ -490,35 +563,69 @@ export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
 
 /**
  * Get stats reset info (H002)
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (stats_reset)
  */
-/**
- * Get stats reset info (H002)
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_stats_reset)
- */
-export async function getStatsReset(client: Client): Promise<StatsReset> {
-  const sql = getMetricSql(METRIC_NAMES.statsReset);
+export async function getStatsReset(client: Client, pgMajorVersion: number = 16): Promise<StatsReset> {
+  const sql = getMetricSql(METRIC_NAMES.statsReset, pgMajorVersion);
   const result = await client.query(sql);
   const row = result.rows[0] || {};
+  
+  // The stats_reset metric returns stats_reset_epoch and seconds_since_reset
+  // We need to calculate additional fields
+  const statsResetEpoch = row.stats_reset_epoch ? parseFloat(row.stats_reset_epoch) : null;
+  const secondsSinceReset = row.seconds_since_reset ? parseInt(row.seconds_since_reset, 10) : null;
+  
+  // Calculate stats_reset_time from epoch
+  const statsResetTime = statsResetEpoch 
+    ? new Date(statsResetEpoch * 1000).toISOString()
+    : null;
+  
+  // Calculate days since reset
+  const daysSinceReset = secondsSinceReset !== null
+    ? Math.floor(secondsSinceReset / 86400)
+    : null;
+  
+  // Get postmaster startup time separately (simple inline SQL)
+  let postmasterStartupEpoch: number | null = null;
+  let postmasterStartupTime: string | null = null;
+  try {
+    const pmResult = await client.query(`
+      select
+        extract(epoch from pg_postmaster_start_time()) as postmaster_startup_epoch,
+        pg_postmaster_start_time()::text as postmaster_startup_time
+    `);
+    if (pmResult.rows.length > 0) {
+      postmasterStartupEpoch = pmResult.rows[0].postmaster_startup_epoch 
+        ? parseFloat(pmResult.rows[0].postmaster_startup_epoch) 
+        : null;
+      postmasterStartupTime = pmResult.rows[0].postmaster_startup_time || null;
+    }
+  } catch {
+    // Ignore errors
+  }
+  
   return {
-    stats_reset_epoch: row.stats_reset_epoch ? parseFloat(row.stats_reset_epoch) : null,
-    stats_reset_time: row.stats_reset_time || null,
-    days_since_reset: row.days_since_reset ? parseInt(row.days_since_reset, 10) : null,
-    postmaster_startup_epoch: row.postmaster_startup_epoch ? parseFloat(row.postmaster_startup_epoch) : null,
-    postmaster_startup_time: row.postmaster_startup_time || null,
+    stats_reset_epoch: statsResetEpoch,
+    stats_reset_time: statsResetTime,
+    days_since_reset: daysSinceReset,
+    postmaster_startup_epoch: postmasterStartupEpoch,
+    postmaster_startup_time: postmasterStartupTime,
   };
 }
 
 /**
  * Get current database name and size
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_current_database)
+ * Uses 'db_size' metric from metrics.yml
  */
-export async function getCurrentDatabaseInfo(client: Client): Promise<{ datname: string; size_bytes: number }> {
-  const sql = getMetricSql(METRIC_NAMES.currentDatabase);
+export async function getCurrentDatabaseInfo(client: Client, pgMajorVersion: number = 16): Promise<{ datname: string; size_bytes: number }> {
+  const sql = getMetricSql(METRIC_NAMES.dbSize, pgMajorVersion);
   const result = await client.query(sql);
   const row = result.rows[0] || {};
+  
+  // db_size metric returns tag_datname and size_b
   return {
-    datname: row.datname || "postgres",
-    size_bytes: parseInt(row.size_bytes, 10) || 0,
+    datname: row.tag_datname || "postgres",
+    size_bytes: parseInt(row.size_b || "0", 10),
   };
 }
 
@@ -526,8 +633,8 @@ export async function getCurrentDatabaseInfo(client: Client): Promise<{ datname:
  * Get redundant indexes (H004)
  * SQL loaded from config/pgwatch-prometheus/metrics.yml (redundant_indexes)
  */
-export async function getRedundantIndexes(client: Client): Promise<RedundantIndex[]> {
-  const sql = getMetricSql(METRIC_NAMES.H004);
+export async function getRedundantIndexes(client: Client, pgMajorVersion: number = 16): Promise<RedundantIndex[]> {
+  const sql = getMetricSql(METRIC_NAMES.H004, pgMajorVersion);
   const result = await client.query(sql);
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
@@ -656,8 +763,9 @@ export async function generateA002(client: Client, nodeName: string = "node-01")
  */
 export async function generateA003(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("A003", "Postgres settings", nodeName);
-  const settings = await getSettings(client);
   const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const settings = await getSettings(client, pgMajorVersion);
 
   report.results[nodeName] = {
     data: settings,
@@ -672,9 +780,10 @@ export async function generateA003(client: Client, nodeName: string = "node-01")
  */
 export async function generateA004(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("A004", "Cluster information", nodeName);
-  const generalInfo = await getClusterInfo(client);
-  const databaseSizes = await getDatabaseSizes(client);
   const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const generalInfo = await getClusterInfo(client, pgMajorVersion);
+  const databaseSizes = await getDatabaseSizes(client);
 
   report.results[nodeName] = {
     data: {
@@ -692,8 +801,9 @@ export async function generateA004(client: Client, nodeName: string = "node-01")
  */
 export async function generateA007(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("A007", "Altered settings", nodeName);
-  const alteredSettings = await getAlteredSettings(client);
   const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const alteredSettings = await getAlteredSettings(client, pgMajorVersion);
 
   report.results[nodeName] = {
     data: alteredSettings,
@@ -724,11 +834,12 @@ export async function generateA013(client: Client, nodeName: string = "node-01")
  */
 export async function generateH001(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("H001", "Invalid indexes", nodeName);
-  const invalidIndexes = await getInvalidIndexes(client);
   const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const invalidIndexes = await getInvalidIndexes(client, pgMajorVersion);
   
   // Get current database name and size
-  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client);
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
 
   // Calculate totals
   const totalCount = invalidIndexes.length;
@@ -757,12 +868,13 @@ export async function generateH001(client: Client, nodeName: string = "node-01")
  */
 export async function generateH002(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("H002", "Unused indexes", nodeName);
-  const unusedIndexes = await getUnusedIndexes(client);
   const postgresVersion = await getPostgresVersion(client);
-  const statsReset = await getStatsReset(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const unusedIndexes = await getUnusedIndexes(client, pgMajorVersion);
+  const statsReset = await getStatsReset(client, pgMajorVersion);
   
   // Get current database name and size
-  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client);
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
 
   // Calculate totals
   const totalCount = unusedIndexes.length;
@@ -792,11 +904,12 @@ export async function generateH002(client: Client, nodeName: string = "node-01")
  */
 export async function generateH004(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("H004", "Redundant indexes", nodeName);
-  const redundantIndexes = await getRedundantIndexes(client);
   const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const redundantIndexes = await getRedundantIndexes(client, pgMajorVersion);
   
   // Get current database name and size
-  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client);
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
 
   // Calculate totals
   const totalCount = redundantIndexes.length;
@@ -826,7 +939,8 @@ export async function generateH004(client: Client, nodeName: string = "node-01")
 async function generateD004(client: Client, nodeName: string): Promise<Report> {
   const report = createBaseReport("D004", "pg_stat_statements and pg_stat_kcache settings", nodeName);
   const postgresVersion = await getPostgresVersion(client);
-  const allSettings = await getSettings(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const allSettings = await getSettings(client, pgMajorVersion);
 
   // Filter settings related to pg_stat_statements and pg_stat_kcache
   const pgssSettings: Record<string, SettingInfo> = {};
@@ -961,7 +1075,8 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
 async function generateF001(client: Client, nodeName: string): Promise<Report> {
   const report = createBaseReport("F001", "Autovacuum: current settings", nodeName);
   const postgresVersion = await getPostgresVersion(client);
-  const allSettings = await getSettings(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const allSettings = await getSettings(client, pgMajorVersion);
 
   // Filter autovacuum-related settings
   const autovacuumSettings: Record<string, SettingInfo> = {};
@@ -985,7 +1100,8 @@ async function generateF001(client: Client, nodeName: string): Promise<Report> {
 async function generateG001(client: Client, nodeName: string): Promise<Report> {
   const report = createBaseReport("G001", "Memory-related settings", nodeName);
   const postgresVersion = await getPostgresVersion(client);
-  const allSettings = await getSettings(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const allSettings = await getSettings(client, pgMajorVersion);
 
   // Memory-related setting names
   const memorySettingNames = [

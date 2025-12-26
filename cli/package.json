@@ -22,13 +22,14 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\"",
+    "embed-metrics": "bun run scripts/embed-metrics.ts",
+    "build": "bun run embed-metrics && bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\"",
     "prepublishOnly": "npm run build",
     "start": "bun ./bin/postgres-ai.ts --help",
     "start:node": "node ./dist/bin/postgres-ai.js --help",
-    "dev": "bun --watch ./bin/postgres-ai.ts",
-    "test": "bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "dev": "bun run embed-metrics && bun --watch ./bin/postgres-ai.ts",
+    "test": "bun run embed-metrics && bun test",
+    "typecheck": "bun run embed-metrics && bunx tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",

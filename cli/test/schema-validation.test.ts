@@ -39,10 +39,10 @@ function createMockClient(options: {
       { name: "server_version_num", setting: "160003" },
     ],
     settingsRows = [
-      { name: "shared_buffers", setting: "128MB", unit: "", category: "Resource Usage / Memory", context: "postmaster", vartype: "string", pretty_value: "128 MB" },
-      { name: "work_mem", setting: "4MB", unit: "", category: "Resource Usage / Memory", context: "user", vartype: "string", pretty_value: "4 MB" },
-      { name: "autovacuum", setting: "on", unit: "", category: "Autovacuum", context: "sighup", vartype: "bool", pretty_value: "on" },
-      { name: "pg_stat_statements.max", setting: "5000", unit: "", category: "Custom", context: "superuser", vartype: "integer", pretty_value: "5000" },
+      { tag_setting_name: "shared_buffers", tag_setting_value: "128MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 1 },
+      { tag_setting_name: "work_mem", tag_setting_value: "4MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 1 },
+      { tag_setting_name: "autovacuum", tag_setting_value: "on", tag_unit: "", tag_category: "Autovacuum", tag_vartype: "bool", is_default: 1 },
+      { tag_setting_name: "pg_stat_statements.max", tag_setting_value: "5000", tag_unit: "", tag_category: "Custom", tag_vartype: "integer", is_default: 0 },
     ],
     invalidIndexesRows = [],
     unusedIndexesRows = [],
@@ -51,32 +51,43 @@ function createMockClient(options: {
 
   return {
     query: async (sql: string) => {
-      if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("order by")) {
+      // Version query (simple inline - used by getPostgresVersion)
+      if (sql.includes("server_version") && sql.includes("server_version_num") && sql.includes("pg_settings") && !sql.includes("tag_setting_name")) {
         return { rows: versionRows };
       }
-      // Full settings query
-      if (sql.includes("pg_settings") && sql.includes("order by") && sql.includes("is_default")) {
+      // Settings metric query (from metrics.yml - has tag_setting_name, tag_setting_value)
+      if (sql.includes("tag_setting_name") && sql.includes("tag_setting_value") && sql.includes("pg_settings")) {
         return { rows: settingsRows };
       }
-      if (sql.includes("current_database()") && sql.includes("pg_database_size")) {
-        return { rows: [{ datname: "testdb", size_bytes: "1073741824" }] };
+      // db_size metric (current database size from metrics.yml)
+      if (sql.includes("pg_database_size(current_database())") && sql.includes("size_b")) {
+        return { rows: [{ tag_datname: "testdb", size_b: "1073741824" }] };
       }
-      if (sql.includes("stats_reset") && sql.includes("pg_stat_database")) {
+      // Stats reset metric (from metrics.yml)
+      if (sql.includes("stats_reset") && sql.includes("pg_stat_database") && sql.includes("seconds_since_reset")) {
         return { rows: [{ 
+          tag_database_name: "testdb",
           stats_reset_epoch: "1704067200", 
-          stats_reset_time: "2024-01-01 00:00:00+00",
-          days_since_reset: "30",
+          seconds_since_reset: "2592000"
+        }] };
+      }
+      // Postmaster startup time (simple inline - used by getStatsReset)
+      if (sql.includes("pg_postmaster_start_time") && sql.includes("postmaster_startup_epoch")) {
+        return { rows: [{ 
           postmaster_startup_epoch: "1704067200",
           postmaster_startup_time: "2024-01-01 00:00:00+00"
         }] };
       }
-      if (sql.includes("indisvalid = false")) {
+      // Invalid indexes (H001) - from metrics.yml
+      if (sql.includes("indisvalid = false") && sql.includes("fk_indexes")) {
         return { rows: invalidIndexesRows };
       }
+      // Unused indexes (H002) - from metrics.yml
       if (sql.includes("Never Used Indexes") && sql.includes("idx_scan = 0")) {
         return { rows: unusedIndexesRows };
       }
-      if (sql.includes("redundant_indexes") && sql.includes("columns like")) {
+      // Redundant indexes (H004) - from metrics.yml
+      if (sql.includes("redundant_indexes_grouped") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
       }
       // D004: pg_stat_statements extension check
