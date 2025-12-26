@@ -103,6 +103,15 @@ def test_schema_k007(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportG
 
 
 @pytest.mark.unit
+def test_schema_k008(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator, fixed_pg_version) -> None:
+    monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])
+    monkeypatch.setattr(generator, "_get_hourly_topk_pgss_data_sum2", lambda *args, **kwargs: ({"1": [3.0]}, [0.0], [100]))
+    report = generator.generate_k008_shared_hit_read_report("local", "node-1", time_range_minutes=60, limit=50)
+    validate_report(report)
+
+
+@pytest.mark.unit
 def test_schema_m001(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator, fixed_pg_version) -> None:
     monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
     monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])

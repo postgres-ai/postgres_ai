@@ -140,6 +140,26 @@ def test_generate_k007_computes_totals(monkeypatch: pytest.MonkeyPatch, generato
 
 
 @pytest.mark.unit
+def test_generate_k008_computes_totals(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator, fixed_pg_version) -> None:
+    monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])
+
+    per_query = {"1": [6.0, 1.0], "2": [0.0, 3.0], "3": [2.0, 2.0]}
+    other = [1.0, 10.0]
+    timeline = [100, 200]
+
+    monkeypatch.setattr(generator, "_get_hourly_topk_pgss_data_sum2", lambda *args, **kwargs: (per_query, other, timeline))
+
+    report = generator.generate_k008_shared_hit_read_report("local", "node-1", time_range_minutes=120, limit=50)
+    db = report["results"]["node-1"]["data"]["db1"]
+
+    tracked = sum(sum(v) for v in per_query.values())
+    assert db["summary"]["total_shared_hit_read_bytes_tracked_queries"] == pytest.approx(tracked)
+    assert db["summary"]["total_shared_hit_read_bytes_other"] == pytest.approx(sum(other))
+    assert db["summary"]["total_shared_hit_read_bytes"] == pytest.approx(tracked + sum(other))
+
+
+@pytest.mark.unit
 def test_generate_m001_computes_mean(monkeypatch: pytest.MonkeyPatch, generator: PostgresReportGenerator, fixed_pg_version) -> None:
     monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
     monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["db1"])

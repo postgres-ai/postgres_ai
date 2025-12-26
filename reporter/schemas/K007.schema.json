@@ -8,7 +8,7 @@
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
     "checkId": { "const": "K007" },
-    "checkTitle": { "const": "Check K007" },
+    "checkTitle": { "const": "Top queries by shared blocks hit" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {
