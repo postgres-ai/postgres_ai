@@ -39,24 +39,28 @@ def test_settings_metric_exists(metrics_config: dict) -> None:
 
 
 @pytest.mark.unit
-def test_settings_metric_uses_reset_val_for_lock_timeout(metrics_config: dict) -> None:
+def test_settings_metric_uses_reset_val_for_overridden_settings(metrics_config: dict) -> None:
     """
-    Test that the settings metric uses reset_val for lock_timeout.
+    Test that the settings metric uses reset_val for settings overridden by pgwatch.
 
-    This is critical because pgwatch sets lock_timeout to 100ms during metric
-    collection, which would mask the actual configured value if we used 'setting'.
+    This is critical because pgwatch overrides these during metric collection:
+    - lock_timeout: set to 100ms
+    - statement_timeout: set per-metric (e.g., 15s for settings)
+
+    Using 'setting' would mask the actual configured values.
 
     See: https://gitlab.com/postgres-ai/postgres_ai/-/issues/61
     """
     sql = metrics_config["metrics"]["settings"]["sqls"][11]
 
-    # Verify the SQL uses reset_val for lock_timeout
+    # Verify the SQL uses reset_val for overridden settings
     assert "reset_val" in sql, "SQL should reference reset_val column"
     assert "lock_timeout" in sql, "SQL should reference lock_timeout"
+    assert "statement_timeout" in sql, "SQL should reference statement_timeout"
 
-    # More specific check: ensure the CASE statement is used correctly
-    assert "case when name = 'lock_timeout' then reset_val else setting end" in sql, \
-        "SQL should use CASE statement to select reset_val for lock_timeout"
+    # More specific check: ensure the CASE statement handles both settings
+    assert "name in ('lock_timeout', 'statement_timeout')" in sql, \
+        "SQL should use IN clause to handle both lock_timeout and statement_timeout"
 
 
 @pytest.mark.unit
@@ -92,43 +96,43 @@ def test_settings_metric_has_required_fields(metrics_config: dict) -> None:
 
 
 @pytest.mark.unit
-def test_settings_metric_numeric_value_uses_correct_source_for_lock_timeout(metrics_config: dict) -> None:
+def test_settings_metric_numeric_value_uses_correct_source_for_overridden_settings(metrics_config: dict) -> None:
     """
-    Test that numeric_value also uses reset_val for lock_timeout.
+    Test that numeric_value also uses reset_val for overridden settings.
 
     The numeric_value field should be derived from the same source as tag_setting_value
     to ensure consistency.
     """
     sql = metrics_config["metrics"]["settings"]["sqls"][11]
 
-    # Count occurrences of the CASE expression for lock_timeout
+    # Count occurrences of the CASE expression for overridden settings
     # It should appear twice: once for tag_setting_value and once for numeric_value
-    case_expr = "case when name = 'lock_timeout' then reset_val else setting end"
+    case_expr = "case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end"
     occurrences = sql.count(case_expr)
 
     assert occurrences >= 2, \
-        f"CASE expression for lock_timeout should appear at least twice (for tag_setting_value and numeric_value), found {occurrences}"
+        f"CASE expression for overridden settings should appear at least twice (for tag_setting_value and numeric_value), found {occurrences}"
 
 
 @pytest.mark.unit
-def test_settings_metric_is_default_uses_boot_val_for_lock_timeout(metrics_config: dict) -> None:
+def test_settings_metric_is_default_uses_boot_val_for_overridden_settings(metrics_config: dict) -> None:
     """
-    Test that is_default compares reset_val with boot_val for lock_timeout.
+    Test that is_default compares reset_val with boot_val for overridden settings.
 
-    When pgwatch sets lock_timeout during collection, the source becomes 'session',
-    which would incorrectly report is_default=0. Instead, we should compare
-    reset_val with boot_val to determine if the configured value is the default.
+    When pgwatch overrides lock_timeout/statement_timeout during collection, the source
+    becomes 'session', which would incorrectly report is_default=0. Instead, we should
+    compare reset_val with boot_val to determine if the configured value is the default.
 
     See: https://gitlab.com/postgres-ai/postgres_ai/-/issues/61
     """
     sql = metrics_config["metrics"]["settings"]["sqls"][11]
 
-    # Verify is_default uses boot_val comparison for lock_timeout
+    # Verify is_default uses boot_val comparison for overridden settings
     assert "boot_val" in sql, "SQL should reference boot_val column for is_default comparison"
 
-    # Check for the specific pattern that handles lock_timeout specially
-    assert "case when name = 'lock_timeout' then" in sql and "boot_val" in sql, \
-        "SQL should use special handling for lock_timeout in is_default calculation"
+    # Check for the specific pattern that handles overridden settings specially
+    assert "name in ('lock_timeout', 'statement_timeout')" in sql and "boot_val" in sql, \
+        "SQL should use special handling for overridden settings in is_default calculation"
 
 
 @pytest.mark.integration
