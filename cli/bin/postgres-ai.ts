@@ -766,7 +766,7 @@ program
     // Preflight: validate upload flags/credentials BEFORE connecting / running checks.
     // This allows "fast-fail" for missing API key / project name.
     let uploadCfg:
-      | { apiKey: string; apiBaseUrl: string; project: string; epoch: number }
+      | { apiKey: string; apiBaseUrl: string; project: string }
       | undefined;
     let projectWasGenerated = false;
     if (shouldUpload) {

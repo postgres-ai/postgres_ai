@@ -422,8 +422,12 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
   const uptimeResult = await client.query(uptimeSql);
   if (uptimeResult.rows.length > 0) {
     const uptime = uptimeResult.rows[0];
+    // pg returns timestamps as strings by default; handle both string and Date
+    const startTime = uptime.start_time instanceof Date
+      ? uptime.start_time.toISOString()
+      : String(uptime.start_time);
     info.start_time = {
-      value: uptime.start_time.toISOString(),
+      value: startTime,
       unit: "timestamp",
       description: "PostgreSQL server start time",
     };
