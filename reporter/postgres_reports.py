@@ -3462,187 +3462,6 @@ class PostgresReportGenerator:
             postgres_version=postgres_version,
         )
 
-    def report_to_markdown(self, report: Dict[str, Any]) -> str:
-        """
-        Convert a report dictionary to markdown format.
-
-        Args:
-            report: Report dictionary (D004, F001, G001, etc.)
-
-        Returns:
-            Markdown string representation of the report
-        """
-        check_id = report.get('checkId', 'Unknown')
-        check_title = report.get('checkTitle', 'Unknown Report')
-        timestamp = report.get('timestamptz', '')
-        nodes = report.get('nodes', {})
-        results = report.get('results', {})
-
-        lines = [
-            f"# {check_id}: {check_title}",
-            "",
-            f"**Generated:** {timestamp}",
-            "",
-        ]
-
-        # Add postgres version if available
-        for node_name, node_data in results.items():
-            pg_version = node_data.get('postgres_version', {})
-            if pg_version:
-                version_str = pg_version.get('version', 'Unknown')
-                lines.append(f"**PostgreSQL Version:** {version_str}")
-                lines.append("")
-                break
-
-        # Add node info
-        primary = nodes.get('primary', '')
-        standbys = nodes.get('standbys', [])
-        if primary:
-            lines.append(f"**Primary Node:** {primary}")
-        if standbys:
-            lines.append(f"**Standby Nodes:** {', '.join(standbys)}")
-        lines.append("")
-
-        # Generate content based on check type
-        if check_id == 'D004':
-            lines.extend(self._d004_to_markdown_content(results))
-        elif check_id == 'F001':
-            lines.extend(self._f001_to_markdown_content(results))
-        elif check_id == 'G001':
-            lines.extend(self._g001_to_markdown_content(results))
-        else:
-            lines.extend(self._generic_settings_to_markdown_content(results))
-
-        return '\n'.join(lines)
-
-    def _settings_table_markdown(self, settings: Dict[str, Any]) -> List[str]:
-        """Generate markdown table for settings."""
-        if not settings:
-            return ["*No settings data available.*", ""]
-
-        lines = [
-            "| Setting | Value | Category | Context |",
-            "|---------|-------|----------|---------|",
-        ]
-        for name, info in sorted(settings.items()):
-            value = info.get('pretty_value', info.get('setting', ''))
-            category = info.get('category', '')
-            context = info.get('context', '')
-            lines.append(f"| `{name}` | {value} | {category} | {context} |")
-        lines.append("")
-        return lines
-
-    def _d004_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
-        """Generate D004-specific markdown content."""
-        lines = []
-
-        for node_name, node_data in results.items():
-            data = node_data.get('data', {})
-
-            lines.append(f"## Node: {node_name}")
-            lines.append("")
-
-            # Settings table
-            lines.append("### pg_stat_statements and Related Settings")
-            lines.append("")
-            settings = data.get('settings', data)
-            lines.extend(self._settings_table_markdown(settings))
-
-            # pg_stat_statements status
-            pgss_status = data.get('pg_stat_statements_status', {})
-            if pgss_status:
-                lines.append("### pg_stat_statements Status")
-                lines.append("")
-                available = "✅ Available" if pgss_status.get('extension_available') else "❌ Not Available"
-                lines.append(f"- **Extension:** {available}")
-                lines.append(f"- **Metrics Count:** {pgss_status.get('metrics_count', 0)}")
-                lines.append(f"- **Total Calls:** {pgss_status.get('total_calls', 0)}")
-                lines.append("")
-
-            # pg_stat_kcache status
-            kcache_status = data.get('pg_stat_kcache_status', {})
-            if kcache_status:
-                lines.append("### pg_stat_kcache Status")
-                lines.append("")
-                available = "✅ Available" if kcache_status.get('extension_available') else "❌ Not Available"
-                lines.append(f"- **Extension:** {available}")
-                lines.append(f"- **Metrics Count:** {kcache_status.get('metrics_count', 0)}")
-                lines.append("")
-
-        return lines
-
-    def _f001_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
-        """Generate F001-specific markdown content."""
-        lines = []
-
-        for node_name, node_data in results.items():
-            data = node_data.get('data', {})
-
-            lines.append(f"## Node: {node_name}")
-            lines.append("")
-            lines.append("### Autovacuum Settings")
-            lines.append("")
-            lines.extend(self._settings_table_markdown(data))
-
-        return lines
-
-    def _g001_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
-        """Generate G001-specific markdown content."""
-        lines = []
-
-        for node_name, node_data in results.items():
-            data = node_data.get('data', {})
-
-            lines.append(f"## Node: {node_name}")
-            lines.append("")
-
-            # Settings table
-            lines.append("### Memory-Related Settings")
-            lines.append("")
-            settings = data.get('settings', {})
-            lines.extend(self._settings_table_markdown(settings))
-
-            # Memory analysis
-            analysis = data.get('analysis', {})
-            mem_usage = analysis.get('estimated_total_memory_usage', {})
-            if mem_usage:
-                lines.append("### Memory Usage Analysis")
-                lines.append("")
-                lines.append("| Metric | Value |")
-                lines.append("|--------|-------|")
-
-                if mem_usage.get('shared_buffers_pretty'):
-                    lines.append(f"| Shared Buffers | {mem_usage.get('shared_buffers_pretty')} |")
-                if mem_usage.get('wal_buffers_pretty'):
-                    lines.append(f"| WAL Buffers | {mem_usage.get('wal_buffers_pretty')} |")
-                if mem_usage.get('shared_memory_total_pretty'):
-                    lines.append(f"| Shared Memory Total | {mem_usage.get('shared_memory_total_pretty')} |")
-                if mem_usage.get('work_mem_per_connection_pretty'):
-                    lines.append(f"| Work Mem (per connection) | {mem_usage.get('work_mem_per_connection_pretty')} |")
-                if mem_usage.get('max_work_mem_usage_pretty'):
-                    lines.append(f"| Max Work Mem (all connections) | {mem_usage.get('max_work_mem_usage_pretty')} |")
-                if mem_usage.get('maintenance_work_mem_pretty'):
-                    lines.append(f"| Maintenance Work Mem | {mem_usage.get('maintenance_work_mem_pretty')} |")
-                if mem_usage.get('effective_cache_size_pretty'):
-                    lines.append(f"| Effective Cache Size | {mem_usage.get('effective_cache_size_pretty')} |")
-
-                lines.append("")
-
-        return lines
-
-    def _generic_settings_to_markdown_content(self, results: Dict[str, Any]) -> List[str]:
-        """Generate generic markdown content for settings-based reports."""
-        lines = []
-
-        for node_name, node_data in results.items():
-            data = node_data.get('data', {})
-
-            lines.append(f"## Node: {node_name}")
-            lines.append("")
-            lines.extend(self._settings_table_markdown(data))
-
-        return lines
-
     def get_check_title(self, check_id: str) -> str:
         """
         Get the human-readable title for a check ID.
@@ -4766,8 +4585,6 @@ def main():
                         help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                         help='Output file (default: stdout)')
-    parser.add_argument('--format', choices=['json', 'markdown', 'both'], default='json',
-                        help='Output format: json, markdown, or both (default: json)')
     parser.add_argument('--api-url', default='https://postgres.ai/api/general')
     parser.add_argument('--token', default='')
     parser.add_argument('--project-name', default='project-name',
@@ -4928,12 +4745,11 @@ def main():
                 elif args.check_id == 'N001':
                     report = generator.generate_n001_wait_events_report(cluster, args.node_name, hours=24)
 
-                # Determine output filenames
+                # Determine output filename
                 base_name = f"{cluster}_{args.check_id}" if len(clusters_to_process) > 1 else args.check_id
-                json_filename = f"{base_name}.json" if args.output == '-' else args.output
-                md_filename = f"{base_name}.md"
+                output_filename = f"{base_name}.json" if args.output == '-' else args.output
 
-                # Output based on format
+                # Output JSON report
                 if args.output == '-' and len(clusters_to_process) == 1:
                     # Report payload to stdout must remain raw JSON (not prefixed with log metadata).
                     sys.stdout.write(json.dumps(report, indent=2) + "\n")
