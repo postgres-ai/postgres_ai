@@ -115,6 +115,11 @@ test("CHECK_INFO contains H003", () => {
   assert.equal(checkup.CHECK_INFO.H003, "Non-indexed foreign keys");
 });
 
+test("CHECK_INFO contains H004", () => {
+  assert.ok("H004" in checkup.CHECK_INFO);
+  assert.equal(checkup.CHECK_INFO.H004, "Redundant indexes");
+});
+
 // Tests for REPORT_GENERATORS
 test("REPORT_GENERATORS has generator for A002", () => {
   assert.ok("A002" in checkup.REPORT_GENERATORS);
@@ -154,6 +159,11 @@ test("REPORT_GENERATORS has generator for H002", () => {
 test("REPORT_GENERATORS has generator for H003", () => {
   assert.ok("H003" in checkup.REPORT_GENERATORS);
   assert.equal(typeof checkup.REPORT_GENERATORS.H003, "function");
+});
+
+test("REPORT_GENERATORS has generator for H004", () => {
+  assert.ok("H004" in checkup.REPORT_GENERATORS);
+  assert.equal(typeof checkup.REPORT_GENERATORS.H004, "function");
 });
 
 test("REPORT_GENERATORS and CHECK_INFO have same keys", () => {
@@ -211,6 +221,12 @@ test("METRICS_SQL.nonIndexedForeignKeys queries pg_constraint for FKs", () => {
   assert.ok(checkup.METRICS_SQL.nonIndexedForeignKeys.includes("contype = 'f'"));
 });
 
+test("METRICS_SQL.redundantIndexes queries for covered indexes", () => {
+  assert.ok(checkup.METRICS_SQL.redundantIndexes.includes("pg_index"));
+  assert.ok(checkup.METRICS_SQL.redundantIndexes.includes("redundant_indexes"));
+  assert.ok(checkup.METRICS_SQL.redundantIndexes.includes("columns LIKE"));
+});
+
 // Tests for formatBytes
 test("formatBytes formats zero bytes", () => {
   assert.equal(checkup.formatBytes(0), "0 B");
@@ -244,6 +260,7 @@ function createMockClient(versionRows, settingsRows, options = {}) {
     invalidIndexesRows = [],
     unusedIndexesRows = [],
     nonIndexedFKsRows = [],
+    redundantIndexesRows = [],
   } = options;
 
   return {
@@ -289,6 +306,10 @@ function createMockClient(versionRows, settingsRows, options = {}) {
       // Non-indexed foreign keys (H003)
       if (sql.includes("fk_list") && sql.includes("contype = 'f'")) {
         return { rows: nonIndexedFKsRows };
+      }
+      // Redundant indexes (H004)
+      if (sql.includes("redundant_indexes") && sql.includes("columns LIKE")) {
+        return { rows: redundantIndexesRows };
       }
       throw new Error(`Unexpected query: ${sql}`);
     },
@@ -424,6 +445,7 @@ test("generateAllReports returns reports for all checks", async () => {
       invalidIndexesRows: [],
       unusedIndexesRows: [],
       nonIndexedFKsRows: [],
+      redundantIndexesRows: [],
     }
   );
 
@@ -436,6 +458,7 @@ test("generateAllReports returns reports for all checks", async () => {
   assert.ok("H001" in reports);
   assert.ok("H002" in reports);
   assert.ok("H003" in reports);
+  assert.ok("H004" in reports);
   assert.equal(reports.A002.checkId, "A002");
   assert.equal(reports.A003.checkId, "A003");
   assert.equal(reports.A004.checkId, "A004");
@@ -444,6 +467,7 @@ test("generateAllReports returns reports for all checks", async () => {
   assert.equal(reports.H001.checkId, "H001");
   assert.equal(reports.H002.checkId, "H002");
   assert.equal(reports.H003.checkId, "H003");
+  assert.equal(reports.H004.checkId, "H004");
 });
 
 // Tests for A007 (Altered settings)
@@ -755,6 +779,70 @@ test("generateH003 creates report with non-indexed FKs", async () => {
   assert.ok(report.results["test-node"].postgres_version);
 });
 
+// Tests for H004 (Redundant indexes)
+test("getRedundantIndexes returns redundant indexes", async () => {
+  const mockClient = createMockClient([], [], {
+    redundantIndexesRows: [
+      {
+        schema_name: "public",
+        table_name: "orders",
+        index_name: "orders_user_id_idx",
+        access_method: "btree",
+        reason: "public.orders_user_id_created_idx",
+        index_size_bytes: "2097152",
+        table_size_bytes: "16777216",
+        index_usage: "0",
+        supports_fk: false,
+      },
+    ],
+  });
+
+  const indexes = await checkup.getRedundantIndexes(mockClient);
+  assert.equal(indexes.length, 1);
+  assert.equal(indexes[0].schema_name, "public");
+  assert.equal(indexes[0].index_name, "orders_user_id_idx");
+  assert.equal(indexes[0].reason, "public.orders_user_id_created_idx");
+  assert.equal(indexes[0].index_size_bytes, 2097152);
+  assert.equal(indexes[0].supports_fk, false);
+});
+
+test("generateH004 creates report with redundant indexes", async () => {
+  const mockClient = createMockClient(
+    [
+      { name: "server_version", setting: "16.3" },
+      { name: "server_version_num", setting: "160003" },
+    ],
+    [],
+    {
+      redundantIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "products",
+          index_name: "products_category_idx",
+          access_method: "btree",
+          reason: "public.products_category_name_idx",
+          index_size_bytes: "4194304",
+          table_size_bytes: "33554432",
+          index_usage: "5",
+          supports_fk: false,
+        },
+      ],
+    }
+  );
+
+  const report = await checkup.generateH004(mockClient, "test-node");
+  assert.equal(report.checkId, "H004");
+  assert.equal(report.checkTitle, "Redundant indexes");
+  assert.ok("test-node" in report.results);
+
+  const data = report.results["test-node"].data;
+  assert.ok("redundant_indexes" in data);
+  assert.equal(data.total_count, 1);
+  assert.equal(data.total_size_bytes, 4194304);
+  assert.ok(data.total_size_pretty);
+  assert.ok(report.results["test-node"].postgres_version);
+});
+
 // CLI tests
 test("cli: checkup command exists and shows help", () => {
   const r = runCli(["checkup", "--help"]);
@@ -778,6 +866,7 @@ test("cli: checkup --help shows available check IDs", () => {
   assert.match(r.stdout, /H001/);
   assert.match(r.stdout, /H002/);
   assert.match(r.stdout, /H003/);
+  assert.match(r.stdout, /H004/);
 });
 
 test("cli: checkup without connection shows help", () => {
