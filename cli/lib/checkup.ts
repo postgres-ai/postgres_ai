@@ -781,6 +781,276 @@ export async function generateH004(client: Client, nodeName: string = "node-01")
 }
 
 /**
+ * Generate D004 report - pg_stat_statements and pg_stat_kcache settings
+ */
+async function generateD004(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("D004", "pg_stat_statements and pg_stat_kcache settings", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const allSettings = await getSettings(client);
+
+  // Filter settings related to pg_stat_statements and pg_stat_kcache
+  const pgssSettings: Record<string, SettingInfo> = {};
+  for (const [name, setting] of Object.entries(allSettings)) {
+    if (name.startsWith("pg_stat_statements") || name.startsWith("pg_stat_kcache")) {
+      pgssSettings[name] = setting;
+    }
+  }
+
+  // Check pg_stat_statements extension
+  let pgssAvailable = false;
+  let pgssMetricsCount = 0;
+  let pgssTotalCalls = 0;
+  const pgssSampleQueries: Array<{ queryid: string; user: string; database: string; calls: number }> = [];
+
+  try {
+    const extCheck = await client.query(
+      "select 1 from pg_extension where extname = 'pg_stat_statements'"
+    );
+    if (extCheck.rows.length > 0) {
+      pgssAvailable = true;
+      const statsResult = await client.query(`
+        select count(*) as cnt, coalesce(sum(calls), 0) as total_calls
+        from pg_stat_statements
+      `);
+      pgssMetricsCount = parseInt(statsResult.rows[0]?.cnt || "0", 10);
+      pgssTotalCalls = parseInt(statsResult.rows[0]?.total_calls || "0", 10);
+
+      // Get sample queries (top 5 by calls)
+      const sampleResult = await client.query(`
+        select
+          queryid::text as queryid,
+          coalesce(usename, 'unknown') as "user",
+          coalesce(datname, 'unknown') as database,
+          calls
+        from pg_stat_statements s
+        left join pg_database d on s.dbid = d.oid
+        left join pg_user u on s.userid = u.usesysid
+        order by calls desc
+        limit 5
+      `);
+      for (const row of sampleResult.rows) {
+        pgssSampleQueries.push({
+          queryid: row.queryid,
+          user: row.user,
+          database: row.database,
+          calls: parseInt(row.calls, 10),
+        });
+      }
+    }
+  } catch {
+    // Extension not available or accessible
+  }
+
+  // Check pg_stat_kcache extension
+  let kcacheAvailable = false;
+  let kcacheMetricsCount = 0;
+  let kcacheTotalExecTime = 0;
+  let kcacheTotalUserTime = 0;
+  let kcacheTotalSystemTime = 0;
+  const kcacheSampleQueries: Array<{ queryid: string; user: string; exec_total_time: number }> = [];
+
+  try {
+    const extCheck = await client.query(
+      "select 1 from pg_extension where extname = 'pg_stat_kcache'"
+    );
+    if (extCheck.rows.length > 0) {
+      kcacheAvailable = true;
+      const statsResult = await client.query(`
+        select
+          count(*) as cnt,
+          coalesce(sum(exec_user_time + exec_system_time), 0) as total_exec_time,
+          coalesce(sum(exec_user_time), 0) as total_user_time,
+          coalesce(sum(exec_system_time), 0) as total_system_time
+        from pg_stat_kcache
+      `);
+      kcacheMetricsCount = parseInt(statsResult.rows[0]?.cnt || "0", 10);
+      kcacheTotalExecTime = parseFloat(statsResult.rows[0]?.total_exec_time || "0");
+      kcacheTotalUserTime = parseFloat(statsResult.rows[0]?.total_user_time || "0");
+      kcacheTotalSystemTime = parseFloat(statsResult.rows[0]?.total_system_time || "0");
+
+      // Get sample queries (top 5 by exec time)
+      const sampleResult = await client.query(`
+        select
+          queryid::text as queryid,
+          coalesce(usename, 'unknown') as "user",
+          (exec_user_time + exec_system_time) as exec_total_time
+        from pg_stat_kcache k
+        left join pg_user u on k.userid = u.usesysid
+        order by (exec_user_time + exec_system_time) desc
+        limit 5
+      `);
+      for (const row of sampleResult.rows) {
+        kcacheSampleQueries.push({
+          queryid: row.queryid,
+          user: row.user,
+          exec_total_time: parseFloat(row.exec_total_time),
+        });
+      }
+    }
+  } catch {
+    // Extension not available or accessible
+  }
+
+  report.results[nodeName] = {
+    data: {
+      settings: pgssSettings,
+      pg_stat_statements_status: {
+        extension_available: pgssAvailable,
+        metrics_count: pgssMetricsCount,
+        total_calls: pgssTotalCalls,
+        sample_queries: pgssSampleQueries,
+      },
+      pg_stat_kcache_status: {
+        extension_available: kcacheAvailable,
+        metrics_count: kcacheMetricsCount,
+        total_exec_time: kcacheTotalExecTime,
+        total_user_time: kcacheTotalUserTime,
+        total_system_time: kcacheTotalSystemTime,
+        sample_queries: kcacheSampleQueries,
+      },
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate F001 report - Autovacuum: current settings
+ */
+async function generateF001(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("F001", "Autovacuum: current settings", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const allSettings = await getSettings(client);
+
+  // Filter autovacuum-related settings
+  const autovacuumSettings: Record<string, SettingInfo> = {};
+  for (const [name, setting] of Object.entries(allSettings)) {
+    if (name.includes("autovacuum") || name.includes("vacuum")) {
+      autovacuumSettings[name] = setting;
+    }
+  }
+
+  report.results[nodeName] = {
+    data: autovacuumSettings,
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate G001 report - Memory-related settings
+ */
+async function generateG001(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("G001", "Memory-related settings", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const allSettings = await getSettings(client);
+
+  // Memory-related setting names
+  const memorySettingNames = [
+    "shared_buffers",
+    "work_mem",
+    "maintenance_work_mem",
+    "effective_cache_size",
+    "wal_buffers",
+    "temp_buffers",
+    "max_connections",
+    "autovacuum_work_mem",
+    "hash_mem_multiplier",
+    "logical_decoding_work_mem",
+    "max_stack_depth",
+    "max_prepared_transactions",
+    "max_locks_per_transaction",
+    "max_pred_locks_per_transaction",
+  ];
+
+  const memorySettings: Record<string, SettingInfo> = {};
+  for (const name of memorySettingNames) {
+    if (allSettings[name]) {
+      memorySettings[name] = allSettings[name];
+    }
+  }
+
+  // Calculate memory usage estimates
+  interface MemoryUsage {
+    shared_buffers_bytes: number;
+    shared_buffers_pretty: string;
+    wal_buffers_bytes: number;
+    wal_buffers_pretty: string;
+    shared_memory_total_bytes: number;
+    shared_memory_total_pretty: string;
+    work_mem_per_connection_bytes: number;
+    work_mem_per_connection_pretty: string;
+    max_work_mem_usage_bytes: number;
+    max_work_mem_usage_pretty: string;
+    maintenance_work_mem_bytes: number;
+    maintenance_work_mem_pretty: string;
+    effective_cache_size_bytes: number;
+    effective_cache_size_pretty: string;
+  }
+
+  let memoryUsage: MemoryUsage | Record<string, never> = {};
+
+  try {
+    // Get actual byte values from PostgreSQL
+    const memQuery = await client.query(`
+      select
+        pg_size_bytes(current_setting('shared_buffers')) as shared_buffers_bytes,
+        pg_size_bytes(current_setting('wal_buffers')) as wal_buffers_bytes,
+        pg_size_bytes(current_setting('work_mem')) as work_mem_bytes,
+        pg_size_bytes(current_setting('maintenance_work_mem')) as maintenance_work_mem_bytes,
+        pg_size_bytes(current_setting('effective_cache_size')) as effective_cache_size_bytes,
+        current_setting('max_connections')::int as max_connections
+    `);
+
+    if (memQuery.rows.length > 0) {
+      const row = memQuery.rows[0];
+      const sharedBuffersBytes = parseInt(row.shared_buffers_bytes, 10);
+      const walBuffersBytes = parseInt(row.wal_buffers_bytes, 10);
+      const workMemBytes = parseInt(row.work_mem_bytes, 10);
+      const maintenanceWorkMemBytes = parseInt(row.maintenance_work_mem_bytes, 10);
+      const effectiveCacheSizeBytes = parseInt(row.effective_cache_size_bytes, 10);
+      const maxConnections = row.max_connections;
+
+      const sharedMemoryTotal = sharedBuffersBytes + walBuffersBytes;
+      const maxWorkMemUsage = workMemBytes * maxConnections;
+
+      memoryUsage = {
+        shared_buffers_bytes: sharedBuffersBytes,
+        shared_buffers_pretty: formatBytes(sharedBuffersBytes),
+        wal_buffers_bytes: walBuffersBytes,
+        wal_buffers_pretty: formatBytes(walBuffersBytes),
+        shared_memory_total_bytes: sharedMemoryTotal,
+        shared_memory_total_pretty: formatBytes(sharedMemoryTotal),
+        work_mem_per_connection_bytes: workMemBytes,
+        work_mem_per_connection_pretty: formatBytes(workMemBytes),
+        max_work_mem_usage_bytes: maxWorkMemUsage,
+        max_work_mem_usage_pretty: formatBytes(maxWorkMemUsage),
+        maintenance_work_mem_bytes: maintenanceWorkMemBytes,
+        maintenance_work_mem_pretty: formatBytes(maintenanceWorkMemBytes),
+        effective_cache_size_bytes: effectiveCacheSizeBytes,
+        effective_cache_size_pretty: formatBytes(effectiveCacheSizeBytes),
+      };
+    }
+  } catch {
+    // If we can't calculate, leave empty object (schema allows this)
+  }
+
+  report.results[nodeName] = {
+    data: {
+      settings: memorySettings,
+      analysis: {
+        estimated_total_memory_usage: memoryUsage,
+      },
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Available report generators
  */
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
@@ -789,6 +1059,9 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   A004: generateA004,
   A007: generateA007,
   A013: generateA013,
+  D004: generateD004,
+  F001: generateF001,
+  G001: generateG001,
   H001: generateH001,
   H002: generateH002,
   H004: generateH004,
@@ -803,6 +1076,9 @@ export const CHECK_INFO: Record<string, string> = {
   A004: "Cluster information",
   A007: "Altered settings",
   A013: "Postgres minor version",
+  D004: "pg_stat_statements and pg_stat_kcache settings",
+  F001: "Autovacuum: current settings",
+  G001: "Memory-related settings",
   H001: "Invalid indexes",
   H002: "Unused indexes",
   H004: "Redundant indexes",
