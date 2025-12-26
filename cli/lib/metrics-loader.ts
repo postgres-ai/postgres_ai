@@ -424,7 +424,7 @@ redundant_indexes_tmp_num as (
         'index_name', reason,
         'index_definition', main_index_def
       )
-    )::text as covering_indexes_json
+    )::text as main_indexes_json
   from redundant_indexes_cut_grouped
   group by
     index_id,
