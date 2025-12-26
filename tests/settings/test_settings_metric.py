@@ -163,21 +163,21 @@ def test_settings_metric_lock_timeout_returns_actual_value() -> None:
     try:
         with conn.cursor() as cur:
             # First, get the actual configured lock_timeout
-            cur.execute("SELECT reset_val FROM pg_settings WHERE name = 'lock_timeout'")
+            cur.execute("select reset_val from pg_settings where name = 'lock_timeout'")
             actual_value = cur.fetchone()[0]
 
             # Now, simulate what pgwatch does - set a session-level lock_timeout
-            cur.execute("SET lock_timeout = '100ms'")
+            cur.execute("set lock_timeout = '100ms'")
 
             # Query using our fixed SQL logic
             cur.execute("""
-                SELECT
+                select
                     name,
                     setting as raw_setting,
                     reset_val,
-                    CASE WHEN name = 'lock_timeout' THEN reset_val ELSE setting END as our_value
-                FROM pg_settings
-                WHERE name = 'lock_timeout'
+                    case when name = 'lock_timeout' then reset_val else setting end as our_value
+                from pg_settings
+                where name = 'lock_timeout'
             """)
             row = cur.fetchone()
             name, raw_setting, reset_val, our_value = row
