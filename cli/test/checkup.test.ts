@@ -269,17 +269,17 @@ describe("formatBytes", () => {
     expect(checkup.formatBytes(500)).toBe("500.00 B");
   });
 
-  test("formats kilobytes", () => {
-    expect(checkup.formatBytes(1024)).toBe("1.00 kB");
-    expect(checkup.formatBytes(1536)).toBe("1.50 kB");
+  test("formats kibibytes", () => {
+    expect(checkup.formatBytes(1024)).toBe("1.00 KiB");
+    expect(checkup.formatBytes(1536)).toBe("1.50 KiB");
   });
 
-  test("formats megabytes", () => {
-    expect(checkup.formatBytes(1048576)).toBe("1.00 MB");
+  test("formats mebibytes", () => {
+    expect(checkup.formatBytes(1048576)).toBe("1.00 MiB");
   });
 
-  test("formats gigabytes", () => {
-    expect(checkup.formatBytes(1073741824)).toBe("1.00 GB");
+  test("formats gibibytes", () => {
+    expect(checkup.formatBytes(1073741824)).toBe("1.00 GiB");
   });
 });
 
