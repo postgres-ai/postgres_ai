@@ -2,14 +2,16 @@
  * Express checkup module - generates JSON reports directly from PostgreSQL
  * without going through Prometheus.
  *
- * This module reuses the same SQL queries from metrics.yml but runs them
- * directly against the target database.
+ * IMPORTANT: SQL queries for H001, H002, H004 are loaded from config/pgwatch-prometheus/metrics.yml
+ * to avoid code duplication. DO NOT copy-paste metric extraction SQL here.
+ * Use getMetricSql() from metrics-loader.ts instead.
  */
 
 import { Client } from "pg";
 import * as fs from "fs";
 import * as path from "path";
 import * as pkg from "../package.json";
+import { getMetricSql, transformMetricRow, METRIC_NAMES } from "./metrics-loader";
 
 /**
  * PostgreSQL version information
@@ -243,114 +245,13 @@ export const METRICS_SQL = {
       current_timestamp - pg_postmaster_start_time() as uptime
   `,
 
-  // Invalid indexes (H001) - indexes where indisvalid = false
-  // Matches H001.schema.json invalidIndex structure
-  invalidIndexes: `
-    with fk_indexes as (
-      select
-        n.nspname as schema_name,
-        ci.relname as index_name,
-        cr.relname as table_name,
-        (confrelid::regclass)::text as fk_table_ref,
-        array_to_string(indclass, ', ') as opclasses
-      from pg_index i
-      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
-      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
-      join pg_namespace n on n.oid = ci.relnamespace
-      join pg_constraint cn on cn.conrelid = cr.oid
-      where cn.contype = 'f'
-        and i.indisunique = false
-    )
-    select
-      n.nspname as schema_name,
-      t.relname as table_name,
-      i.relname as index_name,
-      coalesce(nullif(quote_ident(n.nspname), 'public') || '.', '') || quote_ident(t.relname) as relation_name,
-      pg_relation_size(i.oid) as index_size_bytes,
-      (
-        select count(1) > 0
-        from fk_indexes fi
-        where fi.fk_table_ref = t.relname
-          and fi.schema_name = n.nspname
-      ) as supports_fk
-    from pg_index idx
-    join pg_class i on i.oid = idx.indexrelid
-    join pg_class t on t.oid = idx.indrelid
-    join pg_namespace n on n.oid = t.relnamespace
-    where idx.indisvalid = false
-      and n.nspname not in ('pg_catalog', 'information_schema')
-    order by pg_relation_size(i.oid) desc
-  `,
+  /*
+   * H001, H002, H004 SQL queries are loaded from config/pgwatch-prometheus/metrics.yml
+   * See METRIC_NAMES in metrics-loader.ts for the mapping.
+   * DO NOT add inline SQL for these checks here - use getMetricSql() instead.
+   */
 
-  // Unused indexes (H002) - indexes with zero scans, excluding unique/PK indexes
-  // Matches H002.schema.json unusedIndex structure
-  unusedIndexes: `
-    with fk_indexes as (
-      select
-        n.nspname as schema_name,
-        ci.relname as index_name,
-        cr.relname as table_name,
-        (confrelid::regclass)::text as fk_table_ref,
-        array_to_string(indclass, ', ') as opclasses
-      from pg_index i
-      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
-      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
-      join pg_namespace n on n.oid = ci.relnamespace
-      join pg_constraint cn on cn.conrelid = cr.oid
-      left join pg_stat_all_indexes si on si.indexrelid = i.indexrelid
-      where cn.contype = 'f'
-        and i.indisunique = false
-        and cn.conkey is not null
-        and ci.relpages > 0
-        and coalesce(si.idx_scan, 0) < 10
-    ),
-    indexes as (
-      select
-        i.indrelid,
-        i.indexrelid,
-        n.nspname as schema_name,
-        cr.relname as table_name,
-        ci.relname as index_name,
-        pg_get_indexdef(i.indexrelid) as index_definition,
-        coalesce(si.idx_scan, 0) as idx_scan,
-        pg_relation_size(i.indexrelid) as index_size_bytes,
-        (case when a.amname = 'btree' then true else false end) as idx_is_btree,
-        array_to_string(i.indclass, ', ') as opclasses
-      from pg_index i
-      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
-      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
-      join pg_namespace n on n.oid = ci.relnamespace
-      join pg_am a on ci.relam = a.oid
-      left join pg_stat_all_indexes si on si.indexrelid = i.indexrelid
-      where i.indisunique = false
-        and i.indisvalid = true
-        and ci.relpages > 0
-        and n.nspname not in ('pg_catalog', 'information_schema')
-    )
-    select
-      'Never Used Indexes' as reason,
-      i.schema_name,
-      i.table_name,
-      i.index_name,
-      i.index_definition,
-      i.idx_scan,
-      i.index_size_bytes,
-      i.idx_is_btree,
-      (
-        select count(1) > 0
-        from fk_indexes fi
-        where fi.fk_table_ref = i.table_name
-          and fi.schema_name = i.schema_name
-          and fi.opclasses like (i.opclasses || '%')
-      ) as supports_fk
-    from indexes i
-    where i.idx_scan = 0
-      and i.idx_is_btree
-    order by i.index_size_bytes desc
-    limit 50
-  `,
-
-  // Stats reset info for H002
+  // Stats reset info for H002 (not in metrics.yml, kept here)
   statsReset: `
     select
       extract(epoch from stats_reset) as stats_reset_epoch,
@@ -360,127 +261,6 @@ export const METRICS_SQL = {
       pg_postmaster_start_time()::text as postmaster_startup_time
     from pg_stat_database
     where datname = current_database()
-  `,
-
-  // Redundant indexes (H004) - indexes covered by other indexes
-  // Matches H004.schema.json redundantIndex structure
-  redundantIndexes: `
-    with fk_indexes as (
-      select
-        n.nspname as schema_name,
-        ci.relname as index_name,
-        cr.relname as table_name,
-        (confrelid::regclass)::text as fk_table_ref,
-        array_to_string(indclass, ', ') as opclasses
-      from pg_index i
-      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
-      join pg_class cr on cr.oid = i.indrelid and cr.relkind = 'r'
-      join pg_namespace n on n.oid = ci.relnamespace
-      join pg_constraint cn on cn.conrelid = cr.oid
-      left join pg_stat_all_indexes si on si.indexrelid = i.indexrelid
-      where cn.contype = 'f'
-        and i.indisunique = false
-        and cn.conkey is not null
-        and ci.relpages > 0
-        and coalesce(si.idx_scan, 0) < 10
-    ),
-    index_data as (
-      select
-        i.*,
-        ci.oid as index_oid,
-        indkey::text as columns,
-        array_to_string(indclass, ', ') as opclasses
-      from pg_index i
-      join pg_class ci on ci.oid = i.indexrelid and ci.relkind = 'i'
-      where indisvalid = true
-        and ci.relpages > 0
-    ),
-    redundant_indexes as (
-      select
-        i2.indexrelid as index_id,
-        tnsp.nspname as schema_name,
-        trel.relname as table_name,
-        coalesce(nullif(quote_ident(tnsp.nspname), 'public') || '.', '') || quote_ident(trel.relname) as relation_name,
-        pg_relation_size(trel.oid) as table_size_bytes,
-        irel.relname as index_name,
-        am1.amname as access_method,
-        (i1.indexrelid::regclass)::text as reason,
-        pg_relation_size(i2.indexrelid) as index_size_bytes,
-        coalesce(s.idx_scan, 0) as index_usage,
-        pg_get_indexdef(i2.indexrelid) as index_definition,
-        i2.opclasses
-      from (
-        select indrelid, indexrelid, opclasses, indclass, indexprs, indpred, indisprimary, indisunique, columns
-        from index_data
-        order by indexrelid
-      ) as i1
-      join index_data as i2 on (
-        i1.indrelid = i2.indrelid
-        and i1.indexrelid <> i2.indexrelid
-      )
-      inner join pg_opclass op1 on i1.indclass[0] = op1.oid
-      inner join pg_opclass op2 on i2.indclass[0] = op2.oid
-      inner join pg_am am1 on op1.opcmethod = am1.oid
-      inner join pg_am am2 on op2.opcmethod = am2.oid
-      left join pg_stat_all_indexes s on s.indexrelid = i2.indexrelid
-      join pg_class trel on trel.oid = i2.indrelid
-      join pg_namespace tnsp on trel.relnamespace = tnsp.oid
-      join pg_class irel on irel.oid = i2.indexrelid
-      where not i2.indisprimary
-        and not i2.indisunique
-        and am1.amname = am2.amname
-        and i1.columns like (i2.columns || '%')
-        and i1.opclasses like (i2.opclasses || '%')
-        and pg_get_expr(i1.indexprs, i1.indrelid) is not distinct from pg_get_expr(i2.indexprs, i2.indrelid)
-        and pg_get_expr(i1.indpred, i1.indrelid) is not distinct from pg_get_expr(i2.indpred, i2.indrelid)
-        and tnsp.nspname not in ('pg_catalog', 'information_schema')
-    ),
-    redundant_with_fk as (
-      select
-        ri.*,
-        (
-          select count(1) > 0
-          from fk_indexes fi
-          where fi.fk_table_ref = ri.table_name
-            and fi.opclasses like (ri.opclasses || '%')
-        ) as supports_fk
-      from redundant_indexes ri
-    ),
-    numbered as (
-      select row_number() over () as num, r.*
-      from redundant_with_fk r
-    ),
-    with_links as (
-      select
-        n1.*,
-        n2.num as r_num
-      from numbered n1
-      left join numbered n2 on n2.index_id = (
-        select indexrelid from pg_index where indexrelid::regclass::text = n1.reason
-      ) and (
-        select indexrelid from pg_index where indexrelid::regclass::text = n2.reason
-      ) = n1.index_id
-    ),
-    deduped as (
-      select * from with_links
-      where num < r_num
-        or r_num is null
-    )
-    select distinct on (index_id)
-      schema_name,
-      table_name,
-      index_name,
-      relation_name,
-      access_method,
-      reason,
-      index_size_bytes,
-      table_size_bytes,
-      index_usage,
-      supports_fk,
-      index_definition
-    from deduped
-    order by index_id, index_size_bytes desc
-    limit 50
   `,
 };
 
@@ -728,37 +508,49 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
 
 /**
  * Get invalid indexes (H001)
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (pg_invalid_indexes)
  */
 export async function getInvalidIndexes(client: Client): Promise<InvalidIndex[]> {
-  const result = await client.query(METRICS_SQL.invalidIndexes);
-  return result.rows.map((row) => ({
-    schema_name: row.schema_name,
-    table_name: row.table_name,
-    index_name: row.index_name,
-    relation_name: row.relation_name,
-    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
-    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
-    supports_fk: row.supports_fk === true || row.supports_fk === "t",
-  }));
+  const sql = getMetricSql(METRIC_NAMES.H001);
+  const result = await client.query(sql);
+  return result.rows.map((row) => {
+    const transformed = transformMetricRow(row);
+    const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
+    return {
+      schema_name: String(transformed.schema_name || ""),
+      table_name: String(transformed.table_name || ""),
+      index_name: String(transformed.index_name || ""),
+      relation_name: String(transformed.relation_name || ""),
+      index_size_bytes: indexSizeBytes,
+      index_size_pretty: formatBytes(indexSizeBytes),
+      supports_fk: transformed.supports_fk === true || transformed.supports_fk === 1,
+    };
+  });
 }
 
 /**
  * Get unused indexes (H002)
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (unused_indexes)
  */
 export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
-  const result = await client.query(METRICS_SQL.unusedIndexes);
-  return result.rows.map((row) => ({
-    schema_name: row.schema_name,
-    table_name: row.table_name,
-    index_name: row.index_name,
-    index_definition: row.index_definition || "",
-    reason: row.reason,
-    idx_scan: parseInt(row.idx_scan, 10) || 0,
-    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
-    idx_is_btree: row.idx_is_btree === true || row.idx_is_btree === "t",
-    supports_fk: row.supports_fk === true || row.supports_fk === "t",
-    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
-  }));
+  const sql = getMetricSql(METRIC_NAMES.H002);
+  const result = await client.query(sql);
+  return result.rows.map((row) => {
+    const transformed = transformMetricRow(row);
+    const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
+    return {
+      schema_name: String(transformed.schema_name || ""),
+      table_name: String(transformed.table_name || ""),
+      index_name: String(transformed.index_name || ""),
+      index_definition: String(transformed.index_definition || ""),
+      reason: String(transformed.reason || ""),
+      idx_scan: parseInt(String(transformed.idx_scan || 0), 10),
+      index_size_bytes: indexSizeBytes,
+      idx_is_btree: transformed.idx_is_btree === true || transformed.idx_is_btree === "t",
+      supports_fk: transformed.supports_fk === true || transformed.supports_fk === 1,
+      index_size_pretty: formatBytes(indexSizeBytes),
+    };
+  });
 }
 
 /**
@@ -778,24 +570,31 @@ export async function getStatsReset(client: Client): Promise<StatsReset> {
 
 /**
  * Get redundant indexes (H004)
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (redundant_indexes)
  */
 export async function getRedundantIndexes(client: Client): Promise<RedundantIndex[]> {
-  const result = await client.query(METRICS_SQL.redundantIndexes);
-  return result.rows.map((row) => ({
-    schema_name: row.schema_name,
-    table_name: row.table_name,
-    index_name: row.index_name,
-    relation_name: row.relation_name,
-    access_method: row.access_method,
-    reason: row.reason,
-    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
-    table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
-    index_usage: parseInt(row.index_usage, 10) || 0,
-    supports_fk: row.supports_fk === true || row.supports_fk === "t",
-    index_definition: row.index_definition || "",
-    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
-    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
-  }));
+  const sql = getMetricSql(METRIC_NAMES.H004);
+  const result = await client.query(sql);
+  return result.rows.map((row) => {
+    const transformed = transformMetricRow(row);
+    const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
+    const tableSizeBytes = parseInt(String(transformed.table_size_bytes || 0), 10);
+    return {
+      schema_name: String(transformed.schema_name || ""),
+      table_name: String(transformed.table_name || ""),
+      index_name: String(transformed.index_name || ""),
+      relation_name: String(transformed.relation_name || ""),
+      access_method: String(transformed.access_method || ""),
+      reason: String(transformed.reason || ""),
+      index_size_bytes: indexSizeBytes,
+      table_size_bytes: tableSizeBytes,
+      index_usage: parseInt(String(transformed.index_usage || 0), 10),
+      supports_fk: transformed.supports_fk === true || transformed.supports_fk === 1,
+      index_definition: String(transformed.index_definition || ""),
+      index_size_pretty: formatBytes(indexSizeBytes),
+      table_size_pretty: formatBytes(tableSizeBytes),
+    };
+  });
 }
 
 /**
