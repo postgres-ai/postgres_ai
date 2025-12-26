@@ -1660,7 +1660,7 @@ auth
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Failed to connect to API: ${message}`);
-        callbackServer.server.close();
+        callbackServer.server.stop();
         process.exit(1);
         return;
       }
@@ -1680,7 +1680,7 @@ auth
           console.error(data);
         }
 
-        callbackServer.server.close();
+        callbackServer.server.stop();
         process.exit(1);
         return;
       }
@@ -1708,7 +1708,7 @@ auth
       // Handle Ctrl+C gracefully
       const cancelHandler = () => {
         console.log("\n\nAuthentication cancelled by user.");
-        callbackServer.server.close();
+        callbackServer.server.stop();
         process.exit(130); // Standard exit code for SIGINT
       };
       process.on("SIGINT", cancelHandler);
