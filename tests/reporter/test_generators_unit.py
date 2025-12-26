@@ -373,7 +373,7 @@ def test_get_all_databases_merges_sources(monkeypatch: pytest.MonkeyPatch, gener
                 "data": {
                     "result": [
                         {"metric": {"datname": "appdb"}, "value": [0, "1"]},
-                        {"metric": {"datname": "template0"}, "value": [0, "1"]},
+                        {"metric": {"datname": "template0"}, "value": [0, "1"]},  # excluded
                     ]
                 },
             }
@@ -382,8 +382,9 @@ def test_get_all_databases_merges_sources(monkeypatch: pytest.MonkeyPatch, gener
                 "status": "success",
                 "data": {
                     "result": [
-                        {"metric": {"dbname": "analytics"}, "value": [0, "1"]},
-                        {"metric": {"dbname": "appdb"}, "value": [0, "1"]},
+                        # Reporter expects `datname` label for unused indexes metric.
+                        {"metric": {"datname": "analytics"}, "value": [0, "1"]},
+                        {"metric": {"datname": "appdb"}, "value": [0, "1"]},  # duplicate
                     ]
                 },
             }
@@ -879,6 +880,14 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_h004_redundant_indexes_report",
         "generate_k001_query_calls_report",
         "generate_k003_top_queries_report",
+        "generate_k004_temp_bytes_report",
+        "generate_k005_wal_bytes_report",
+        "generate_k006_shared_read_report",
+        "generate_k007_shared_hit_report",
+        "generate_m001_mean_time_report",
+        "generate_m002_rows_report",
+        "generate_m003_io_time_report",
+        "generate_n001_wait_events_report",
     ]
 
     for name in builders:
@@ -921,7 +930,8 @@ def test_upload_report_file_sends_contents(tmp_path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
 
     report_file = tmp_path / "A002_report.json"
-    report_file.write_text('{"foo": "bar"}', encoding="utf-8")
+    # check_id is derived from JSON payload (not filename).
+    report_file.write_text('{"checkId": "A002", "foo": "bar"}', encoding="utf-8")
 
     generator.upload_report_file("https://api", "tok", 100, str(report_file))
 
@@ -931,12 +941,56 @@ def test_upload_report_file_sends_contents(tmp_path, monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.unit
+def test_upload_report_file_handles_404_gracefully(tmp_path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    generator = PostgresReportGenerator()
+    
+    def fake_make_request(api_url, endpoint, request_data):
+        import requests
+        response = requests.Response()
+        response.status_code = 404
+        raise requests.exceptions.HTTPError(response=response)
+
+    monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
+
+    report_file = tmp_path / "A002_report.json"
+    report_file.write_text('{"foo": "bar"}', encoding="utf-8")
+
+    # Should not raise exception
+    generator.upload_report_file("https://api", "tok", 100, str(report_file))
+    
+    captured = capsys.readouterr()
+    assert "Upload endpoint not available (404)" in captured.out
+    assert "--no-upload" in captured.out
+
+
+@pytest.mark.unit
+def test_create_report_handles_404_gracefully(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    generator = PostgresReportGenerator()
+    
+    def fake_make_request(api_url, endpoint, request_data):
+        import requests
+        response = requests.Response()
+        response.status_code = 404
+        raise requests.exceptions.HTTPError(response=response)
+
+    monkeypatch.setattr(postgres_reports_module, "make_request", fake_make_request)
+
+    # Should not raise exception, should return None
+    report_id = generator.create_report("https://api", "tok", "proj", "123")
+    
+    assert report_id is None
+    captured = capsys.readouterr()
+    assert "API endpoint not available (404)" in captured.out
+
+
+@pytest.mark.unit
 def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     class DummyGenerator:
         DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
 
         def __init__(self, *args, **kwargs):
             self.closed = False
+            self.pg_conn = None  # Add pg_conn attribute for memory cleanup check
 
         def get_all_clusters(self):
             # Match current reporter.main() behavior which always calls
@@ -951,6 +1005,7 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
 
         def close_postgres_sink(self):
             self.closed = True
+            self.pg_conn = None
 
     monkeypatch.setattr(postgres_reports_module, "PostgresReportGenerator", DummyGenerator)
     monkeypatch.setattr(sys, "argv", ["postgres_reports.py", "--check-id", "A002", "--output", "-", "--no-upload"])
@@ -961,18 +1016,88 @@ def test_main_runs_specific_check_without_upload(monkeypatch: pytest.MonkeyPatch
 
     # main() prints progress banners along with the JSON payload.
     # Extract the JSON object from the captured stdout by finding the
-    # first line that looks like JSON and joining from there.
+    # first line that looks like JSON and ending before any trailing messages.
     lines = captured.splitlines()
     start_idx = 0
+    end_idx = len(lines)
+    
+    # Find start of JSON
     for i, line in enumerate(lines):
         if line.strip().startswith("{"):
             start_idx = i
             break
-    json_str = "\n".join(lines[start_idx:])
+    
+    # Find end of JSON (stop at first non-JSON line after JSON starts)
+    brace_count = 0
+    for i in range(start_idx, len(lines)):
+        line = lines[i].strip()
+        brace_count += line.count("{") - line.count("}")
+        if brace_count == 0 and line.endswith("}"):
+            end_idx = i + 1
+            break
+    
+    json_str = "\n".join(lines[start_idx:end_idx])
 
     output = json.loads(json_str)
     assert output["checkId"] == "A002"
     assert "results" in output
+
+
+@pytest.mark.unit
+def test_main_all_reports_does_not_crash_when_output_is_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Regression test for reporter/postgres_reports.py around the `del reports` block
+    (~4308-4324).
+
+    In ALL-reports mode, providing a normal file path via --output should NOT
+    cause the process to crash. Current code crashes because it does `del reports`
+    and then later references `reports` when handling args.output.
+    """
+    class DummyGenerator:
+        DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
+
+        def __init__(self, *args, **kwargs):
+            self.pg_conn = None
+
+        def test_connection(self) -> bool:
+            return True
+
+        def get_all_clusters(self):
+            return ["local"]
+
+        def generate_all_reports(self, cluster, node_name, combine_nodes=True):
+            # Minimal plausible payload
+            return {
+                "A002": {"checkId": "A002", "results": {"node-1": {"data": {"ok": True}}}},
+                "A003": {"checkId": "A003", "results": {"node-1": {"data": {"ok": True}}}},
+            }
+
+        def generate_per_query_jsons(self, *args, **kwargs):
+            return []
+
+        def close_postgres_sink(self):
+            self.pg_conn = None
+
+    monkeypatch.setattr(postgres_reports_module, "PostgresReportGenerator", DummyGenerator)
+    monkeypatch.chdir(tmp_path)
+
+    out_path = tmp_path / "all_reports.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "postgres_reports.py",
+            "--check-id",
+            "ALL",
+            "--cluster",
+            "local",
+            "--output",
+            str(out_path),
+            "--no-upload",
+        ],
+    )
+
+    postgres_reports_module.main()
 
 
 @pytest.mark.unit
