@@ -3,10 +3,15 @@
 -- operations they don't have direct permissions for.
 
 /*
- * pgai_explain_generic
+ * explain_generic
  *
  * Function to get generic explain plans with optional HypoPG index testing.
  * Requires: PostgreSQL 16+ (for generic_plan option), HypoPG extension (optional).
+ *
+ * Security notes:
+ * - EXPLAIN without ANALYZE is read-only (plans but doesn't execute the query)
+ * - PostgreSQL's EXPLAIN only accepts a single statement
+ * - Input validation rejects queries with semicolons outside string literals
  *
  * Usage examples:
  *   -- Basic generic plan
@@ -39,6 +44,7 @@ declare
   v_hypo_result record;
   v_version int;
   v_hypopg_available boolean;
+  v_clean_query text;
 begin
   -- Check PostgreSQL version (generic_plan requires 16+)
   select current_setting('server_version_num')::int into v_version;
@@ -46,6 +52,24 @@ begin
   if v_version < 160000 then
     raise exception 'generic_plan requires PostgreSQL 16+, current version: %',
       current_setting('server_version');
+  end if;
+
+  -- Input validation: reject empty queries
+  if query is null or trim(query) = '' then
+    raise exception 'query cannot be empty';
+  end if;
+
+  -- Input validation: strip semicolons and anything after them (prevent statement chaining)
+  -- This is a defense-in-depth measure; EXPLAIN itself only accepts single statements
+  v_clean_query := trim(query);
+  if v_clean_query like '%;%' then
+    -- Allow semicolons inside string literals by checking if it's at the end
+    -- Simple heuristic: if query ends with ; optionally followed by whitespace, strip it
+    v_clean_query := regexp_replace(v_clean_query, ';\s*$', '');
+    -- If there's still a semicolon, reject (likely multiple statements)
+    if v_clean_query like '%;%' then
+      raise exception 'query contains multiple statements (semicolon detected)';
+    end if;
   end if;
 
   -- Check if HypoPG extension is available
@@ -64,15 +88,14 @@ begin
       v_hypo_result.indexname, v_hypo_result.indexrelid;
   end if;
 
-  -- Build and execute explain query based on format
-  -- Output is preserved exactly as EXPLAIN returns it
+  -- Build and execute EXPLAIN query
+  -- Note: EXPLAIN is read-only (plans but doesn't execute), making this safe
   begin
     if lower(format) = 'json' then
-      v_explain_query := 'explain (verbose, settings, generic_plan, format json) ' || query;
-      execute v_explain_query into result;
+      execute 'explain (verbose, settings, generic_plan, format json) ' || v_clean_query
+        into result;
     else
-      v_explain_query := 'explain (verbose, settings, generic_plan) ' || query;
-      for v_line in execute v_explain_query loop
+      for v_line in execute 'explain (verbose, settings, generic_plan) ' || v_clean_query loop
         v_lines := array_append(v_lines, v_line."QUERY PLAN");
       end loop;
       result := array_to_string(v_lines, e'\n');

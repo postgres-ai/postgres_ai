@@ -540,4 +540,77 @@ test("integration: table_describe works with different object types", { skip: !h
   }
 });
 
+test("integration: explain_generic validates input and prevents SQL injection", { skip: !havePostgresBinaries() }, async (t) => {
+  const pg = await withTempPostgres(t);
+  const { Client } = require("pg");
+
+  // Run init first
+  {
+    const r = await runCliInit([pg.adminUri, "--password", "pw1", "--skip-optional-permissions"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+  }
+
+  const c = new Client({ connectionString: pg.adminUri });
+  await c.connect();
+
+  try {
+    // Check PostgreSQL version - generic_plan requires 16+
+    const versionRes = await c.query("show server_version_num");
+    const version = parseInt(versionRes.rows[0].server_version_num, 10);
+
+    if (version < 160000) {
+      // Skip this test on older PostgreSQL versions
+      t.skip("generic_plan requires PostgreSQL 16+");
+      return;
+    }
+
+    // Test 1: Empty query should be rejected
+    {
+      await assert.rejects(
+        c.query("select postgres_ai.explain_generic('')"),
+        /query cannot be empty/
+      );
+    }
+
+    // Test 2: Null query should be rejected
+    {
+      await assert.rejects(
+        c.query("select postgres_ai.explain_generic(null)"),
+        /query cannot be empty/
+      );
+    }
+
+    // Test 3: Multiple statements (semicolon in middle) should be rejected
+    {
+      await assert.rejects(
+        c.query("select postgres_ai.explain_generic('select 1; select 2')"),
+        /multiple statements|semicolon detected/i
+      );
+    }
+
+    // Test 4: Trailing semicolon should be stripped and work
+    {
+      const res = await c.query("select postgres_ai.explain_generic('select 1;') as result");
+      assert.ok(res.rows[0].result, "Should return a query plan");
+      assert.match(res.rows[0].result, /Result/i);
+    }
+
+    // Test 5: Valid query should work
+    {
+      const res = await c.query("select postgres_ai.explain_generic('select $1::int', 'text') as result");
+      assert.ok(res.rows[0].result, "Should return a query plan");
+    }
+
+    // Test 6: JSON format should work
+    {
+      const res = await c.query("select postgres_ai.explain_generic('select 1', 'json') as result");
+      const plan = JSON.parse(res.rows[0].result);
+      assert.ok(Array.isArray(plan), "JSON result should be an array");
+      assert.ok(plan[0].Plan, "JSON result should have a Plan");
+    }
+
+  } finally {
+    await c.end();
+  }
+});
 
