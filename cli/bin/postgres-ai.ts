@@ -16,6 +16,7 @@ import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
 import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
+import * as childProcess from "child_process";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -32,84 +33,70 @@ function closeReadline() {
   }
 }
 
-// Helper functions for spawning processes using Bun APIs
+// Helper functions for spawning processes - use Node.js child_process for compatibility
 async function execPromise(command: string): Promise<{ stdout: string; stderr: string }> {
-  const proc = Bun.spawn(["sh", "-c", command], {
-    stdout: "pipe",
-    stderr: "pipe",
+  return new Promise((resolve, reject) => {
+    childProcess.exec(command, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as Error & { code: number };
+        err.code = error.code ?? 1;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
   });
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    const error = new Error(`Command failed: ${command}\n${stderr}`) as Error & { code: number };
-    error.code = exitCode;
-    throw error;
-  }
-  return { stdout, stderr };
 }
 
 async function execFilePromise(file: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
-  const proc = Bun.spawn([file, ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
+  return new Promise((resolve, reject) => {
+    childProcess.execFile(file, args, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as Error & { code: number };
+        err.code = error.code ?? 1;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
   });
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    const error = new Error(`Command failed: ${file} ${args.join(" ")}\n${stderr}`) as Error & { code: number };
-    error.code = exitCode;
-    throw error;
-  }
-  return { stdout, stderr };
 }
 
 function spawnSync(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; encoding?: string; env?: Record<string, string | undefined>; cwd?: string }): { status: number | null; stdout: string; stderr: string } {
-  const proc = Bun.spawnSync([cmd, ...args], {
-    stdout: options?.stdio === "ignore" ? "ignore" : "pipe",
-    stderr: options?.stdio === "ignore" ? "ignore" : "pipe",
-    env: options?.env as Record<string, string>,
+  const result = childProcess.spawnSync(cmd, args, {
+    stdio: options?.stdio === "inherit" ? "inherit" : "pipe",
+    env: options?.env as NodeJS.ProcessEnv,
     cwd: options?.cwd,
+    encoding: "utf8",
   });
   return {
-    status: proc.exitCode,
-    stdout: proc.stdout ? new TextDecoder().decode(proc.stdout) : "",
-    stderr: proc.stderr ? new TextDecoder().decode(proc.stderr) : "",
+    status: result.status,
+    stdout: typeof result.stdout === "string" ? result.stdout : "",
+    stderr: typeof result.stderr === "string" ? result.stderr : "",
   };
 }
 
-function spawn(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; env?: Record<string, string | undefined>; cwd?: string; detached?: boolean }): { on: (event: string, cb: (code: number | null, signal?: string) => void) => void; unref: () => void } {
-  const proc = Bun.spawn([cmd, ...args], {
-    stdout: options?.stdio === "inherit" ? "inherit" : options?.stdio === "ignore" ? "ignore" : "pipe",
-    stderr: options?.stdio === "inherit" ? "inherit" : options?.stdio === "ignore" ? "ignore" : "pipe",
-    stdin: options?.stdio === "inherit" ? "inherit" : "ignore",
-    env: options?.env as Record<string, string>,
+function spawn(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; env?: Record<string, string | undefined>; cwd?: string; detached?: boolean }): { on: (event: string, cb: (code: number | null, signal?: string) => void) => void; unref: () => void; pid?: number } {
+  const proc = childProcess.spawn(cmd, args, {
+    stdio: options?.stdio ?? "pipe",
+    env: options?.env as NodeJS.ProcessEnv,
     cwd: options?.cwd,
-  });
-
-  const handlers: Record<string, ((code: number | null, signal?: string) => void)[]> = {};
-
-  proc.exited.then((code) => {
-    handlers["close"]?.forEach((cb) => cb(code));
-    handlers["exit"]?.forEach((cb) => cb(code));
-  }).catch((err) => {
-    if (handlers["error"]?.length) {
-      handlers["error"].forEach((cb) => cb(null, String(err)));
-    } else {
-      console.error(`Spawn error for ${cmd}:`, err);
-    }
+    detached: options?.detached,
   });
 
   return {
     on(event: string, cb: (code: number | null, signal?: string) => void) {
-      if (!handlers[event]) handlers[event] = [];
-      handlers[event].push(cb);
+      if (event === "close" || event === "exit") {
+        proc.on(event, (code, signal) => cb(code, signal ?? undefined));
+      } else if (event === "error") {
+        proc.on("error", (err) => cb(null, String(err)));
+      }
       return this;
     },
     unref() {
-      // Bun handles this automatically for detached processes
+      proc.unref();
     },
+    pid: proc.pid,
   };
 }
 
