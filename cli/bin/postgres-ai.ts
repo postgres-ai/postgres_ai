@@ -691,8 +691,12 @@ program
   .option("--check-id <id>", `specific check to run: ${Object.keys(CHECK_INFO).join(", ")}, or ALL`, "ALL")
   .option("--node-name <name>", "node name for reports", "node-01")
   .option("--output <path>", "output directory for JSON files")
-  .option("--upload", "create a remote checkup report and upload JSON results (requires API key)", false)
-  .option("--project <project>", "project name or ID for remote upload (used with --upload; defaults to config defaultProject)")
+  .option("--[no-]upload", "upload JSON results to PostgresAI (default: enabled; requires API key)", undefined)
+  .option(
+    "--project <project>",
+    "project name or ID for remote upload (used with --upload; defaults to config defaultProject; auto-generated on first run)"
+  )
+  .option("--json", "output JSON to stdout")
   .addHelpText(
     "after",
     [
@@ -704,9 +708,10 @@ program
       "  postgresai checkup postgresql://user:pass@host:5432/db",
       "  postgresai checkup postgresql://user:pass@host:5432/db --check-id A003",
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
-      "  postgresai checkup postgresql://user:pass@host:5432/db --upload --project my_project",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --project my_project",
       "  postgresai set-default-project my_project",
-      "  postgresai checkup postgresql://user:pass@host:5432/db --upload",
+      "  postgresai checkup postgresql://user:pass@host:5432/db",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -715,6 +720,7 @@ program
     output?: string;
     upload?: boolean;
     project?: string;
+    json?: boolean;
   }, cmd: Command) => {
     if (!conn) {
       // No args — show help like other commands do (instead of a bare error).
@@ -722,6 +728,13 @@ program
       process.exitCode = 1;
       return;
     }
+
+    const shouldUpload = opts.upload !== false; // default: enabled
+    const shouldPrintJson = !!opts.json;
+    const generateDefaultProjectName = (): string => {
+      // Must start with a letter; use only letters/numbers/underscores.
+      return `project_${crypto.randomBytes(6).toString("hex")}`;
+    };
 
     // Preflight: validate/create output directory BEFORE connecting / running checks.
     // This avoids waiting on network/DB work only to fail at the very end.
@@ -753,11 +766,12 @@ program
     let uploadCfg:
       | { apiKey: string; apiBaseUrl: string; project: string; epoch: number }
       | undefined;
-    if (opts.upload) {
+    let projectWasGenerated = false;
+    if (shouldUpload) {
       const rootOpts = program.opts() as CliOptions;
       const { apiKey } = getConfig(rootOpts);
       if (!apiKey) {
-        console.error("Error: API key is required for --upload");
+        console.error("Error: API key is required for upload");
         console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
         process.exitCode = 1;
         return;
@@ -765,11 +779,16 @@ program
 
       const cfg = config.readConfig();
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
-      const project = ((opts.project || cfg.defaultProject) || "").trim();
+      let project = ((opts.project || cfg.defaultProject) || "").trim();
       if (!project) {
-        console.error("Error: --project is required (or set a default via 'postgresai set-default-project <project>')");
-        process.exitCode = 1;
-        return;
+        project = generateDefaultProjectName();
+        projectWasGenerated = true;
+        try {
+          config.writeConfig({ defaultProject: project });
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          console.error(`Warning: Failed to save generated default project: ${message}`);
+        }
       }
       const epoch = Math.floor(Date.now() / 1000);
       uploadCfg = {
@@ -788,7 +807,7 @@ program
       envPassword: process.env.PGPASSWORD,
     });
     let client: Client | undefined;
-    const spinnerEnabled = !!process.stdout.isTTY && !!opts.upload;
+    const spinnerEnabled = !!process.stdout.isTTY && !!shouldUpload;
     const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {
@@ -830,9 +849,13 @@ program
         });
 
         const reportId = created.reportId;
-        // Keep upload progress out of stdout since JSON is output to stdout.
+        // Keep upload progress out of stdout when JSON is printed to stdout.
         const logUpload = (msg: string): void => {
-          console.error(msg);
+          if (shouldPrintJson) {
+            console.error(msg);
+          } else {
+            console.log(msg);
+          }
         };
         logUpload(`Created remote checkup report: ${reportId}`);
 
@@ -865,21 +888,30 @@ program
           fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
           console.log(`✓ ${checkId}: ${filePath}`);
         }
-      } else if (uploadSummary) {
-        // With --upload: show upload result to stderr, JSON to stdout.
-        console.error("\nCheckup report uploaded");
-        console.error("======================\n");
-        console.error(`Project: ${uploadSummary.project}`);
-        console.error(`Report ID: ${uploadSummary.reportId}`);
-        console.error("View in Console: console.postgres.ai → Support → checkup reports");
-        console.error("");
-        console.error("Files:");
-        for (const item of uploadSummary.uploaded) {
-          console.error(`- ${item.checkId}: ${item.filename}`);
+      }
+
+      if (uploadSummary) {
+        const out = shouldPrintJson ? console.error : console.log;
+        out("\nCheckup report uploaded");
+        out("======================\n");
+        if (projectWasGenerated) {
+          out(`Project: ${uploadSummary.project} (generated and saved as default)`);
+        } else {
+          out(`Project: ${uploadSummary.project}`);
         }
+        out(`Report ID: ${uploadSummary.reportId}`);
+        out("View in Console: console.postgres.ai → Support → checkup reports");
+        out("");
+        out("Files:");
+        for (const item of uploadSummary.uploaded) {
+          out(`- ${item.checkId}: ${item.filename}`);
+        }
+      }
+
+      if (shouldPrintJson) {
         console.log(JSON.stringify(reports, null, 2));
-      } else {
-        // Default: output JSON to stdout
+      } else if (!shouldUpload && !opts.output) {
+        // Offline mode keeps historical behavior: print JSON when not uploading and no --output.
         console.log(JSON.stringify(reports, null, 2));
       }
     } catch (error) {

@@ -524,7 +524,8 @@ test("cli: checkup command exists and shows help", () => {
   assert.match(r.stdout, /--check-id/);
   assert.match(r.stdout, /--node-name/);
   assert.match(r.stdout, /--output/);
-  assert.match(r.stdout, /--upload/);
+  assert.match(r.stdout, /upload/);
+  assert.match(r.stdout, /--json/);
 });
 
 test("cli: checkup --help shows available check IDs", () => {
@@ -589,8 +590,8 @@ test("cli: checkup --output validates/creates output dir before connecting", () 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test("cli: checkup --upload requires API key (fast-fail)", () => {
-  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db", "--upload", "--project", "p"], {
+test("cli: checkup defaults to upload and requires API key (fast-fail)", () => {
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db"], {
     PGAI_API_KEY: "",
     XDG_CONFIG_HOME: "/nonexistent",
   });
@@ -598,7 +599,7 @@ test("cli: checkup --upload requires API key (fast-fail)", () => {
   assert.match(r.stderr, /api key is required/i);
 });
 
-test("cli: checkup --upload uses defaultProject when --project omitted", () => {
+test("cli: checkup defaults to upload and uses defaultProject when --project omitted", () => {
   const fs = require("node:fs");
   const path = require("node:path");
 
@@ -615,10 +616,36 @@ test("cli: checkup --upload uses defaultProject when --project omitted", () => {
 
   // It will fail later on connection (port 1) — that's fine; we only assert it didn't
   // fail due to missing project/API key.
-  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db", "--upload"], { XDG_CONFIG_HOME: xdgHome });
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db"], { XDG_CONFIG_HOME: xdgHome });
   assert.notEqual(r.status, 0);
   assert.doesNotMatch(r.stderr, /--project is required/i);
   assert.doesNotMatch(r.stderr, /api key is required/i);
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test("cli: checkup generates and saves defaultProject when missing", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+
+  const tmpRoot = path.resolve(__dirname, ".tmp-config3");
+  const xdgHome = path.join(tmpRoot, "xdg");
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  fs.mkdirSync(xdgHome, { recursive: true });
+
+  // Provide API key via env so upload preflight passes without any config file.
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db"], {
+    XDG_CONFIG_HOME: xdgHome,
+    PGAI_API_KEY: "dummy",
+  });
+  assert.notEqual(r.status, 0);
+  assert.doesNotMatch(r.stderr, /--project is required/i);
+  assert.doesNotMatch(r.stderr, /api key is required/i);
+
+  const cfgPath = path.join(xdgHome, "postgresai", "config.json");
+  const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+  assert.equal(typeof cfg.defaultProject, "string");
+  assert.match(cfg.defaultProject, /^project_[0-9a-f]+$/);
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
