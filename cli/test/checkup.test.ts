@@ -259,15 +259,6 @@ describe("REPORT_GENERATORS", () => {
   });
 });
 
-// Tests for METRICS_SQL - all SQL is now loaded from metrics.yml
-describe("METRICS_SQL", () => {
-  test("METRICS_SQL is empty - all queries loaded from metrics.yml", () => {
-    // All SQL queries are now loaded from config/pgwatch-prometheus/metrics.yml
-    // via getMetricSql() to ensure consistency between CLI and Prometheus metrics
-    expect(Object.keys(checkup.METRICS_SQL).length).toBe(0);
-  });
-});
-
 // Tests for formatBytes
 describe("formatBytes", () => {
   test("formats zero bytes", () => {

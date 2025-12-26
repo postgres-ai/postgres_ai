@@ -138,18 +138,6 @@ export interface Report {
 }
 
 /**
- * IMPORTANT: All SQL queries for express reports are now loaded from
- * config/pgwatch-prometheus/metrics.yml via getMetricSql().
- * 
- * DO NOT add inline SQL queries here. Use METRIC_NAMES from metrics-loader.ts
- * to reference the appropriate metric, then call getMetricSql(METRIC_NAMES.xxx).
- * 
- * This ensures consistency between CLI express reports and Prometheus metrics.
- */
-export const METRICS_SQL = {} as const;
-
-
-/**
  * Parse PostgreSQL version number into major and minor components
  */
 export function parseVersionNum(versionNum: string): { major: string; minor: string } {
