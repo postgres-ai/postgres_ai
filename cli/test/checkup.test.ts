@@ -358,6 +358,8 @@ describe("Report generators with mock client", () => {
           tag_category: "Resource Usage / Memory",
           tag_vartype: "integer",
           is_default: 1,
+          setting_normalized: "134217728",  // 16384 * 8192
+          unit_normalized: "bytes",
         },
         {
           tag_setting_name: "work_mem",
@@ -366,6 +368,8 @@ describe("Report generators with mock client", () => {
           tag_category: "Resource Usage / Memory",
           tag_vartype: "integer",
           is_default: 1,
+          setting_normalized: "4194304",  // 4096 * 1024
+          unit_normalized: "bytes",
         },
       ],
     });
@@ -375,7 +379,8 @@ describe("Report generators with mock client", () => {
     expect("work_mem" in settings).toBe(true);
     expect(settings.shared_buffers.setting).toBe("16384");
     expect(settings.shared_buffers.unit).toBe("8kB");
-    // pretty_value is now computed from unit
+    // pretty_value is now computed from setting_normalized
+    expect(settings.shared_buffers.pretty_value).toBe("128.00 MiB");
     expect(settings.work_mem.pretty_value).toBe("4.00 MiB");
   });
 
@@ -410,6 +415,8 @@ describe("Report generators with mock client", () => {
             tag_category: "Resource Usage / Memory",
             tag_vartype: "integer",
             is_default: 1,
+            setting_normalized: "134217728",
+            unit_normalized: "bytes",
           },
         ],
       }
@@ -455,6 +462,8 @@ describe("Report generators with mock client", () => {
             tag_category: "Resource Usage / Memory",
             tag_vartype: "integer",
             is_default: 0, // Non-default for A007
+            setting_normalized: "134217728",
+            unit_normalized: "bytes",
           },
         ],
         databaseSizesRows: [{ datname: "postgres", size_bytes: "1073741824" }],
@@ -507,9 +516,9 @@ describe("A007 - Altered settings", () => {
   test("getAlteredSettings returns non-default settings", async () => {
     const mockClient = createMockClient([], [], {
       settingsRows: [
-        { tag_setting_name: "shared_buffers", tag_setting_value: "256MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0 },
-        { tag_setting_name: "work_mem", tag_setting_value: "64MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0 },
-        { tag_setting_name: "default_setting", tag_setting_value: "on", tag_unit: "", tag_category: "Other", tag_vartype: "bool", is_default: 1 },
+        { tag_setting_name: "shared_buffers", tag_setting_value: "256MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0, setting_normalized: null, unit_normalized: null },
+        { tag_setting_name: "work_mem", tag_setting_value: "64MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0, setting_normalized: null, unit_normalized: null },
+        { tag_setting_name: "default_setting", tag_setting_value: "on", tag_unit: "", tag_category: "Other", tag_vartype: "bool", is_default: 1, setting_normalized: null, unit_normalized: null },
       ],
     });
 
@@ -530,7 +539,7 @@ describe("A007 - Altered settings", () => {
       [],
       {
         settingsRows: [
-          { tag_setting_name: "max_connections", tag_setting_value: "200", tag_unit: "", tag_category: "Connections and Authentication", tag_vartype: "integer", is_default: 0 },
+          { tag_setting_name: "max_connections", tag_setting_value: "200", tag_unit: "", tag_category: "Connections and Authentication", tag_vartype: "integer", is_default: 0, setting_normalized: null, unit_normalized: null },
         ],
       }
     );

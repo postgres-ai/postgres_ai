@@ -207,36 +207,33 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * Format a setting value to human-readable form based on its unit
+ * Format a setting's pretty value from the normalized value and unit.
+ * The settings metric provides setting_normalized (bytes or seconds) and unit_normalized.
  */
-function formatSettingValue(setting: string, unit: string | null): string {
-  if (!unit) return setting;
-  
-  try {
-    const numValue = parseInt(setting, 10);
-    if (isNaN(numValue)) return setting;
-    
-    switch (unit) {
-      case "8kB":
-        return formatBytes(numValue * 8192);
-      case "kB":
-        return formatBytes(numValue * 1024);
-      case "MB":
-        return formatBytes(numValue * 1024 * 1024);
-      case "B":
-        return formatBytes(numValue);
-      case "ms":
-        return `${setting} ms`;
-      case "s":
-        return `${setting} s`;
-      case "min":
-        return `${setting} min`;
-      default:
-        return setting;
-    }
-  } catch {
-    return setting;
+function formatSettingPrettyValue(
+  settingNormalized: number | null,
+  unitNormalized: string | null,
+  rawValue: string
+): string {
+  if (settingNormalized === null || unitNormalized === null) {
+    return rawValue;
   }
+  
+  if (unitNormalized === "bytes") {
+    return formatBytes(settingNormalized);
+  }
+  
+  if (unitNormalized === "seconds") {
+    if (settingNormalized < 1) {
+      return `${(settingNormalized * 1000).toFixed(0)} ms`;
+    } else if (settingNormalized < 60) {
+      return `${settingNormalized} s`;
+    } else {
+      return `${(settingNormalized / 60).toFixed(1)} min`;
+    }
+  }
+  
+  return rawValue;
 }
 
 /**
@@ -287,6 +284,8 @@ export async function getSettings(client: Client, pgMajorVersion: number = 16): 
     const unit = row.tag_unit || "";
     const category = row.tag_category || "";
     const vartype = row.tag_vartype || "";
+    const settingNormalized = row.setting_normalized !== null ? parseFloat(row.setting_normalized) : null;
+    const unitNormalized = row.unit_normalized || null;
     
     settings[name] = {
       setting: settingValue,
@@ -294,7 +293,7 @@ export async function getSettings(client: Client, pgMajorVersion: number = 16): 
       category,
       context: "", // Not available in the monitoring metric
       vartype,
-      pretty_value: formatSettingValue(settingValue, unit || null),
+      pretty_value: formatSettingPrettyValue(settingNormalized, unitNormalized, settingValue),
     };
   }
 
@@ -317,12 +316,14 @@ export async function getAlteredSettings(client: Client, pgMajorVersion: number 
       const settingValue = row.tag_setting_value;
       const unit = row.tag_unit || "";
       const category = row.tag_category || "";
+      const settingNormalized = row.setting_normalized !== null ? parseFloat(row.setting_normalized) : null;
+      const unitNormalized = row.unit_normalized || null;
       
       settings[name] = {
         value: settingValue,
         unit,
         category,
-        pretty_value: formatSettingValue(settingValue, unit || null),
+        pretty_value: formatSettingPrettyValue(settingNormalized, unitNormalized, settingValue),
       };
     }
   }
