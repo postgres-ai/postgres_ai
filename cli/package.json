@@ -1,7 +1,7 @@
 {
   "name": "postgresai",
   "version": "0.0.0-dev.0",
-  "description": "postgres_ai CLI (Node.js)",
+  "description": "postgres_ai CLI",
   "license": "Apache-2.0",
   "private": false,
   "repository": {
@@ -17,16 +17,18 @@
     "postgresai": "./dist/bin/postgres-ai.js",
     "pgai": "./dist/bin/postgres-ai.js"
   },
-  "type": "commonjs",
+  "type": "module",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc",
-    "prepare": "npm run build",
-    "start": "node ./dist/bin/postgres-ai.js --help",
-    "dev": "tsc --watch",
-    "test": "npm run build && node --test test/*.test.cjs"
+    "build": "bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\" && cp -r sql dist/",
+    "prepublishOnly": "npm run build",
+    "start": "bun ./bin/postgres-ai.ts --help",
+    "start:node": "node ./dist/bin/postgres-ai.js --help",
+    "dev": "bun --watch ./bin/postgres-ai.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
@@ -35,8 +37,8 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.14",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^18.19.0",
     "@types/pg": "^8.15.6",
     "typescript": "^5.3.3"
   },

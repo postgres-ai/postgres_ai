@@ -1,25 +1,113 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { Command } from "commander";
-import * as pkg from "../package.json";
+import pkg from "../package.json";
 import * as config from "../lib/config";
 import * as yaml from "js-yaml";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { spawn, spawnSync, exec, execFile } from "child_process";
-import { promisify } from "util";
-import * as readline from "readline";
-import * as http from "https";
-import { URL } from "url";
 import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import * as pkce from "../lib/pkce";
+import * as authServer from "../lib/auth-server";
+import { maskSecret } from "../lib/util";
+import { createInterface } from "readline";
+import * as childProcess from "child_process";
 
-const execPromise = promisify(exec);
-const execFilePromise = promisify(execFile);
+// Singleton readline interface for stdin prompts
+let rl: ReturnType<typeof createInterface> | null = null;
+function getReadline() {
+  if (!rl) {
+    rl = createInterface({ input: process.stdin, output: process.stdout });
+  }
+  return rl;
+}
+function closeReadline() {
+  if (rl) {
+    rl.close();
+    rl = null;
+  }
+}
+
+// Helper functions for spawning processes - use Node.js child_process for compatibility
+async function execPromise(command: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    childProcess.exec(command, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as Error & { code: number };
+        err.code = error.code ?? 1;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+async function execFilePromise(file: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    childProcess.execFile(file, args, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as Error & { code: number };
+        err.code = error.code ?? 1;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+function spawnSync(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; encoding?: string; env?: Record<string, string | undefined>; cwd?: string }): { status: number | null; stdout: string; stderr: string } {
+  const result = childProcess.spawnSync(cmd, args, {
+    stdio: options?.stdio === "inherit" ? "inherit" : "pipe",
+    env: options?.env as NodeJS.ProcessEnv,
+    cwd: options?.cwd,
+    encoding: "utf8",
+  });
+  return {
+    status: result.status,
+    stdout: typeof result.stdout === "string" ? result.stdout : "",
+    stderr: typeof result.stderr === "string" ? result.stderr : "",
+  };
+}
+
+function spawn(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; env?: Record<string, string | undefined>; cwd?: string; detached?: boolean }): { on: (event: string, cb: (code: number | null, signal?: string) => void) => void; unref: () => void; pid?: number } {
+  const proc = childProcess.spawn(cmd, args, {
+    stdio: options?.stdio ?? "pipe",
+    env: options?.env as NodeJS.ProcessEnv,
+    cwd: options?.cwd,
+    detached: options?.detached,
+  });
+
+  return {
+    on(event: string, cb: (code: number | null, signal?: string) => void) {
+      if (event === "close" || event === "exit") {
+        proc.on(event, (code, signal) => cb(code, signal ?? undefined));
+      } else if (event === "error") {
+        proc.on("error", (err) => cb(null, String(err)));
+      }
+      return this;
+    },
+    unref() {
+      proc.unref();
+    },
+    pid: proc.pid,
+  };
+}
+
+// Simple readline-like interface for prompts using Bun
+async function question(prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    getReadline().question(prompt, (answer) => {
+      resolve(answer);
+    });
+  });
+}
 
 /**
  * CLI configuration options
@@ -69,21 +157,17 @@ function getDefaultMonitoringProjectDir(): string {
 }
 
 async function downloadText(url: string): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const req = http.get(new URL(url), (res) => {
-      if (!res.statusCode || res.statusCode >= 400) {
-        reject(new Error(`HTTP ${res.statusCode || "?"} for ${url}`));
-        res.resume();
-        return;
-      }
-      res.setEncoding("utf8");
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => resolve(data));
-    });
-    req.on("error", reject);
-    req.setTimeout(15_000, () => req.destroy(new Error(`Timeout fetching ${url}`)));
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} for ${url}`);
+    }
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function ensureDefaultMonitoringProject(): Promise<PathResolution> {
@@ -760,48 +844,36 @@ mon
         console.log("⚠ Reports will be generated locally only");
         console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
       } else {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
+        const answer = await question("Do you have a Postgres AI API key? (Y/n): ");
+        const proceedWithApiKey = !answer || answer.toLowerCase() === "y";
 
-        const question = (prompt: string): Promise<string> =>
-          new Promise((resolve) => rl.question(prompt, resolve));
+        if (proceedWithApiKey) {
+          while (true) {
+            const inputApiKey = await question("Enter your Postgres AI API key: ");
+            const trimmedKey = inputApiKey.trim();
 
-        try {
-          const answer = await question("Do you have a Postgres AI API key? (Y/n): ");
-          const proceedWithApiKey = !answer || answer.toLowerCase() === "y";
-
-          if (proceedWithApiKey) {
-            while (true) {
-              const inputApiKey = await question("Enter your Postgres AI API key: ");
-              const trimmedKey = inputApiKey.trim();
-
-              if (trimmedKey) {
-                config.writeConfig({ apiKey: trimmedKey });
-                // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
-                fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${trimmedKey}\n`, {
-                  encoding: "utf8",
-                  mode: 0o600
-                });
-                console.log("✓ API key saved\n");
-                break;
-              }
-
-              console.log("⚠ API key cannot be empty");
-              const retry = await question("Try again or skip API key setup, retry? (Y/n): ");
-              if (retry.toLowerCase() === "n") {
-                console.log("⚠ Skipping API key setup - reports will be generated locally only");
-                console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
-                break;
-              }
+            if (trimmedKey) {
+              config.writeConfig({ apiKey: trimmedKey });
+              // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+              fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${trimmedKey}\n`, {
+                encoding: "utf8",
+                mode: 0o600
+              });
+              console.log("✓ API key saved\n");
+              break;
             }
-          } else {
-            console.log("⚠ Skipping API key setup - reports will be generated locally only");
-            console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+
+            console.log("⚠ API key cannot be empty");
+            const retry = await question("Try again or skip API key setup, retry? (Y/n): ");
+            if (retry.toLowerCase() === "n") {
+              console.log("⚠ Skipping API key setup - reports will be generated locally only");
+              console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+              break;
+            }
           }
-        } finally {
-          rl.close();
+        } else {
+          console.log("⚠ Skipping API key setup - reports will be generated locally only");
+          console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
         }
       }
     } else {
@@ -847,7 +919,6 @@ mon
         // Test connection
         console.log("Testing connection to the added instance...");
         try {
-          const { Client } = require("pg");
           const client = new Client({ connectionString: connStr });
           await client.connect();
           const result = await client.query("select version();");
@@ -864,63 +935,50 @@ mon
         console.log("⚠ No PostgreSQL instance added");
         console.log("You can add one later with: postgres-ai mon targets add\n");
       } else {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
+        console.log("You need to add at least one PostgreSQL instance to monitor");
+        const answer = await question("Do you want to add a PostgreSQL instance now? (Y/n): ");
+        const proceedWithInstance = !answer || answer.toLowerCase() === "y";
 
-        const question = (prompt: string): Promise<string> =>
-          new Promise((resolve) => rl.question(prompt, resolve));
+        if (proceedWithInstance) {
+          console.log("\nYou can provide either:");
+          console.log("  1. A full connection string: postgresql://user:pass@host:port/database");
+          console.log("  2. Press Enter to skip for now\n");
 
-        try {
-          console.log("You need to add at least one PostgreSQL instance to monitor");
-          const answer = await question("Do you want to add a PostgreSQL instance now? (Y/n): ");
-          const proceedWithInstance = !answer || answer.toLowerCase() === "y";
+          const connStr = await question("Enter connection string (or press Enter to skip): ");
 
-          if (proceedWithInstance) {
-            console.log("\nYou can provide either:");
-            console.log("  1. A full connection string: postgresql://user:pass@host:port/database");
-            console.log("  2. Press Enter to skip for now\n");
-
-            const connStr = await question("Enter connection string (or press Enter to skip): ");
-
-            if (connStr.trim()) {
-              const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
-              if (!m) {
-                console.error("✗ Invalid connection string format");
-                console.log("⚠ Continuing without adding instance\n");
-              } else {
-                const host = m[3];
-                const db = m[5];
-                const instanceName = `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
-
-                const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
-                fs.appendFileSync(instancesPath, body, "utf8");
-                console.log(`✓ Monitoring target '${instanceName}' added\n`);
-
-                // Test connection
-                console.log("Testing connection to the added instance...");
-                try {
-                  const { Client } = require("pg");
-                  const client = new Client({ connectionString: connStr });
-                  await client.connect();
-                  const result = await client.query("select version();");
-                  console.log("✓ Connection successful");
-                  console.log(`${result.rows[0].version}\n`);
-                  await client.end();
-                } catch (error) {
-                  const message = error instanceof Error ? error.message : String(error);
-                  console.error(`✗ Connection failed: ${message}\n`);
-                }
-              }
+          if (connStr.trim()) {
+            const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
+            if (!m) {
+              console.error("✗ Invalid connection string format");
+              console.log("⚠ Continuing without adding instance\n");
             } else {
-              console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
+              const host = m[3];
+              const db = m[5];
+              const instanceName = `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
+
+              const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
+              fs.appendFileSync(instancesPath, body, "utf8");
+              console.log(`✓ Monitoring target '${instanceName}' added\n`);
+
+              // Test connection
+              console.log("Testing connection to the added instance...");
+              try {
+                const client = new Client({ connectionString: connStr });
+                await client.connect();
+                const result = await client.query("select version();");
+                console.log("✓ Connection successful");
+                console.log(`${result.rows[0].version}\n`);
+                await client.end();
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`✗ Connection failed: ${message}\n`);
+              }
             }
           } else {
             console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
           }
-        } finally {
-          rl.close();
+        } else {
+          console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
         }
       }
     } else {
@@ -1106,16 +1164,16 @@ mon
       allHealthy = true;
       for (const service of services) {
         try {
-          const { execSync } = require("child_process");
-          const status = execSync(`docker inspect -f '{{.State.Status}}' ${service.container} 2>/dev/null`, {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe']
-          }).trim();
+          const result = spawnSync("docker", ["inspect", "-f", "{{.State.Status}}", service.container], { stdio: "pipe" });
+          const status = result.stdout.trim();
 
-          if (status === 'running') {
+          if (result.status === 0 && status === 'running') {
             console.log(`✓ ${service.name}: healthy`);
-          } else {
+          } else if (result.status === 0) {
             console.log(`✗ ${service.name}: unhealthy (status: ${status})`);
+            allHealthy = false;
+          } else {
+            console.log(`✗ ${service.name}: unreachable`);
             allHealthy = false;
           }
         } catch (error) {
@@ -1220,14 +1278,6 @@ mon
   .command("reset [service]")
   .description("reset all or specific monitoring service")
   .action(async (service?: string) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const question = (prompt: string): Promise<string> =>
-      new Promise((resolve) => rl.question(prompt, resolve));
-
     try {
       if (service) {
         // Reset specific service
@@ -1237,7 +1287,6 @@ mon
         const answer = await question("Continue? (y/N): ");
         if (answer.toLowerCase() !== "y") {
           console.log("Cancelled");
-          rl.close();
           return;
         }
 
@@ -1264,7 +1313,6 @@ mon
         const answer = await question("Continue? (y/N): ");
         if (answer.toLowerCase() !== "y") {
           console.log("Cancelled");
-          rl.close();
           return;
         }
 
@@ -1278,10 +1326,7 @@ mon
           process.exitCode = 1;
         }
       }
-
-      rl.close();
     } catch (error) {
-      rl.close();
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Reset failed: ${message}`);
       process.exitCode = 1;
@@ -1515,7 +1560,6 @@ targets
       console.log(`Testing connection to monitoring target '${name}'...`);
 
       // Use native pg client instead of requiring psql to be installed
-      const { Client } = require('pg');
       const client = new Client({ connectionString: instance.conn_str });
 
       try {
@@ -1558,9 +1602,6 @@ auth
     }
 
     // Otherwise, proceed with OAuth flow
-    const pkce = require("../lib/pkce");
-    const authServer = require("../lib/auth-server");
-
     console.log("Starting authentication flow...\n");
 
     // Generate PKCE parameters
@@ -1606,173 +1647,163 @@ auth
         console.log(`Debug: Request data: ${initData}`);
       }
 
-      const initReq = http.request(
-        initUrl,
-        {
+      // Step 2: Initialize OAuth session on backend using fetch
+      let initResponse: Response;
+      try {
+        initResponse = await fetch(initUrl.toString(), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(initData),
           },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", async () => {
-            if (res.statusCode !== 200) {
-              console.error(`Failed to initialize auth session: ${res.statusCode}`);
-
-              // Check if response is HTML (common for 404 pages)
-              if (data.trim().startsWith("<!") || data.trim().startsWith("<html")) {
-                console.error("Error: Received HTML response instead of JSON. This usually means:");
-                console.error("  1. The API endpoint URL is incorrect");
-                console.error("  2. The endpoint does not exist (404)");
-                console.error(`\nAPI URL attempted: ${initUrl.toString()}`);
-                console.error("\nPlease verify the --api-base-url parameter.");
-              } else {
-                console.error(data);
-              }
-
-              callbackServer.server.close();
-              process.exit(1);
-            }
-
-            // Step 3: Open browser
-            const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
-
-            if (opts.debug) {
-              console.log(`Debug: Auth URL: ${authUrl}`);
-            }
-
-            console.log(`\nOpening browser for authentication...`);
-            console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
-
-            // Open browser (cross-platform)
-            const openCommand = process.platform === "darwin" ? "open" :
-                               process.platform === "win32" ? "start" :
-                               "xdg-open";
-            spawn(openCommand, [authUrl], { detached: true, stdio: "ignore" }).unref();
-
-            // Step 4: Wait for callback
-            console.log("Waiting for authorization...");
-            console.log("(Press Ctrl+C to cancel)\n");
-
-            // Handle Ctrl+C gracefully
-            const cancelHandler = () => {
-              console.log("\n\nAuthentication cancelled by user.");
-              callbackServer.server.close();
-              process.exit(130); // Standard exit code for SIGINT
-            };
-            process.on("SIGINT", cancelHandler);
-
-            try {
-              const { code } = await callbackServer.promise;
-
-              // Remove the cancel handler after successful auth
-              process.off("SIGINT", cancelHandler);
-
-              // Step 5: Exchange code for token
-              console.log("\nExchanging authorization code for API token...");
-              const exchangeData = JSON.stringify({
-                authorization_code: code,
-                code_verifier: params.codeVerifier,
-                state: params.state,
-              });
-              const exchangeUrl = new URL(`${apiBaseUrl}/rpc/oauth_token_exchange`);
-              const exchangeReq = http.request(
-                exchangeUrl,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Content-Length": Buffer.byteLength(exchangeData),
-                  },
-                },
-                (exchangeRes) => {
-                  let exchangeBody = "";
-                  exchangeRes.on("data", (chunk) => (exchangeBody += chunk));
-                  exchangeRes.on("end", () => {
-                    if (exchangeRes.statusCode !== 200) {
-                      console.error(`Failed to exchange code for token: ${exchangeRes.statusCode}`);
-
-                      // Check if response is HTML (common for 404 pages)
-                      if (exchangeBody.trim().startsWith("<!") || exchangeBody.trim().startsWith("<html")) {
-                        console.error("Error: Received HTML response instead of JSON. This usually means:");
-                        console.error("  1. The API endpoint URL is incorrect");
-                        console.error("  2. The endpoint does not exist (404)");
-                        console.error(`\nAPI URL attempted: ${exchangeUrl.toString()}`);
-                        console.error("\nPlease verify the --api-base-url parameter.");
-                      } else {
-                        console.error(exchangeBody);
-                      }
-
-                      process.exit(1);
-                      return;
-                    }
-
-                    try {
-                      const result = JSON.parse(exchangeBody);
-                      const apiToken = result.api_token || result?.[0]?.result?.api_token; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
-                      const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
-
-                      // Step 6: Save token to config
-                      config.writeConfig({
-                        apiKey: apiToken,
-                        baseUrl: apiBaseUrl,
-                        orgId: orgId,
-                      });
-
-                      console.log("\nAuthentication successful!");
-                      console.log(`API key saved to: ${config.getConfigPath()}`);
-                      console.log(`Organization ID: ${orgId}`);
-                      console.log(`\nYou can now use the CLI without specifying an API key.`);
-                      process.exit(0);
-                    } catch (err) {
-                      const message = err instanceof Error ? err.message : String(err);
-                      console.error(`Failed to parse response: ${message}`);
-                      process.exit(1);
-                    }
-                  });
-                }
-              );
-
-              exchangeReq.on("error", (err: Error) => {
-                console.error(`Exchange request failed: ${err.message}`);
-                process.exit(1);
-              });
-
-              exchangeReq.write(exchangeData);
-              exchangeReq.end();
-
-            } catch (err) {
-              // Remove the cancel handler in error case too
-              process.off("SIGINT", cancelHandler);
-
-              const message = err instanceof Error ? err.message : String(err);
-
-              // Provide more helpful error messages
-              if (message.includes("timeout")) {
-                console.error(`\nAuthentication timed out.`);
-                console.error(`This usually means you closed the browser window without completing authentication.`);
-                console.error(`Please try again and complete the authentication flow.`);
-              } else {
-                console.error(`\nAuthentication failed: ${message}`);
-              }
-
-              process.exit(1);
-            }
-          });
-        }
-      );
-
-      initReq.on("error", (err: Error) => {
-        console.error(`Failed to connect to API: ${err.message}`);
-        callbackServer.server.close();
+          body: initData,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Failed to connect to API: ${message}`);
+        callbackServer.server.stop();
         process.exit(1);
-      });
+        return;
+      }
 
-      initReq.write(initData);
-      initReq.end();
+      if (!initResponse.ok) {
+        const data = await initResponse.text();
+        console.error(`Failed to initialize auth session: ${initResponse.status}`);
+
+        // Check if response is HTML (common for 404 pages)
+        if (data.trim().startsWith("<!") || data.trim().startsWith("<html")) {
+          console.error("Error: Received HTML response instead of JSON. This usually means:");
+          console.error("  1. The API endpoint URL is incorrect");
+          console.error("  2. The endpoint does not exist (404)");
+          console.error(`\nAPI URL attempted: ${initUrl.toString()}`);
+          console.error("\nPlease verify the --api-base-url parameter.");
+        } else {
+          console.error(data);
+        }
+
+        callbackServer.server.stop();
+        process.exit(1);
+        return;
+      }
+
+      // Step 3: Open browser
+      const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+      if (opts.debug) {
+        console.log(`Debug: Auth URL: ${authUrl}`);
+      }
+
+      console.log(`\nOpening browser for authentication...`);
+      console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
+
+      // Open browser (cross-platform)
+      const openCommand = process.platform === "darwin" ? "open" :
+                         process.platform === "win32" ? "start" :
+                         "xdg-open";
+      spawn(openCommand, [authUrl], { detached: true, stdio: "ignore" }).unref();
+
+      // Step 4: Wait for callback
+      console.log("Waiting for authorization...");
+      console.log("(Press Ctrl+C to cancel)\n");
+
+      // Handle Ctrl+C gracefully
+      const cancelHandler = () => {
+        console.log("\n\nAuthentication cancelled by user.");
+        callbackServer.server.stop();
+        process.exit(130); // Standard exit code for SIGINT
+      };
+      process.on("SIGINT", cancelHandler);
+
+      try {
+        const { code } = await callbackServer.promise;
+
+        // Remove the cancel handler after successful auth
+        process.off("SIGINT", cancelHandler);
+
+        // Step 5: Exchange code for token using fetch
+        console.log("\nExchanging authorization code for API token...");
+        const exchangeData = JSON.stringify({
+          authorization_code: code,
+          code_verifier: params.codeVerifier,
+          state: params.state,
+        });
+        const exchangeUrl = new URL(`${apiBaseUrl}/rpc/oauth_token_exchange`);
+
+        let exchangeResponse: Response;
+        try {
+          exchangeResponse = await fetch(exchangeUrl.toString(), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: exchangeData,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Exchange request failed: ${message}`);
+          process.exit(1);
+          return;
+        }
+
+        const exchangeBody = await exchangeResponse.text();
+
+        if (!exchangeResponse.ok) {
+          console.error(`Failed to exchange code for token: ${exchangeResponse.status}`);
+
+          // Check if response is HTML (common for 404 pages)
+          if (exchangeBody.trim().startsWith("<!") || exchangeBody.trim().startsWith("<html")) {
+            console.error("Error: Received HTML response instead of JSON. This usually means:");
+            console.error("  1. The API endpoint URL is incorrect");
+            console.error("  2. The endpoint does not exist (404)");
+            console.error(`\nAPI URL attempted: ${exchangeUrl.toString()}`);
+            console.error("\nPlease verify the --api-base-url parameter.");
+          } else {
+            console.error(exchangeBody);
+          }
+
+          process.exit(1);
+          return;
+        }
+
+        try {
+          const result = JSON.parse(exchangeBody);
+          const apiToken = result.api_token || result?.[0]?.result?.api_token; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
+          const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
+
+          // Step 6: Save token to config
+          config.writeConfig({
+            apiKey: apiToken,
+            baseUrl: apiBaseUrl,
+            orgId: orgId,
+          });
+
+          console.log("\nAuthentication successful!");
+          console.log(`API key saved to: ${config.getConfigPath()}`);
+          console.log(`Organization ID: ${orgId}`);
+          console.log(`\nYou can now use the CLI without specifying an API key.`);
+          process.exit(0);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Failed to parse response: ${message}`);
+          process.exit(1);
+        }
+
+      } catch (err) {
+        // Remove the cancel handler in error case too
+        process.off("SIGINT", cancelHandler);
+
+        const message = err instanceof Error ? err.message : String(err);
+
+        // Provide more helpful error messages
+        if (message.includes("timeout")) {
+          console.error(`\nAuthentication timed out.`);
+          console.error(`This usually means you closed the browser window without completing authentication.`);
+          console.error(`Please try again and complete the authentication flow.`);
+        } else {
+          console.error(`\nAuthentication failed: ${message}`);
+        }
+
+        process.exit(1);
+      }
 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1791,7 +1822,6 @@ auth
       console.log(`\nTo authenticate, run: pgai auth`);
       return;
     }
-    const { maskSecret } = require("../lib/util");
     console.log(`Current API key: ${maskSecret(cfg.apiKey)}`);
     if (cfg.orgId) {
       console.log(`Organization ID: ${cfg.orgId}`);
@@ -2101,15 +2131,7 @@ mcp
       console.log("  4. Codex");
       console.log("");
 
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-
-      const answer = await new Promise<string>((resolve) => {
-        rl.question("Select your AI coding tool (1-4): ", resolve);
-      });
-      rl.close();
+      const answer = await question("Select your AI coding tool (1-4): ");
 
       const choices: Record<string, string> = {
         "1": "cursor",
@@ -2244,5 +2266,7 @@ mcp
     }
   });
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).finally(() => {
+  closeReadline();
+});
 
