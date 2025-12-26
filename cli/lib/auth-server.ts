@@ -73,7 +73,14 @@ export function createCallbackServer(
     rejectReady = reject;
   });
 
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
   const stopServer = () => {
+    // Clear timeout to prevent it firing after manual stop
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
     if (serverInstance) {
       serverInstance.close();
       serverInstance = null;
@@ -81,9 +88,10 @@ export function createCallbackServer(
   };
 
   // Timeout handler
-  const timeout = setTimeout(() => {
+  timeoutId = setTimeout(() => {
     if (!resolved) {
       resolved = true;
+      timeoutId = null; // Already fired, clear reference
       stopServer();
       rejectCallback(new Error("Authentication timeout. Please try again."));
     }
@@ -113,7 +121,10 @@ export function createCallbackServer(
     // Handle OAuth error
     if (error) {
       resolved = true;
-      clearTimeout(timeout);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
 
       setTimeout(() => stopServer(), 100);
       rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
@@ -173,7 +184,10 @@ export function createCallbackServer(
     // Validate state (CSRF protection)
     if (expectedState && state !== expectedState) {
       resolved = true;
-      clearTimeout(timeout);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
 
       setTimeout(() => stopServer(), 100);
       rejectCallback(new Error("State mismatch (possible CSRF attack)"));
@@ -204,7 +218,10 @@ export function createCallbackServer(
 
     // Success!
     resolved = true;
-    clearTimeout(timeout);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
 
     // Resolve first, then stop server asynchronously after response is sent.
     // The 100ms delay ensures the HTTP response is fully written before closing.
@@ -236,7 +253,10 @@ export function createCallbackServer(
 
   // Handle server errors (e.g., EADDRINUSE)
   serverInstance.on("error", (err: NodeJS.ErrnoException) => {
-    clearTimeout(timeout);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
     if (err.code === "EADDRINUSE") {
       rejectReady(new Error(`Port ${port} is already in use`));
     } else {

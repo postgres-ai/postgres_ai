@@ -1624,7 +1624,8 @@ auth
 
       // Wait for server to start and get the actual port
       const actualPort = await callbackServer.ready;
-      const redirectUri = `http://localhost:${actualPort}/callback`;
+      // Use 127.0.0.1 to match the server bind address (avoids IPv6 issues on some hosts)
+      const redirectUri = `http://127.0.0.1:${actualPort}/callback`;
 
       console.log(`Callback server listening on port ${actualPort}`);
 
