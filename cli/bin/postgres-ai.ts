@@ -17,6 +17,7 @@ import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
 
 const execPromise = promisify(exec);
 const execFilePromise = promisify(execFile);
@@ -526,6 +527,116 @@ program
           // ignore
         }
       }
+    }
+  });
+
+program
+  .command("checkup [conn]")
+  .description("generate health check reports directly from PostgreSQL (express mode)")
+  .option("--check-id <id>", `specific check to run: ${Object.keys(CHECK_INFO).join(", ")}, or ALL`, "ALL")
+  .option("--node-name <name>", "node name for reports", "node-01")
+  .option("--output <path>", "output directory for JSON files")
+  .option("--json", "output to stdout as JSON instead of files")
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Available checks:",
+      ...Object.entries(CHECK_INFO).map(([id, title]) => `  ${id}: ${title}`),
+      "",
+      "Examples:",
+      "  postgresai checkup postgresql://user:pass@host:5432/db",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --check-id A003",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --json",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
+    ].join("\n")
+  )
+  .action(async (conn: string | undefined, opts: {
+    checkId: string;
+    nodeName: string;
+    output?: string;
+    json?: boolean;
+  }) => {
+    if (!conn) {
+      console.error("Error: PostgreSQL connection string is required");
+      console.error("");
+      console.error("Usage: postgresai checkup <connection-string> [options]");
+      console.error("");
+      console.error("Example:");
+      console.error("  postgresai checkup postgresql://user:pass@host:5432/db");
+      process.exitCode = 1;
+      return;
+    }
+
+    const client = new Client({ connectionString: conn });
+
+    try {
+      await client.connect();
+
+      let reports: Record<string, any>;
+
+      if (opts.checkId === "ALL") {
+        reports = await generateAllReports(client, opts.nodeName);
+      } else {
+        const checkId = opts.checkId.toUpperCase();
+        const generator = REPORT_GENERATORS[checkId];
+        if (!generator) {
+          console.error(`Unknown check ID: ${opts.checkId}`);
+          console.error(`Available: ${Object.keys(CHECK_INFO).join(", ")}, ALL`);
+          process.exitCode = 1;
+          return;
+        }
+        reports = { [checkId]: await generator(client, opts.nodeName) };
+      }
+
+      // Output results
+      if (opts.json) {
+        console.log(JSON.stringify(reports, null, 2));
+      } else if (opts.output) {
+        // Write to files
+        if (!fs.existsSync(opts.output)) {
+          fs.mkdirSync(opts.output, { recursive: true });
+        }
+        for (const [checkId, report] of Object.entries(reports)) {
+          const filePath = path.join(opts.output, `${checkId}.json`);
+          fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
+          console.log(`✓ ${checkId}: ${filePath}`);
+        }
+      } else {
+        // Default: print summary
+        console.log("\nHealth Check Reports Generated:");
+        console.log("================================\n");
+        for (const [checkId, report] of Object.entries(reports)) {
+          const r = report as any;
+          console.log(`${checkId}: ${r.checkTitle}`);
+          if (r.results && r.results[opts.nodeName]) {
+            const nodeData = r.results[opts.nodeName];
+            if (nodeData.postgres_version) {
+              console.log(`  PostgreSQL: ${nodeData.postgres_version.version}`);
+            }
+            if (checkId === "A007" && nodeData.data) {
+              const count = Object.keys(nodeData.data).length;
+              console.log(`  Altered settings: ${count}`);
+            }
+            if (checkId === "A004" && nodeData.data) {
+              if (nodeData.data.database_sizes) {
+                const dbCount = Object.keys(nodeData.data.database_sizes).length;
+                console.log(`  Databases: ${dbCount}`);
+              }
+              if (nodeData.data.general_info?.cache_hit_ratio) {
+                console.log(`  Cache hit ratio: ${nodeData.data.general_info.cache_hit_ratio.value}%`);
+              }
+            }
+          }
+        }
+        console.log("\nUse --json for full output or --output <dir> to save files");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Error: ${message}`);
+      process.exitCode = 1;
+    } finally {
+      await client.end();
     }
   });
 
