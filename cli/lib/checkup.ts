@@ -127,6 +127,14 @@ export interface StatsReset {
 /**
  * Redundant index entry (H004) - matches H004.schema.json redundantIndex
  */
+/**
+ * Covering index definition (the index that makes another index redundant)
+ */
+export interface CoveringIndex {
+  index_name: string;
+  index_definition: string;
+}
+
 export interface RedundantIndex {
   schema_name: string;
   table_name: string;
@@ -141,6 +149,7 @@ export interface RedundantIndex {
   index_definition: string;
   index_size_pretty: string;
   table_size_pretty: string;
+  covering_indexes: CoveringIndex[];
 }
 
 /**
@@ -516,6 +525,22 @@ export async function getRedundantIndexes(client: Client): Promise<RedundantInde
     const transformed = transformMetricRow(row);
     const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
     const tableSizeBytes = parseInt(String(transformed.table_size_bytes || 0), 10);
+    
+    // Parse covering_indexes JSON array
+    let coveringIndexes: CoveringIndex[] = [];
+    try {
+      const jsonStr = String(transformed.covering_indexes_json || "[]");
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) {
+        coveringIndexes = parsed.map((item: any) => ({
+          index_name: String(item.index_name || ""),
+          index_definition: String(item.index_definition || ""),
+        }));
+      }
+    } catch {
+      // If JSON parsing fails, leave as empty array
+    }
+    
     return {
       schema_name: String(transformed.schema_name || ""),
       table_name: String(transformed.table_name || ""),
@@ -530,6 +555,7 @@ export async function getRedundantIndexes(client: Client): Promise<RedundantInde
       index_definition: String(transformed.index_definition || ""),
       index_size_pretty: formatBytes(indexSizeBytes),
       table_size_pretty: formatBytes(tableSizeBytes),
+      covering_indexes: coveringIndexes,
     };
   });
 }
