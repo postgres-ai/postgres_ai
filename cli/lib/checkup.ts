@@ -166,6 +166,7 @@ export interface NodeResult {
 export interface Report {
   version: string | null;
   build_ts: string | null;
+  generation_mode: string | null;
   checkId: string;
   checkTitle: string;
   timestamptz: string;
@@ -572,6 +573,7 @@ export function createBaseReport(
   return {
     version: pkg.version || null,
     build_ts: buildTs,
+    generation_mode: "express",
     checkId,
     checkTitle,
     timestamptz: new Date().toISOString(),

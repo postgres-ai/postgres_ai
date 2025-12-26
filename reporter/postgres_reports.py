@@ -3307,6 +3307,7 @@ class PostgresReportGenerator:
         template_data = {
             "version": self._build_metadata.get("version"),
             "build_ts": self._build_metadata.get("build_ts"),
+            "generation_mode": "full",
             "checkId": check_id,
             "checkTitle": self.get_check_title(check_id),
             "timestamptz": now.isoformat(),

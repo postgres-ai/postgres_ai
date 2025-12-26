@@ -7,6 +7,7 @@
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "M002" },
     "checkTitle": { "const": "Top queries by rows (I/O intensity)" },
     "timestamptz": { "type": "string" },

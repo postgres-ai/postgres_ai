@@ -7,6 +7,7 @@
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "H002" },
     "checkTitle": { "const": "Unused indexes" },
     "timestamptz": { "type": "string" },
