@@ -1,3 +1,5 @@
+import * as http from "http";
+
 /**
  * OAuth callback result
  */
@@ -31,7 +33,7 @@ function escapeHtml(str: string | null): string {
 }
 
 /**
- * Create and start callback server using Bun.serve
+ * Create and start callback server using Node.js http module
  *
  * @param port - Port to listen on (0 for random available port)
  * @param expectedState - Expected state parameter for CSRF protection
@@ -53,53 +55,60 @@ export function createCallbackServer(
   let actualPort = port;
   let resolveCallback: (value: CallbackResult) => void;
   let rejectCallback: (reason: Error) => void;
-  let serverInstance: ReturnType<typeof Bun.serve> | null = null;
+  let serverInstance: http.Server | null = null;
 
   const promise = new Promise<CallbackResult>((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
   });
 
+  const stopServer = () => {
+    if (serverInstance) {
+      serverInstance.close();
+      serverInstance = null;
+    }
+  };
+
   // Timeout handler
   const timeout = setTimeout(() => {
     if (!resolved) {
       resolved = true;
-      if (serverInstance) {
-        serverInstance.stop();
-      }
+      stopServer();
       rejectCallback(new Error("Authentication timeout. Please try again."));
     }
   }, timeoutMs);
 
-  serverInstance = Bun.serve({
-    port: port,
-    hostname: "127.0.0.1",
-    fetch(req) {
-      if (resolved) {
-        return new Response("Already handled", { status: 200 });
-      }
+  serverInstance = http.createServer((req, res) => {
+    if (resolved) {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Already handled");
+      return;
+    }
 
-      const url = new URL(req.url);
+    const url = new URL(req.url || "/", `http://127.0.0.1:${actualPort}`);
 
-      // Only handle /callback path
-      if (!url.pathname.startsWith("/callback")) {
-        return new Response("Not Found", { status: 404 });
-      }
+    // Only handle /callback path
+    if (!url.pathname.startsWith("/callback")) {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Not Found");
+      return;
+    }
 
-      const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state");
-      const error = url.searchParams.get("error");
-      const errorDescription = url.searchParams.get("error_description");
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+    const errorDescription = url.searchParams.get("error_description");
 
-      // Handle OAuth error
-      if (error) {
-        resolved = true;
-        clearTimeout(timeout);
+    // Handle OAuth error
+    if (error) {
+      resolved = true;
+      clearTimeout(timeout);
 
-        setTimeout(() => serverInstance?.stop(), 100);
-        rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
+      setTimeout(() => stopServer(), 100);
+      rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
 
-        return new Response(`
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -120,12 +129,14 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `, { status: 400, headers: { "Content-Type": "text/html" } });
-      }
+      `);
+      return;
+    }
 
-      // Validate required parameters
-      if (!code || !state) {
-        return new Response(`
+    // Validate required parameters
+    if (!code || !state) {
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -144,18 +155,20 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `, { status: 400, headers: { "Content-Type": "text/html" } });
-      }
+      `);
+      return;
+    }
 
-      // Validate state (CSRF protection)
-      if (expectedState && state !== expectedState) {
-        resolved = true;
-        clearTimeout(timeout);
+    // Validate state (CSRF protection)
+    if (expectedState && state !== expectedState) {
+      resolved = true;
+      clearTimeout(timeout);
 
-        setTimeout(() => serverInstance?.stop(), 100);
-        rejectCallback(new Error("State mismatch (possible CSRF attack)"));
+      setTimeout(() => stopServer(), 100);
+      rejectCallback(new Error("State mismatch (possible CSRF attack)"));
 
-        return new Response(`
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -174,19 +187,21 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `, { status: 400, headers: { "Content-Type": "text/html" } });
-      }
+      `);
+      return;
+    }
 
-      // Success!
-      resolved = true;
-      clearTimeout(timeout);
+    // Success!
+    resolved = true;
+    clearTimeout(timeout);
 
-      // Resolve first, then stop server asynchronously after response is sent.
-      // The 100ms delay ensures the HTTP response is fully written before closing.
-      resolveCallback({ code, state });
-      setTimeout(() => serverInstance?.stop(), 100);
+    // Resolve first, then stop server asynchronously after response is sent.
+    // The 100ms delay ensures the HTTP response is fully written before closing.
+    resolveCallback({ code, state });
+    setTimeout(() => stopServer(), 100);
 
-      return new Response(`
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -205,24 +220,19 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-      `, { status: 200, headers: { "Content-Type": "text/html" } });
-    },
+    `);
   });
 
-  actualPort = serverInstance.port;
+  serverInstance.listen(port, "127.0.0.1", () => {
+    const address = serverInstance?.address();
+    if (address && typeof address === "object") {
+      actualPort = address.port;
+    }
+  });
 
   return {
-    server: { stop: () => serverInstance?.stop() },
+    server: { stop: stopServer },
     promise,
     getPort: () => actualPort,
   };
-}
-
-/**
- * Get the actual port the server is listening on
- * @param server - Bun server instance
- * @returns Port number
- */
-export function getServerPort(server: ReturnType<typeof Bun.serve>): number {
-  return server.port;
 }
