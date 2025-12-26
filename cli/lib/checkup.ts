@@ -138,131 +138,15 @@ export interface Report {
 }
 
 /**
- * SQL queries derived from metrics.yml
- * These are the same queries used by pgwatch to export metrics to Prometheus
+ * IMPORTANT: All SQL queries for express reports are now loaded from
+ * config/pgwatch-prometheus/metrics.yml via getMetricSql().
+ * 
+ * DO NOT add inline SQL queries here. Use METRIC_NAMES from metrics-loader.ts
+ * to reference the appropriate metric, then call getMetricSql(METRIC_NAMES.xxx).
+ * 
+ * This ensures consistency between CLI express reports and Prometheus metrics.
  */
-export const METRICS_SQL = {
-  // From metrics.yml: settings metric
-  // Queries pg_settings for all configuration parameters
-  settings: `
-    select
-      name,
-      setting,
-      coalesce(unit, '') as unit,
-      category,
-      context,
-      vartype,
-      case
-        when unit = '8kB' then pg_size_pretty(setting::bigint * 8192)
-        when unit = 'kB' then pg_size_pretty(setting::bigint * 1024)
-        when unit = 'MB' then pg_size_pretty(setting::bigint * 1024 * 1024)
-        when unit = 'B' then pg_size_pretty(setting::bigint)
-        when unit = 'ms' then setting || ' ms'
-        when unit = 's' then setting || ' s'
-        when unit = 'min' then setting || ' min'
-        else setting
-      end as pretty_value,
-      source,
-      case when source <> 'default' then 0 else 1 end as is_default
-    from pg_settings
-    order by name
-  `,
-
-  // Altered settings - non-default values only (A007)
-  alteredSettings: `
-    select
-      name,
-      setting,
-      coalesce(unit, '') as unit,
-      category,
-      case
-        when unit = '8kB' then pg_size_pretty(setting::bigint * 8192)
-        when unit = 'kB' then pg_size_pretty(setting::bigint * 1024)
-        when unit = 'MB' then pg_size_pretty(setting::bigint * 1024 * 1024)
-        when unit = 'B' then pg_size_pretty(setting::bigint)
-        when unit = 'ms' then setting || ' ms'
-        when unit = 's' then setting || ' s'
-        when unit = 'min' then setting || ' min'
-        else setting
-      end as pretty_value
-    from pg_settings
-    where source <> 'default'
-    order by name
-  `,
-
-  // Version info - extracts server_version and server_version_num
-  version: `
-    select
-      name,
-      setting
-    from pg_settings
-    where name in ('server_version', 'server_version_num')
-  `,
-
-  // Database sizes (A004)
-  databaseSizes: `
-    select
-      datname,
-      pg_database_size(datname) as size_bytes
-    from pg_database
-    where datistemplate = false
-    order by size_bytes desc
-  `,
-
-  // Cluster statistics (A004)
-  clusterStats: `
-    select
-      sum(numbackends) as total_connections,
-      sum(xact_commit) as total_commits,
-      sum(xact_rollback) as total_rollbacks,
-      sum(blks_read) as blocks_read,
-      sum(blks_hit) as blocks_hit,
-      sum(tup_returned) as tuples_returned,
-      sum(tup_fetched) as tuples_fetched,
-      sum(tup_inserted) as tuples_inserted,
-      sum(tup_updated) as tuples_updated,
-      sum(tup_deleted) as tuples_deleted,
-      sum(deadlocks) as total_deadlocks,
-      sum(temp_files) as temp_files_created,
-      sum(temp_bytes) as temp_bytes_written
-    from pg_stat_database
-    where datname is not null
-  `,
-
-  // Connection states (A004)
-  connectionStates: `
-    select
-      coalesce(state, 'null') as state,
-      count(*) as count
-    from pg_stat_activity
-    group by state
-  `,
-
-  // Uptime info (A004)
-  uptimeInfo: `
-    select
-      pg_postmaster_start_time() as start_time,
-      current_timestamp - pg_postmaster_start_time() as uptime
-  `,
-
-  /*
-   * H001, H002, H004 SQL queries are loaded from config/pgwatch-prometheus/metrics.yml
-   * See METRIC_NAMES in metrics-loader.ts for the mapping.
-   * DO NOT add inline SQL for these checks here - use getMetricSql() instead.
-   */
-
-  // Stats reset info for H002 (not in metrics.yml, kept here)
-  statsReset: `
-    select
-      extract(epoch from stats_reset) as stats_reset_epoch,
-      stats_reset::text as stats_reset_time,
-      extract(day from (now() - stats_reset))::integer as days_since_reset,
-      extract(epoch from pg_postmaster_start_time()) as postmaster_startup_epoch,
-      pg_postmaster_start_time()::text as postmaster_startup_time
-    from pg_stat_database
-    where datname = current_database()
-  `,
-};
+export const METRICS_SQL = {} as const;
 
 
 /**
@@ -295,9 +179,11 @@ export function formatBytes(bytes: number): string {
 
 /**
  * Get PostgreSQL version information
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_version)
  */
 export async function getPostgresVersion(client: Client): Promise<PostgresVersion> {
-  const result = await client.query(METRICS_SQL.version);
+  const sql = getMetricSql(METRIC_NAMES.version);
+  const result = await client.query(sql);
 
   let version = "";
   let serverVersionNum = "";
@@ -322,15 +208,17 @@ export async function getPostgresVersion(client: Client): Promise<PostgresVersio
 
 /**
  * Get all PostgreSQL settings
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_settings)
  */
 export async function getSettings(client: Client): Promise<Record<string, SettingInfo>> {
-  const result = await client.query(METRICS_SQL.settings);
+  const sql = getMetricSql(METRIC_NAMES.settings);
+  const result = await client.query(sql);
   const settings: Record<string, SettingInfo> = {};
 
   for (const row of result.rows) {
     settings[row.name] = {
       setting: row.setting,
-      unit: row.unit,
+      unit: row.unit || "",
       category: row.category,
       context: row.context,
       vartype: row.vartype,
@@ -343,15 +231,17 @@ export async function getSettings(client: Client): Promise<Record<string, Settin
 
 /**
  * Get altered (non-default) PostgreSQL settings
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_altered_settings)
  */
 export async function getAlteredSettings(client: Client): Promise<Record<string, AlteredSetting>> {
-  const result = await client.query(METRICS_SQL.alteredSettings);
+  const sql = getMetricSql(METRIC_NAMES.alteredSettings);
+  const result = await client.query(sql);
   const settings: Record<string, AlteredSetting> = {};
 
   for (const row of result.rows) {
     settings[row.name] = {
       value: row.setting,
-      unit: row.unit,
+      unit: row.unit || "",
       category: row.category,
       pretty_value: row.pretty_value,
     };
@@ -362,9 +252,11 @@ export async function getAlteredSettings(client: Client): Promise<Record<string,
 
 /**
  * Get database sizes
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_database_sizes)
  */
 export async function getDatabaseSizes(client: Client): Promise<Record<string, number>> {
-  const result = await client.query(METRICS_SQL.databaseSizes);
+  const sql = getMetricSql(METRIC_NAMES.databaseSizes);
+  const result = await client.query(sql);
   const sizes: Record<string, number> = {};
 
   for (const row of result.rows) {
@@ -376,12 +268,14 @@ export async function getDatabaseSizes(client: Client): Promise<Record<string, n
 
 /**
  * Get cluster general info metrics
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_cluster_stats, express_connection_states, express_uptime)
  */
 export async function getClusterInfo(client: Client): Promise<Record<string, ClusterMetric>> {
   const info: Record<string, ClusterMetric> = {};
 
   // Get cluster statistics
-  const statsResult = await client.query(METRICS_SQL.clusterStats);
+  const clusterStatsSql = getMetricSql(METRIC_NAMES.clusterStats);
+  const statsResult = await client.query(clusterStatsSql);
   if (statsResult.rows.length > 0) {
     const stats = statsResult.rows[0];
 
@@ -477,7 +371,8 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
   }
 
   // Get connection states
-  const connResult = await client.query(METRICS_SQL.connectionStates);
+  const connStatesSql = getMetricSql(METRIC_NAMES.connectionStates);
+  const connResult = await client.query(connStatesSql);
   for (const row of connResult.rows) {
     const stateKey = `connections_${row.state.replace(/\s+/g, "_")}`;
     info[stateKey] = {
@@ -488,7 +383,8 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
   }
 
   // Get uptime info
-  const uptimeResult = await client.query(METRICS_SQL.uptimeInfo);
+  const uptimeSql = getMetricSql(METRIC_NAMES.uptimeInfo);
+  const uptimeResult = await client.query(uptimeSql);
   if (uptimeResult.rows.length > 0) {
     const uptime = uptimeResult.rows[0];
     info.start_time = {
@@ -556,8 +452,13 @@ export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
 /**
  * Get stats reset info (H002)
  */
+/**
+ * Get stats reset info (H002)
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_stats_reset)
+ */
 export async function getStatsReset(client: Client): Promise<StatsReset> {
-  const result = await client.query(METRICS_SQL.statsReset);
+  const sql = getMetricSql(METRIC_NAMES.statsReset);
+  const result = await client.query(sql);
   const row = result.rows[0] || {};
   return {
     stats_reset_epoch: row.stats_reset_epoch ? parseFloat(row.stats_reset_epoch) : null,
@@ -565,6 +466,20 @@ export async function getStatsReset(client: Client): Promise<StatsReset> {
     days_since_reset: row.days_since_reset ? parseInt(row.days_since_reset, 10) : null,
     postmaster_startup_epoch: row.postmaster_startup_epoch ? parseFloat(row.postmaster_startup_epoch) : null,
     postmaster_startup_time: row.postmaster_startup_time || null,
+  };
+}
+
+/**
+ * Get current database name and size
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (express_current_database)
+ */
+export async function getCurrentDatabaseInfo(client: Client): Promise<{ datname: string; size_bytes: number }> {
+  const sql = getMetricSql(METRIC_NAMES.currentDatabase);
+  const result = await client.query(sql);
+  const row = result.rows[0] || {};
+  return {
+    datname: row.datname || "postgres",
+    size_bytes: parseInt(row.size_bytes, 10) || 0,
   };
 }
 
@@ -751,9 +666,7 @@ export async function generateH001(client: Client, nodeName: string = "node-01")
   const postgresVersion = await getPostgresVersion(client);
   
   // Get current database name and size
-  const dbResult = await client.query("SELECT current_database() as datname, pg_database_size(current_database()) as size_bytes");
-  const dbName = dbResult.rows[0]?.datname || "postgres";
-  const dbSizeBytes = parseInt(dbResult.rows[0]?.size_bytes, 10) || 0;
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client);
 
   // Calculate totals
   const totalCount = invalidIndexes.length;
@@ -787,9 +700,7 @@ export async function generateH002(client: Client, nodeName: string = "node-01")
   const statsReset = await getStatsReset(client);
   
   // Get current database name and size
-  const dbResult = await client.query("SELECT current_database() as datname, pg_database_size(current_database()) as size_bytes");
-  const dbName = dbResult.rows[0]?.datname || "postgres";
-  const dbSizeBytes = parseInt(dbResult.rows[0]?.size_bytes, 10) || 0;
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client);
 
   // Calculate totals
   const totalCount = unusedIndexes.length;
@@ -823,9 +734,7 @@ export async function generateH004(client: Client, nodeName: string = "node-01")
   const postgresVersion = await getPostgresVersion(client);
   
   // Get current database name and size
-  const dbResult = await client.query("SELECT current_database() as datname, pg_database_size(current_database()) as size_bytes");
-  const dbName = dbResult.rows[0]?.datname || "postgres";
-  const dbSizeBytes = parseInt(dbResult.rows[0]?.size_bytes, 10) || 0;
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client);
 
   // Calculate totals
   const totalCount = redundantIndexes.length;

@@ -2023,6 +2023,187 @@ metrics:
       - 'stats_reset_epoch'
       - 'seconds_since_reset'
     statement_timeout_seconds: 15
+
+  # =============================================================================
+  # Express Report Metrics
+  # These metrics are used by the postgres-ai CLI for express checkup reports.
+  # They have a clean output format (no tag_ prefixes, no epoch_ns).
+  # =============================================================================
+
+  express_version:
+    description: >
+      PostgreSQL version information for express reports (A002, A013).
+      Returns server_version and server_version_num from pg_settings.
+    sqls:
+      11: |
+        select
+          name,
+          setting
+        from pg_settings
+        where name in ('server_version', 'server_version_num');
+    gauges:
+      - '*'
+    statement_timeout_seconds: 5
+
+  express_settings:
+    description: >
+      Full PostgreSQL settings list for express reports (A003).
+      Returns all settings with their values, units, categories, and contexts.
+    sqls:
+      11: |
+        select
+          name,
+          setting,
+          unit,
+          category,
+          context,
+          vartype,
+          case when (source <> 'default') then 0 else 1 end as is_default,
+          case
+            when unit = '8kB' then pg_size_pretty(setting::bigint * 8192)
+            when unit = 'kB' then pg_size_pretty(setting::bigint * 1024)
+            when unit = 'MB' then pg_size_pretty(setting::bigint * 1024 * 1024)
+            when unit = 'B' then pg_size_pretty(setting::bigint)
+            when unit = 'ms' then setting || ' ms'
+            when unit = 's' then setting || ' s'
+            when unit = 'min' then setting || ' min'
+            else setting
+          end as pretty_value
+        from pg_settings
+        order by name;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 15
+
+  express_altered_settings:
+    description: >
+      Non-default PostgreSQL settings for express reports (A007).
+      Returns settings where source is not 'default'.
+    sqls:
+      11: |
+        select
+          name,
+          setting,
+          unit,
+          category,
+          case
+            when unit = '8kB' then pg_size_pretty(setting::bigint * 8192)
+            when unit = 'kB' then pg_size_pretty(setting::bigint * 1024)
+            when unit = 'MB' then pg_size_pretty(setting::bigint * 1024 * 1024)
+            when unit = 'B' then pg_size_pretty(setting::bigint)
+            when unit = 'ms' then setting || ' ms'
+            when unit = 's' then setting || ' s'
+            when unit = 'min' then setting || ' min'
+            else setting
+          end as pretty_value
+        from pg_settings
+        where source <> 'default'
+        order by name;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 15
+
+  express_database_sizes:
+    description: >
+      Database sizes for express reports (A004).
+      Returns size in bytes for all non-template databases.
+    sqls:
+      11: |
+        select
+          datname,
+          pg_database_size(datname) as size_bytes
+        from pg_database
+        where datistemplate = false
+        order by size_bytes desc;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 60
+
+  express_cluster_stats:
+    description: >
+      Aggregated cluster statistics for express reports (A004).
+      Returns totals across all databases.
+    sqls:
+      11: |
+        select
+          sum(numbackends) as total_connections,
+          sum(xact_commit) as total_commits,
+          sum(xact_rollback) as total_rollbacks,
+          sum(blks_read) as blocks_read,
+          sum(blks_hit) as blocks_hit,
+          sum(tup_returned) as tuples_returned,
+          sum(tup_fetched) as tuples_fetched,
+          sum(tup_inserted) as tuples_inserted,
+          sum(tup_updated) as tuples_updated,
+          sum(tup_deleted) as tuples_deleted,
+          sum(deadlocks) as total_deadlocks,
+          sum(temp_files) as temp_files_created,
+          sum(temp_bytes) as temp_bytes_written
+        from pg_stat_database
+        where datname is not null;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 15
+
+  express_connection_states:
+    description: >
+      Connection states for express reports (A004).
+      Returns count of connections by state.
+    sqls:
+      11: |
+        select
+          coalesce(state, 'null') as state,
+          count(*) as count
+        from pg_stat_activity
+        group by state;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 5
+
+  express_uptime:
+    description: >
+      Server uptime information for express reports (A004).
+      Returns postmaster start time and uptime interval.
+    sqls:
+      11: |
+        select
+          pg_postmaster_start_time() as start_time,
+          current_timestamp - pg_postmaster_start_time() as uptime;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 5
+
+  express_stats_reset:
+    description: >
+      Statistics reset information for express reports (H002).
+      Returns stats reset time and postmaster startup time.
+    sqls:
+      11: |
+        select
+          extract(epoch from stats_reset) as stats_reset_epoch,
+          stats_reset::text as stats_reset_time,
+          extract(day from (now() - stats_reset))::integer as days_since_reset,
+          extract(epoch from pg_postmaster_start_time()) as postmaster_startup_epoch,
+          pg_postmaster_start_time()::text as postmaster_startup_time
+        from pg_stat_database
+        where datname = current_database();
+    gauges:
+      - '*'
+    statement_timeout_seconds: 5
+
+  express_current_database:
+    description: >
+      Current database information for express reports.
+      Returns database name and size.
+    sqls:
+      11: |
+        select
+          current_database() as datname,
+          pg_database_size(current_database()) as size_bytes;
+    gauges:
+      - '*'
+    statement_timeout_seconds: 5
+
   archive_lag:
     description: >
       This metric measures the lag in WAL archive processing.

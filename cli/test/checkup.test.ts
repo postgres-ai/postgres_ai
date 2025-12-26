@@ -259,42 +259,13 @@ describe("REPORT_GENERATORS", () => {
   });
 });
 
-// Tests for METRICS_SQL
+// Tests for METRICS_SQL - all SQL is now loaded from metrics.yml
 describe("METRICS_SQL", () => {
-  test("settings queries pg_settings", () => {
-    expect(checkup.METRICS_SQL.settings).toContain("pg_settings");
-    expect(checkup.METRICS_SQL.settings).toContain("name");
-    expect(checkup.METRICS_SQL.settings).toContain("setting");
+  test("METRICS_SQL is empty - all queries loaded from metrics.yml", () => {
+    // All SQL queries are now loaded from config/pgwatch-prometheus/metrics.yml
+    // via getMetricSql() to ensure consistency between CLI and Prometheus metrics
+    expect(Object.keys(checkup.METRICS_SQL).length).toBe(0);
   });
-
-  test("version queries server_version fields", () => {
-    expect(checkup.METRICS_SQL.version).toContain("server_version");
-    expect(checkup.METRICS_SQL.version).toContain("server_version_num");
-  });
-
-  test("alteredSettings filters non-default settings", () => {
-    expect(checkup.METRICS_SQL.alteredSettings).toContain("pg_settings");
-    expect(checkup.METRICS_SQL.alteredSettings).toContain("source <> 'default'");
-  });
-
-  test("databaseSizes queries pg_database", () => {
-    expect(checkup.METRICS_SQL.databaseSizes).toContain("pg_database");
-    expect(checkup.METRICS_SQL.databaseSizes).toContain("pg_database_size");
-  });
-
-  test("clusterStats queries pg_stat_database", () => {
-    expect(checkup.METRICS_SQL.clusterStats).toContain("pg_stat_database");
-    expect(checkup.METRICS_SQL.clusterStats).toContain("xact_commit");
-    expect(checkup.METRICS_SQL.clusterStats).toContain("deadlocks");
-  });
-
-  test("connectionStates queries pg_stat_activity", () => {
-    expect(checkup.METRICS_SQL.connectionStates).toContain("pg_stat_activity");
-    expect(checkup.METRICS_SQL.connectionStates).toContain("state");
-  });
-
-  // H001, H002, H004 SQL queries are now loaded from metrics.yml via getMetricSql()
-  // See metrics-loader.ts for implementation
 });
 
 // Tests for formatBytes
