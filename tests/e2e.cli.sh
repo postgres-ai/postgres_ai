@@ -28,9 +28,9 @@ $MON_CMD targets remove ci-test
 
 echo ""
 echo "=== Testing API key commands ==="
-$CLI_CMD add-key "test_api_key_12345"
-$CLI_CMD show-key | grep -q "test_api"
-$CLI_CMD remove-key
+$CLI_CMD auth login --set-key "test_api_key_12345"
+$CLI_CMD auth show-key | grep -q "test_api"
+$CLI_CMD auth remove-key
 
 echo ""
 echo "=== Testing Grafana commands ==="
