@@ -39,7 +39,7 @@
         "server_minor_ver": { "type": "string" }
       }
     },
-    "mainIndex": {
+    "redundantToIndex": {
       "type": "object",
       "additionalProperties": false,
       "required": ["index_name", "index_definition"],
@@ -65,7 +65,7 @@
         "index_definition",
         "index_size_pretty",
         "table_size_pretty",
-        "main_indexes"
+        "redundant_to"
       ],
       "properties": {
         "schema_name": { "type": "string" },
@@ -81,7 +81,7 @@
         "index_definition": { "type": "string" },
         "index_size_pretty": { "type": "string" },
         "table_size_pretty": { "type": "string" },
-        "main_indexes": { "type": "array", "items": { "$ref": "#/$defs/mainIndex" } }
+        "redundant_to": { "type": "array", "items": { "$ref": "#/$defs/redundantToIndex" } }
       }
     },
     "dbEntry": {

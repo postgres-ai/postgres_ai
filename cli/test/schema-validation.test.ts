@@ -203,7 +203,7 @@ describe("H004 schema validation", () => {
           index_usage: "0",
           supports_fk: false,
           index_definition: "CREATE INDEX orders_user_id_idx ON public.orders USING btree (user_id)",
-          main_indexes_json: JSON.stringify([
+          redundant_to_json: JSON.stringify([
             { index_name: "public.orders_user_id_created_idx", index_definition: "CREATE INDEX orders_user_id_created_idx ON public.orders USING btree (user_id, created_at)" }
           ])
         },

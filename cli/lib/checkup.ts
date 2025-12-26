@@ -128,10 +128,10 @@ export interface StatsReset {
  * Redundant index entry (H004) - matches H004.schema.json redundantIndex
  */
 /**
- * Main index definition (the index that makes another index redundant)
- * Named "main" to match the SQL variable `main_index_def` in the query.
+ * Index that makes another index redundant.
+ * Used in redundant_to array to show which indexes this one is redundant to.
  */
-export interface MainIndex {
+export interface RedundantToIndex {
   index_name: string;
   index_definition: string;
 }
@@ -150,7 +150,7 @@ export interface RedundantIndex {
   index_definition: string;
   index_size_pretty: string;
   table_size_pretty: string;
-  main_indexes: MainIndex[];
+  redundant_to: RedundantToIndex[];
 }
 
 /**
@@ -528,13 +528,13 @@ export async function getRedundantIndexes(client: Client): Promise<RedundantInde
     const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
     const tableSizeBytes = parseInt(String(transformed.table_size_bytes || 0), 10);
     
-    // Parse main_indexes JSON array (indexes that make this one redundant)
-    let mainIndexes: MainIndex[] = [];
+    // Parse redundant_to JSON array (indexes that make this one redundant)
+    let redundantTo: RedundantToIndex[] = [];
     try {
-      const jsonStr = String(transformed.main_indexes_json || "[]");
+      const jsonStr = String(transformed.redundant_to_json || "[]");
       const parsed = JSON.parse(jsonStr);
       if (Array.isArray(parsed)) {
-        mainIndexes = parsed.map((item: any) => ({
+        redundantTo = parsed.map((item: any) => ({
           index_name: String(item.index_name || ""),
           index_definition: String(item.index_definition || ""),
         }));
@@ -557,7 +557,7 @@ export async function getRedundantIndexes(client: Client): Promise<RedundantInde
       index_definition: String(transformed.index_definition || ""),
       index_size_pretty: formatBytes(indexSizeBytes),
       table_size_pretty: formatBytes(tableSizeBytes),
-      main_indexes: mainIndexes,
+      redundant_to: redundantTo,
     };
   });
 }
