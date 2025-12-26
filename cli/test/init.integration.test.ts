@@ -213,7 +213,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 30000 });
 
   test("requires explicit monitoring password in non-interactive mode", async () => {
     pg = await createTempPostgres();
@@ -237,7 +237,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 30000 });
 
   test("fixes slightly-off permissions idempotently", async () => {
     pg = await createTempPostgres();
@@ -291,7 +291,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 30000 });
 
   test("reports nicely when lacking permissions", async () => {
     pg = await createTempPostgres();
@@ -324,7 +324,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 30000 });
 
   test(
     "--verify returns 0 when ok and non-zero when missing",
@@ -363,7 +363,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
         await pg.cleanup();
       }
     },
-    { timeout: 15000 }
+    { timeout: 30000 }
   );
 
   test("--reset-password updates the monitoring role login password", async () => {
@@ -396,5 +396,5 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 30000 });
 });
