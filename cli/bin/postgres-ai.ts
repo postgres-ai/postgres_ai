@@ -1916,6 +1916,9 @@ auth
       }
       
       config.writeConfig({ apiKey: trimmedKey });
+      // When API key is set directly, invalidate org/project selection
+      // as it likely belongs to a different account/session.
+      config.deleteConfigKeys(["orgId", "defaultProject"]);
       console.log(`API key saved to ${config.getConfigPath()}`);
       return;
     }
@@ -1974,6 +1977,7 @@ auth
           headers: {
             "Content-Type": "application/json",
           },
+<<<<<<< HEAD
           body: initData,
         });
       } catch (err) {
@@ -2094,6 +2098,9 @@ auth
             baseUrl: apiBaseUrl,
             orgId: orgId,
           });
+          // When re-authing via OAuth, orgId will be refreshed,
+          // but defaultProject may no longer be valid in the new org.
+          config.deleteConfigKeys(["defaultProject"]);
 
           console.log("\nAuthentication successful!");
           console.log(`API key saved to: ${config.getConfigPath()}`);
