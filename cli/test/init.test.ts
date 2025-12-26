@@ -332,8 +332,8 @@ describe("CLI commands", () => {
     expect(r.stdout).toMatch(/--api-key/);
   });
 
-  test("cli: auth --help shows --set-key option", () => {
-    const r = runCli(["auth", "--help"]);
+  test("cli: auth login --help shows --set-key option", () => {
+    const r = runCli(["auth", "login", "--help"]);
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/--set-key/);
   });
