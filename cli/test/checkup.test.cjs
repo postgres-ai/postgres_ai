@@ -650,6 +650,16 @@ test("cli: checkup generates and saves defaultProject when missing", () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test("cli: checkup --json implies --no-upload (no API key/project required)", () => {
+  const r = runCli(["checkup", "postgresql://user:pass@127.0.0.1:1/db", "--json"], {
+    PGAI_API_KEY: "",
+    XDG_CONFIG_HOME: "/nonexistent",
+  });
+  assert.notEqual(r.status, 0);
+  assert.doesNotMatch(r.stderr, /api key is required/i);
+  assert.doesNotMatch(r.stderr, /--project is required/i);
+});
+
 test("formatRpcErrorForDisplay formats details/hint nicely", () => {
   const api = require("../dist/lib/checkup-api.js");
   const err = new api.RpcError({
