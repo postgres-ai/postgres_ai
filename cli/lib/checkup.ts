@@ -53,6 +53,52 @@ export interface ClusterMetric {
 }
 
 /**
+ * Invalid index entry (H001)
+ */
+export interface InvalidIndex {
+  schema_name: string;
+  table_name: string;
+  index_name: string;
+  relation_name: string;
+  index_size_bytes: number;
+  index_size_pretty: string;
+  supports_fk: boolean;
+}
+
+/**
+ * Unused index entry (H002)
+ */
+export interface UnusedIndex {
+  schema_name: string;
+  table_name: string;
+  index_name: string;
+  reason: string;
+  index_size_bytes: number;
+  index_size_pretty: string;
+  idx_scan: number;
+  all_scans: number;
+  index_scan_pct: number;
+  writes: number;
+  scans_per_write: number;
+  table_size_bytes: number;
+  table_size_pretty: string;
+  supports_fk: boolean;
+}
+
+/**
+ * Non-indexed foreign key entry (H003)
+ */
+export interface NonIndexedForeignKey {
+  schema_name: string;
+  table_name: string;
+  fk_name: string;
+  fk_definition: string;
+  table_size_bytes: number;
+  table_size_pretty: string;
+  referenced_table: string;
+}
+
+/**
  * Node result for reports
  */
 export interface NodeResult {
@@ -182,6 +228,158 @@ export const METRICS_SQL = {
     SELECT
       pg_postmaster_start_time() as start_time,
       current_timestamp - pg_postmaster_start_time() as uptime
+  `,
+
+  // Invalid indexes (H001) - indexes where indisvalid = false
+  invalidIndexes: `
+    SELECT
+      n.nspname as schema_name,
+      t.relname as table_name,
+      i.relname as index_name,
+      pg_relation_size(i.oid) as index_size_bytes
+    FROM pg_index idx
+    JOIN pg_class i ON i.oid = idx.indexrelid
+    JOIN pg_class t ON t.oid = idx.indrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE idx.indisvalid = false
+      AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    ORDER BY pg_relation_size(i.oid) DESC
+  `,
+
+  // Unused indexes (H002) - indexes with zero scans, excluding unique/PK indexes
+  unusedIndexes: `
+    WITH fk_indexes AS (
+      SELECT
+        n.nspname as schema_name,
+        ci.relname as index_name,
+        cr.relname as table_name,
+        (confrelid::regclass)::text as fk_table_ref,
+        array_to_string(indclass, ', ') as opclasses
+      FROM pg_index i
+      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
+      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
+      JOIN pg_namespace n ON n.oid = ci.relnamespace
+      JOIN pg_constraint cn ON cn.conrelid = cr.oid
+      LEFT JOIN pg_stat_all_indexes si ON si.indexrelid = i.indexrelid
+      WHERE cn.contype = 'f'
+        AND i.indisunique = false
+        AND cn.conkey IS NOT NULL
+        AND ci.relpages > 0
+        AND COALESCE(si.idx_scan, 0) < 10
+    ),
+    table_scans AS (
+      SELECT
+        relid,
+        COALESCE(idx_scan, 0) + COALESCE(seq_scan, 0) as all_scans,
+        COALESCE(n_tup_ins, 0) + COALESCE(n_tup_upd, 0) + COALESCE(n_tup_del, 0) as writes,
+        pg_relation_size(relid) as table_size
+      FROM pg_stat_all_tables
+      JOIN pg_class c ON c.oid = relid
+      WHERE c.relpages > 0
+    ),
+    indexes AS (
+      SELECT
+        i.indrelid,
+        i.indexrelid,
+        n.nspname as schema_name,
+        cr.relname as table_name,
+        ci.relname as index_name,
+        COALESCE(si.idx_scan, 0) as idx_scan,
+        pg_relation_size(i.indexrelid) as index_size_bytes,
+        ci.relpages,
+        (CASE WHEN a.amname = 'btree' THEN true ELSE false END) as idx_is_btree,
+        array_to_string(i.indclass, ', ') as opclasses
+      FROM pg_index i
+      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
+      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
+      JOIN pg_namespace n ON n.oid = ci.relnamespace
+      JOIN pg_am a ON ci.relam = a.oid
+      LEFT JOIN pg_stat_all_indexes si ON si.indexrelid = i.indexrelid
+      WHERE i.indisunique = false
+        AND i.indisvalid = true
+        AND ci.relpages > 0
+        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    )
+    SELECT
+      'Never Used Indexes' as reason,
+      i.schema_name,
+      i.table_name,
+      i.index_name,
+      i.idx_scan,
+      ts.all_scans,
+      ROUND((CASE WHEN ts.all_scans = 0 THEN 0.0 ELSE i.idx_scan::numeric / ts.all_scans * 100 END)::numeric, 2) as index_scan_pct,
+      ts.writes,
+      ROUND((CASE WHEN ts.writes = 0 THEN i.idx_scan::numeric ELSE i.idx_scan::numeric / ts.writes END)::numeric, 2) as scans_per_write,
+      i.index_size_bytes,
+      ts.table_size as table_size_bytes,
+      i.relpages,
+      i.idx_is_btree,
+      (
+        SELECT COUNT(1) > 0
+        FROM fk_indexes fi
+        WHERE fi.fk_table_ref = i.table_name
+          AND fi.schema_name = i.schema_name
+          AND fi.opclasses LIKE (i.opclasses || '%')
+      ) as supports_fk
+    FROM indexes i
+    JOIN table_scans ts ON ts.relid = i.indrelid
+    WHERE i.idx_scan = 0
+      AND i.idx_is_btree
+    ORDER BY i.index_size_bytes DESC
+    LIMIT 50
+  `,
+
+  // Non-indexed foreign keys (H003)
+  nonIndexedForeignKeys: `
+    WITH fk_list AS (
+      SELECT
+        n.nspname as schema_name,
+        t.relname as table_name,
+        c.conname as fk_name,
+        pg_get_constraintdef(c.oid) as fk_definition,
+        c.conkey as fk_columns,
+        c.confrelid as ref_table_oid
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE c.contype = 'f'
+        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    ),
+    indexed_fks AS (
+      SELECT DISTINCT
+        fk.schema_name,
+        fk.table_name,
+        fk.fk_name
+      FROM fk_list fk
+      JOIN pg_index idx ON idx.indrelid = (
+        SELECT oid FROM pg_class 
+        WHERE relname = fk.table_name 
+          AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = fk.schema_name)
+      )
+      WHERE fk.fk_columns::text[] <@ (
+        SELECT array_agg(a ORDER BY ord)
+        FROM unnest(idx.indkey) WITH ORDINALITY AS u(a, ord)
+        WHERE a != 0
+      )
+    )
+    SELECT
+      fk.schema_name,
+      fk.table_name,
+      fk.fk_name,
+      fk.fk_definition,
+      pg_relation_size(t.oid) as table_size_bytes,
+      (SELECT relname FROM pg_class WHERE oid = fk.ref_table_oid) as referenced_table
+    FROM fk_list fk
+    JOIN pg_class t ON t.relname = fk.table_name
+      AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = fk.schema_name)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM indexed_fks ifk
+      WHERE ifk.schema_name = fk.schema_name
+        AND ifk.table_name = fk.table_name
+        AND ifk.fk_name = fk.fk_name
+    )
+    ORDER BY pg_relation_size(t.oid) DESC
+    LIMIT 50
   `,
 };
 
@@ -427,6 +625,61 @@ export async function getClusterInfo(client: Client): Promise<Record<string, Clu
 }
 
 /**
+ * Get invalid indexes (H001)
+ */
+export async function getInvalidIndexes(client: Client): Promise<InvalidIndex[]> {
+  const result = await client.query(METRICS_SQL.invalidIndexes);
+  return result.rows.map((row) => ({
+    schema_name: row.schema_name,
+    table_name: row.table_name,
+    index_name: row.index_name,
+    relation_name: `${row.schema_name}.${row.table_name}`,
+    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
+    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
+    supports_fk: false, // Invalid indexes don't support FK lookups
+  }));
+}
+
+/**
+ * Get unused indexes (H002)
+ */
+export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
+  const result = await client.query(METRICS_SQL.unusedIndexes);
+  return result.rows.map((row) => ({
+    schema_name: row.schema_name,
+    table_name: row.table_name,
+    index_name: row.index_name,
+    reason: row.reason,
+    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
+    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
+    idx_scan: parseInt(row.idx_scan, 10) || 0,
+    all_scans: parseInt(row.all_scans, 10) || 0,
+    index_scan_pct: parseFloat(row.index_scan_pct) || 0,
+    writes: parseInt(row.writes, 10) || 0,
+    scans_per_write: parseFloat(row.scans_per_write) || 0,
+    table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
+    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
+    supports_fk: row.supports_fk === true || row.supports_fk === "t",
+  }));
+}
+
+/**
+ * Get non-indexed foreign keys (H003)
+ */
+export async function getNonIndexedForeignKeys(client: Client): Promise<NonIndexedForeignKey[]> {
+  const result = await client.query(METRICS_SQL.nonIndexedForeignKeys);
+  return result.rows.map((row) => ({
+    schema_name: row.schema_name,
+    table_name: row.table_name,
+    fk_name: row.fk_name,
+    fk_definition: row.fk_definition,
+    table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
+    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
+    referenced_table: row.referenced_table,
+  }));
+}
+
+/**
  * Create base report structure
  */
 export function createBaseReport(
@@ -572,6 +825,78 @@ export async function generateA013(client: Client, nodeName: string = "node-01")
 }
 
 /**
+ * Generate H001 report - Invalid indexes
+ */
+export async function generateH001(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("H001", "Invalid indexes", nodeName);
+  const invalidIndexes = await getInvalidIndexes(client);
+  const postgresVersion = await getPostgresVersion(client);
+
+  // Calculate totals
+  const totalCount = invalidIndexes.length;
+  const totalSizeBytes = invalidIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
+
+  report.results[nodeName] = {
+    data: {
+      invalid_indexes: invalidIndexes,
+      total_count: totalCount,
+      total_size_bytes: totalSizeBytes,
+      total_size_pretty: formatBytes(totalSizeBytes),
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate H002 report - Unused indexes
+ */
+export async function generateH002(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("H002", "Unused indexes", nodeName);
+  const unusedIndexes = await getUnusedIndexes(client);
+  const postgresVersion = await getPostgresVersion(client);
+
+  // Calculate totals
+  const totalCount = unusedIndexes.length;
+  const totalSizeBytes = unusedIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
+
+  report.results[nodeName] = {
+    data: {
+      unused_indexes: unusedIndexes,
+      total_count: totalCount,
+      total_size_bytes: totalSizeBytes,
+      total_size_pretty: formatBytes(totalSizeBytes),
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate H003 report - Non-indexed foreign keys
+ */
+export async function generateH003(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("H003", "Non-indexed foreign keys", nodeName);
+  const nonIndexedFKs = await getNonIndexedForeignKeys(client);
+  const postgresVersion = await getPostgresVersion(client);
+
+  // Calculate totals
+  const totalCount = nonIndexedFKs.length;
+
+  report.results[nodeName] = {
+    data: {
+      non_indexed_fks: nonIndexedFKs,
+      total_count: totalCount,
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Available report generators
  */
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
@@ -580,6 +905,9 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   A004: generateA004,
   A007: generateA007,
   A013: generateA013,
+  H001: generateH001,
+  H002: generateH002,
+  H003: generateH003,
 };
 
 /**
@@ -591,6 +919,9 @@ export const CHECK_INFO: Record<string, string> = {
   A004: "Cluster information",
   A007: "Altered settings",
   A013: "Postgres minor version",
+  H001: "Invalid indexes",
+  H002: "Unused indexes",
+  H003: "Non-indexed foreign keys",
 };
 
 /**
