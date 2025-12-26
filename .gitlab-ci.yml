@@ -170,9 +170,12 @@ cli:node:smoke:
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true
+    - apk add --no-cache bash curl unzip
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
   script:
-    - node -v && npm -v
-    - npm --prefix cli install --no-audit --no-fund
+    - node -v && npm -v && bun --version
+    - cd cli && bun install && bun run build && cd ..
     - node ./cli/dist/bin/postgres-ai.js --help
     - node ./cli/dist/bin/postgres-ai.js mon status --help
     - node ./cli/dist/bin/postgres-ai.js mon targets list --help
@@ -203,13 +206,18 @@ cli:node:tests:
   before_script:
     - corepack enable || true
     - apt-get update
-    - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
+    - apt-get install -y --no-install-recommends postgresql postgresql-client unzip && rm -rf /var/lib/apt/lists/*
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
     # initdb refuses to run as root; run CLI tests as an unprivileged user
     - useradd -m -s /bin/bash pgtest || true
     - chown -R pgtest:pgtest "$CI_PROJECT_DIR"
-    - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && node -v && npm -v && npm --prefix cli ci"
+    # Install Bun for pgtest user
+    - su - pgtest -c "curl -fsSL https://bun.sh/install | bash"
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun install"
   script:
-    - su - pgtest -c "cd \"$CI_PROJECT_DIR\" && npm --prefix cli test"
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun test"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
@@ -222,7 +230,10 @@ cli:npm:publish:
     NPM_CONFIG_FUND: "false"
   before_script:
     - corepack enable || true
-    - node -v && npm -v
+    # Install Bun for build step
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version
   script:
     - |
       set -euo pipefail
@@ -260,10 +271,12 @@ cli:npm:publish:
 
       echo "Publishing postgresai@${NPM_VERSION} to dist-tag ${DIST_TAG}"
       cd cli
-      npm ci --no-audit --no-fund
+      # Use bun for faster install and build
+      export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+      bun install
       # Make the git tag the source of truth without committing version bumps.
       npm version --no-git-tag-version "$NPM_VERSION"
-      npm run build
+      bun run build
       npm publish --dry-run --tag "$DIST_TAG" --access public
       npm publish --tag "$DIST_TAG" --access public
 
@@ -399,9 +412,12 @@ cli:node:e2e:dind:
     PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
-    - apk add --no-cache bash docker-cli docker-compose openssl postgresql-client
-    - node -v && npm -v && docker version
-    - npm --prefix cli install --no-audit --no-fund
+    - apk add --no-cache bash curl unzip docker-cli docker-compose openssl postgresql-client
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version && docker version
+    - cd cli && bun install && bun run build && cd ..
     # Pull images from GitLab Container Registry
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
@@ -440,9 +456,12 @@ cli:node:full:dind:
     PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
-    - apk add --no-cache bash git docker-cli docker-compose openssl postgresql-client
-    - node -v && npm -v && docker version
-    - npm --prefix cli install --no-audit --no-fund
+    - apk add --no-cache bash curl unzip git docker-cli docker-compose openssl postgresql-client
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version && docker version
+    - cd cli && bun install && bun run build && cd ..
     # Pull images from GitLab Container Registry
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
@@ -490,8 +509,12 @@ cli:node:integration:
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true
-    - node -v && npm -v
-    - npm --prefix cli install --no-audit --no-fund
+    - apk add --no-cache bash curl unzip
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version
+    - cd cli && bun install && bun run build && cd ..
   script:
     - |
       set -euo pipefail
