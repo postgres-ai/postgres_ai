@@ -293,22 +293,8 @@ describe("METRICS_SQL", () => {
     expect(checkup.METRICS_SQL.connectionStates).toContain("state");
   });
 
-  test("invalidIndexes queries pg_index for invalid indexes", () => {
-    expect(checkup.METRICS_SQL.invalidIndexes).toContain("pg_index");
-    expect(checkup.METRICS_SQL.invalidIndexes).toContain("indisvalid = false");
-  });
-
-  test("unusedIndexes queries for indexes with zero scans", () => {
-    expect(checkup.METRICS_SQL.unusedIndexes).toContain("pg_index");
-    expect(checkup.METRICS_SQL.unusedIndexes).toContain("idx_scan = 0");
-    expect(checkup.METRICS_SQL.unusedIndexes).toContain("Never Used");
-  });
-
-  test("redundantIndexes queries for covered indexes", () => {
-    expect(checkup.METRICS_SQL.redundantIndexes).toContain("pg_index");
-    expect(checkup.METRICS_SQL.redundantIndexes).toContain("redundant_indexes");
-    expect(checkup.METRICS_SQL.redundantIndexes).toContain("columns like");
-  });
+  // H001, H002, H004 SQL queries are now loaded from metrics.yml via getMetricSql()
+  // See metrics-loader.ts for implementation
 });
 
 // Tests for formatBytes
