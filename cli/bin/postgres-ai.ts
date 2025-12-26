@@ -15,6 +15,22 @@ import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORIN
 import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
 import { maskSecret } from "../lib/util";
+import { createInterface } from "readline";
+
+// Singleton readline interface for stdin prompts
+let rl: ReturnType<typeof createInterface> | null = null;
+function getReadline() {
+  if (!rl) {
+    rl = createInterface({ input: process.stdin, output: process.stdout });
+  }
+  return rl;
+}
+function closeReadline() {
+  if (rl) {
+    rl.close();
+    rl = null;
+  }
+}
 
 // Helper functions for spawning processes using Bun APIs
 async function execPromise(command: string): Promise<{ stdout: string; stderr: string }> {
@@ -95,17 +111,11 @@ function spawn(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore
 
 // Simple readline-like interface for prompts using Bun
 async function question(prompt: string): Promise<string> {
-  process.stdout.write(prompt);
-  const reader = Bun.stdin.stream().getReader();
-  let result = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    result += new TextDecoder().decode(value);
-    if (result.includes("\n")) break;
-  }
-  reader.releaseLock();
-  return result.trim();
+  return new Promise((resolve) => {
+    getReadline().question(prompt, (answer) => {
+      resolve(answer);
+    });
+  });
 }
 
 /**
@@ -2265,5 +2275,7 @@ mcp
     }
   });
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).finally(() => {
+  closeReadline();
+});
 
