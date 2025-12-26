@@ -174,8 +174,10 @@ export function createCallbackServer(
       resolved = true;
       clearTimeout(timeout);
 
-      setTimeout(() => serverInstance?.stop(), 100);
+      // Resolve first, then stop server asynchronously after response is sent.
+      // The 100ms delay ensures the HTTP response is fully written before closing.
       resolveCallback({ code, state });
+      setTimeout(() => serverInstance?.stop(), 100);
 
       return new Response(`
 <!DOCTYPE html>

@@ -94,7 +94,11 @@ function spawn(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore
     handlers["close"]?.forEach((cb) => cb(code));
     handlers["exit"]?.forEach((cb) => cb(code));
   }).catch((err) => {
-    handlers["error"]?.forEach((cb) => cb(null, String(err)));
+    if (handlers["error"]?.length) {
+      handlers["error"].forEach((cb) => cb(null, String(err)));
+    } else {
+      console.error(`Spawn error for ${cmd}:`, err);
+    }
   });
 
   return {

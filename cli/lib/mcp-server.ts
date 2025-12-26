@@ -75,7 +75,8 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
     };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (req: { params: { name: string; arguments?: Record<string, unknown> } }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  server.setRequestHandler(CallToolRequestSchema, async (req: any) => {
     const toolName = req.params.name;
     const args = (req.params.arguments as Record<string, unknown>) || {};
 
