@@ -32,10 +32,17 @@ function escapeHtml(str: string | null): string {
 
 /**
  * Create and start callback server using Bun.serve
+ *
  * @param port - Port to listen on (0 for random available port)
  * @param expectedState - Expected state parameter for CSRF protection
  * @param timeoutMs - Timeout in milliseconds
  * @returns Server object with promise and getPort function
+ *
+ * @remarks
+ * The server stops asynchronously ~100ms after the callback resolves/rejects.
+ * This delay ensures the HTTP response is fully sent before closing the connection.
+ * Callers should not attempt to reuse the same port immediately after the promise
+ * resolves - wait at least 200ms or use a different port.
  */
 export function createCallbackServer(
   port: number = 0,

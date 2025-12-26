@@ -20,7 +20,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "bun build ./bin/pgai.ts --outdir ./dist/bin --target node && sed -i '1s|#!/usr/bin/env bun|#!/usr/bin/env node|' ./dist/bin/pgai.js",
+    "build": "bun build ./bin/pgai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/pgai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\"",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
