@@ -100,6 +100,21 @@ test("CHECK_INFO contains A007", () => {
   assert.equal(checkup.CHECK_INFO.A007, "Altered settings");
 });
 
+test("CHECK_INFO contains H001", () => {
+  assert.ok("H001" in checkup.CHECK_INFO);
+  assert.equal(checkup.CHECK_INFO.H001, "Invalid indexes");
+});
+
+test("CHECK_INFO contains H002", () => {
+  assert.ok("H002" in checkup.CHECK_INFO);
+  assert.equal(checkup.CHECK_INFO.H002, "Unused indexes");
+});
+
+test("CHECK_INFO contains H003", () => {
+  assert.ok("H003" in checkup.CHECK_INFO);
+  assert.equal(checkup.CHECK_INFO.H003, "Non-indexed foreign keys");
+});
+
 // Tests for REPORT_GENERATORS
 test("REPORT_GENERATORS has generator for A002", () => {
   assert.ok("A002" in checkup.REPORT_GENERATORS);
@@ -124,6 +139,21 @@ test("REPORT_GENERATORS has generator for A004", () => {
 test("REPORT_GENERATORS has generator for A007", () => {
   assert.ok("A007" in checkup.REPORT_GENERATORS);
   assert.equal(typeof checkup.REPORT_GENERATORS.A007, "function");
+});
+
+test("REPORT_GENERATORS has generator for H001", () => {
+  assert.ok("H001" in checkup.REPORT_GENERATORS);
+  assert.equal(typeof checkup.REPORT_GENERATORS.H001, "function");
+});
+
+test("REPORT_GENERATORS has generator for H002", () => {
+  assert.ok("H002" in checkup.REPORT_GENERATORS);
+  assert.equal(typeof checkup.REPORT_GENERATORS.H002, "function");
+});
+
+test("REPORT_GENERATORS has generator for H003", () => {
+  assert.ok("H003" in checkup.REPORT_GENERATORS);
+  assert.equal(typeof checkup.REPORT_GENERATORS.H003, "function");
 });
 
 test("REPORT_GENERATORS and CHECK_INFO have same keys", () => {
@@ -165,6 +195,22 @@ test("METRICS_SQL.connectionStates queries pg_stat_activity", () => {
   assert.ok(checkup.METRICS_SQL.connectionStates.includes("state"));
 });
 
+test("METRICS_SQL.invalidIndexes queries pg_index for invalid indexes", () => {
+  assert.ok(checkup.METRICS_SQL.invalidIndexes.includes("pg_index"));
+  assert.ok(checkup.METRICS_SQL.invalidIndexes.includes("indisvalid = false"));
+});
+
+test("METRICS_SQL.unusedIndexes queries for indexes with zero scans", () => {
+  assert.ok(checkup.METRICS_SQL.unusedIndexes.includes("pg_index"));
+  assert.ok(checkup.METRICS_SQL.unusedIndexes.includes("idx_scan = 0"));
+  assert.ok(checkup.METRICS_SQL.unusedIndexes.includes("Never Used"));
+});
+
+test("METRICS_SQL.nonIndexedForeignKeys queries pg_constraint for FKs", () => {
+  assert.ok(checkup.METRICS_SQL.nonIndexedForeignKeys.includes("pg_constraint"));
+  assert.ok(checkup.METRICS_SQL.nonIndexedForeignKeys.includes("contype = 'f'"));
+});
+
 // Tests for formatBytes
 test("formatBytes formats zero bytes", () => {
   assert.equal(checkup.formatBytes(0), "0 B");
@@ -195,6 +241,9 @@ function createMockClient(versionRows, settingsRows, options = {}) {
     clusterStatsRows = [],
     connectionStatesRows = [],
     uptimeRows = [],
+    invalidIndexesRows = [],
+    unusedIndexesRows = [],
+    nonIndexedFKsRows = [],
   } = options;
 
   return {
@@ -228,6 +277,18 @@ function createMockClient(versionRows, settingsRows, options = {}) {
       // Uptime info (A004)
       if (sql.includes("pg_postmaster_start_time")) {
         return { rows: uptimeRows };
+      }
+      // Invalid indexes (H001)
+      if (sql.includes("indisvalid = false")) {
+        return { rows: invalidIndexesRows };
+      }
+      // Unused indexes (H002)
+      if (sql.includes("Never Used Indexes") && sql.includes("idx_scan = 0")) {
+        return { rows: unusedIndexesRows };
+      }
+      // Non-indexed foreign keys (H003)
+      if (sql.includes("fk_list") && sql.includes("contype = 'f'")) {
+        return { rows: nonIndexedFKsRows };
       }
       throw new Error(`Unexpected query: ${sql}`);
     },
@@ -360,6 +421,9 @@ test("generateAllReports returns reports for all checks", async () => {
       clusterStatsRows: [{ total_connections: 5, total_commits: 100, total_rollbacks: 1, blocks_read: 1000, blocks_hit: 9000, tuples_returned: 500, tuples_fetched: 400, tuples_inserted: 50, tuples_updated: 30, tuples_deleted: 10, total_deadlocks: 0, temp_files_created: 0, temp_bytes_written: 0 }],
       connectionStatesRows: [{ state: "active", count: 2 }, { state: "idle", count: 3 }],
       uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
+      invalidIndexesRows: [],
+      unusedIndexesRows: [],
+      nonIndexedFKsRows: [],
     }
   );
 
@@ -369,11 +433,17 @@ test("generateAllReports returns reports for all checks", async () => {
   assert.ok("A004" in reports);
   assert.ok("A007" in reports);
   assert.ok("A013" in reports);
+  assert.ok("H001" in reports);
+  assert.ok("H002" in reports);
+  assert.ok("H003" in reports);
   assert.equal(reports.A002.checkId, "A002");
   assert.equal(reports.A003.checkId, "A003");
   assert.equal(reports.A004.checkId, "A004");
   assert.equal(reports.A007.checkId, "A007");
   assert.equal(reports.A013.checkId, "A013");
+  assert.equal(reports.H001.checkId, "H001");
+  assert.equal(reports.H002.checkId, "H002");
+  assert.equal(reports.H003.checkId, "H003");
 });
 
 // Tests for A007 (Altered settings)
@@ -516,6 +586,175 @@ test("generateA004 creates report with cluster info and database sizes", async (
   assert.ok(report.results["test-node"].postgres_version);
 });
 
+// Tests for H001 (Invalid indexes)
+test("getInvalidIndexes returns invalid indexes", async () => {
+  const mockClient = createMockClient([], [], {
+    invalidIndexesRows: [
+      { schema_name: "public", table_name: "users", index_name: "users_email_idx", index_size_bytes: "1048576" },
+    ],
+  });
+
+  const indexes = await checkup.getInvalidIndexes(mockClient);
+  assert.equal(indexes.length, 1);
+  assert.equal(indexes[0].schema_name, "public");
+  assert.equal(indexes[0].table_name, "users");
+  assert.equal(indexes[0].index_name, "users_email_idx");
+  assert.equal(indexes[0].index_size_bytes, 1048576);
+  assert.ok(indexes[0].index_size_pretty);
+});
+
+test("generateH001 creates report with invalid indexes", async () => {
+  const mockClient = createMockClient(
+    [
+      { name: "server_version", setting: "16.3" },
+      { name: "server_version_num", setting: "160003" },
+    ],
+    [],
+    {
+      invalidIndexesRows: [
+        { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", index_size_bytes: "2097152" },
+      ],
+    }
+  );
+
+  const report = await checkup.generateH001(mockClient, "test-node");
+  assert.equal(report.checkId, "H001");
+  assert.equal(report.checkTitle, "Invalid indexes");
+  assert.ok("test-node" in report.results);
+
+  const data = report.results["test-node"].data;
+  assert.ok("invalid_indexes" in data);
+  assert.equal(data.total_count, 1);
+  assert.equal(data.total_size_bytes, 2097152);
+  assert.ok(data.total_size_pretty);
+  assert.ok(report.results["test-node"].postgres_version);
+});
+
+// Tests for H002 (Unused indexes)
+test("getUnusedIndexes returns unused indexes", async () => {
+  const mockClient = createMockClient([], [], {
+    unusedIndexesRows: [
+      {
+        schema_name: "public",
+        table_name: "products",
+        index_name: "products_old_idx",
+        reason: "Never Used Indexes",
+        index_size_bytes: "4194304",
+        idx_scan: "0",
+        all_scans: "1000",
+        index_scan_pct: "0.00",
+        writes: "500",
+        scans_per_write: "0.00",
+        table_size_bytes: "10485760",
+        supports_fk: false,
+      },
+    ],
+  });
+
+  const indexes = await checkup.getUnusedIndexes(mockClient);
+  assert.equal(indexes.length, 1);
+  assert.equal(indexes[0].schema_name, "public");
+  assert.equal(indexes[0].index_name, "products_old_idx");
+  assert.equal(indexes[0].index_size_bytes, 4194304);
+  assert.equal(indexes[0].idx_scan, 0);
+  assert.equal(indexes[0].supports_fk, false);
+});
+
+test("generateH002 creates report with unused indexes", async () => {
+  const mockClient = createMockClient(
+    [
+      { name: "server_version", setting: "16.3" },
+      { name: "server_version_num", setting: "160003" },
+    ],
+    [],
+    {
+      unusedIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "logs",
+          index_name: "logs_created_idx",
+          reason: "Never Used Indexes",
+          index_size_bytes: "8388608",
+          idx_scan: "0",
+          all_scans: "5000",
+          index_scan_pct: "0.00",
+          writes: "2000",
+          scans_per_write: "0.00",
+          table_size_bytes: "52428800",
+          supports_fk: false,
+        },
+      ],
+    }
+  );
+
+  const report = await checkup.generateH002(mockClient, "test-node");
+  assert.equal(report.checkId, "H002");
+  assert.equal(report.checkTitle, "Unused indexes");
+  assert.ok("test-node" in report.results);
+
+  const data = report.results["test-node"].data;
+  assert.ok("unused_indexes" in data);
+  assert.equal(data.total_count, 1);
+  assert.equal(data.total_size_bytes, 8388608);
+  assert.ok(data.total_size_pretty);
+  assert.ok(report.results["test-node"].postgres_version);
+});
+
+// Tests for H003 (Non-indexed foreign keys)
+test("getNonIndexedForeignKeys returns non-indexed FKs", async () => {
+  const mockClient = createMockClient([], [], {
+    nonIndexedFKsRows: [
+      {
+        schema_name: "public",
+        table_name: "order_items",
+        fk_name: "order_items_product_id_fkey",
+        fk_definition: "FOREIGN KEY (product_id) REFERENCES products(id)",
+        table_size_bytes: "16777216",
+        referenced_table: "products",
+      },
+    ],
+  });
+
+  const fks = await checkup.getNonIndexedForeignKeys(mockClient);
+  assert.equal(fks.length, 1);
+  assert.equal(fks[0].schema_name, "public");
+  assert.equal(fks[0].fk_name, "order_items_product_id_fkey");
+  assert.equal(fks[0].referenced_table, "products");
+  assert.equal(fks[0].table_size_bytes, 16777216);
+});
+
+test("generateH003 creates report with non-indexed FKs", async () => {
+  const mockClient = createMockClient(
+    [
+      { name: "server_version", setting: "16.3" },
+      { name: "server_version_num", setting: "160003" },
+    ],
+    [],
+    {
+      nonIndexedFKsRows: [
+        {
+          schema_name: "public",
+          table_name: "comments",
+          fk_name: "comments_user_id_fkey",
+          fk_definition: "FOREIGN KEY (user_id) REFERENCES users(id)",
+          table_size_bytes: "33554432",
+          referenced_table: "users",
+        },
+      ],
+    }
+  );
+
+  const report = await checkup.generateH003(mockClient, "test-node");
+  assert.equal(report.checkId, "H003");
+  assert.equal(report.checkTitle, "Non-indexed foreign keys");
+  assert.ok("test-node" in report.results);
+
+  const data = report.results["test-node"].data;
+  assert.ok("non_indexed_fks" in data);
+  assert.equal(data.total_count, 1);
+  assert.ok(report.results["test-node"].postgres_version);
+});
+
 // CLI tests
 test("cli: checkup command exists and shows help", () => {
   const r = runCli(["checkup", "--help"]);
@@ -536,6 +775,9 @@ test("cli: checkup --help shows available check IDs", () => {
   assert.match(r.stdout, /A004/);
   assert.match(r.stdout, /A007/);
   assert.match(r.stdout, /A013/);
+  assert.match(r.stdout, /H001/);
+  assert.match(r.stdout, /H002/);
+  assert.match(r.stdout, /H003/);
 });
 
 test("cli: checkup without connection shows help", () => {
