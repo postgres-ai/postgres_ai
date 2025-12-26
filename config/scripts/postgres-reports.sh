@@ -48,7 +48,7 @@ while true; do
 
   if api_key="$(read_api_key)"; then
     echo "postgres-reports: generating reports (upload enabled) -> ${output_path}"
-    python postgres_reports.py \
+    python -m reporter.postgres_reports \
       --prometheus-url "${prometheus_url}" \
       --output "${output_path}" \
       --api-url "${api_url}" \
@@ -56,7 +56,7 @@ while true; do
       --token "${api_key}"
   else
     echo "postgres-reports: generating reports (no upload) -> ${output_path}"
-    python postgres_reports.py \
+    python -m reporter.postgres_reports \
       --prometheus-url "${prometheus_url}" \
       --output "${output_path}" \
       --no-upload

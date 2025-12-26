@@ -2,7 +2,7 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003)
+This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003, M001, M002, M003, N001)
 by querying Prometheus metrics using PromQL queries.
 """
 
@@ -10,16 +10,23 @@ __version__ = "1.0.2"
 
 import requests
 import json
+import time
+import re
+import gc
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 import argparse
 import sys
 import os
+from pathlib import Path
 try:
     import psycopg2
     import psycopg2.extras
 except ImportError:  # pragma: no cover
     psycopg2 = None
+
+
+from reporter.logger import logger
 
 
 class PostgresReportGenerator:
@@ -81,7 +88,7 @@ class PostgresReportGenerator:
             response = requests.get(f"{self.base_url}/status/config", timeout=10)
             return response.status_code == 200
         except Exception as e:
-            print(f"Connection failed: {e}")
+            logger.error(f"Connection failed: {e}")
             return False
 
     def connect_postgres_sink(self) -> bool:
@@ -95,7 +102,7 @@ class PostgresReportGenerator:
             self.pg_conn = psycopg2.connect(self.postgres_sink_url)
             return True
         except Exception as e:
-            print(f"Postgres sink connection failed: {e}")
+            logger.error(f"Postgres sink connection failed: {e}")
             return False
 
     def close_postgres_sink(self):
@@ -121,9 +128,8 @@ class PostgresReportGenerator:
         index_definitions = {}
         
         try:
-            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                # Query the index_definitions table for the most recent data
-                # 
+            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor, name='index_defs_cursor') as cursor:
+                # Use server-side cursor for memory efficiency with large result sets
                 # PERFORMANCE NOTE: This query will use a Seq Scan on index_definitions table.
                 # This is acceptable because:
                 # 1. This method is called VERY rarely (only during report generation)
@@ -139,6 +145,7 @@ class PostgresReportGenerator:
                             data->>'index_definition' as index_definition,
                             dbname
                         from public.index_definitions
+                        where dbname = %s
                         order by data->>'indexrelname', time desc
                     """
                     cursor.execute(query, (db_name,))
@@ -153,16 +160,92 @@ class PostgresReportGenerator:
                     """
                     cursor.execute(query)
                 
-                for row in cursor.fetchall():
+                # Use iterator to fetch rows in batches instead of loading all at once
+                for row in cursor:
                     if row['indexrelname']:
                         # Include database name in the key to avoid collisions across databases
                         key = f"{row['dbname']}.{row['indexrelname']}" if not db_name else row['indexrelname']
                         index_definitions[key] = row['index_definition']
         
         except Exception as e:
-            print(f"Error fetching index definitions from Postgres sink: {e}")
+            logger.error(f"Error fetching index definitions from Postgres sink: {e}")
         
         return index_definitions
+
+    def get_queryid_queries_from_sink(self, query_text_limit: int = 655360, db_names: List[str] = None) -> Dict[str, Dict[str, str]]:
+        """
+        Get queryid-to-query text mappings from the Postgres sink database.
+
+        Args:
+            query_text_limit: Maximum number of characters for each query text (default: 655360)
+            db_names: Optional list of database names to filter results (default: fetch all)
+        
+        Returns:
+            Dictionary with database names as keys, containing queryid->query mappings
+        """
+        if not self.pg_conn:
+            if not self.connect_postgres_sink():
+                return {}
+        
+        queries_by_db: Dict[str, Dict[str, str]] = {}
+        
+        try:
+            # Use server-side cursor for memory efficiency with large result sets
+            with self.pg_conn.cursor(cursor_factory=psycopg2.extras.DictCursor, name='queryid_cursor') as cursor:
+                # Query unique queryid-to-query mappings
+                # The pgss_queryid_queries table stores deduplicated queryid->query mappings
+                if db_names:
+                    query = """
+                        select distinct on (dbname, data->>'queryid')
+                            dbname,
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        from public.pgss_queryid_queries
+                        where
+                            dbname = ANY(%s)
+                            and data->>'queryid' is not null
+                            and data->>'query' is not null
+                        order by dbname, data->>'queryid', time desc
+                    """
+                    cursor.execute(query, (db_names,))
+                else:
+                    query = """
+                        select distinct on (dbname, data->>'queryid')
+                            dbname,
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        from public.pgss_queryid_queries
+                        where
+                            data->>'queryid' is not null
+                            and data->>'query' is not null
+                        order by dbname, data->>'queryid', time desc
+                    """
+                    cursor.execute(query)
+                
+                # Use iterator to fetch rows in batches instead of loading all at once
+                for row in cursor:
+                    db_name = row['dbname']
+                    queryid = row['queryid']
+                    query_text = row['query']
+                    
+                    # Skip if queryid is missing
+                    if not queryid:
+                        continue
+                    
+                    # Truncate query text if it exceeds the limit
+                    if query_text and len(query_text) > query_text_limit:
+                        query_text = query_text[:query_text_limit] + '...'
+                    
+                    # Initialize database dict if needed
+                    if db_name not in queries_by_db:
+                        queries_by_db[db_name] = {}
+                    
+                    queries_by_db[db_name][queryid] = query_text or ''
+        
+        except Exception as e:
+            logger.error(f"Error fetching queryid queries from Postgres sink: {e}")
+        
+        return queries_by_db
 
     def query_instant(self, query: str) -> Dict[str, Any]:
         """
@@ -181,10 +264,10 @@ class PostgresReportGenerator:
             if response.status_code == 200:
                 return response.json()
             else:
-                print(f"Query failed with status {response.status_code}: {response.text}")
+                logger.error(f"Query failed with status {response.status_code}: {response.text}")
                 return {}
         except Exception as e:
-            print(f"Query error: {e}")
+            logger.error(f"Query error: {e}")
             return {}
 
     def _get_postgres_version_info(self, cluster: str, node_name: str) -> Dict[str, str]:
@@ -196,30 +279,44 @@ class PostgresReportGenerator:
           (tests may stub query responses broadly by metric name substring).
         - Uses a single query with a regex on setting_name to reduce roundtrips.
         """
-        query = (
-            f'last_over_time(pgwatch_settings_configured{{'
-            f'cluster="{cluster}", node_name="{node_name}", '
-            f'setting_name=~"server_version|server_version_num"}}[3h])'
-        )
+        # Support both label schemas:
+        # - newer/expected-by-tests: setting_name/setting_value
+        # - older/pgwatch-tagged:    tag_setting_name/tag_setting_value
+        queries = [
+            (
+                "setting_name",
+                f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", '
+                f'setting_name=~"server_version|server_version_num"}}[3h])',
+            ),
+            (
+                "tag_setting_name",
+                f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}", '
+                f'tag_setting_name=~"server_version|server_version_num"}}[3h])',
+            ),
+        ]
 
-        result = self.query_instant(query)
         version_str = None
         version_num = None
 
-        if result.get("status") == "success":
-            if result.get("data", {}).get("result"):
-                for item in result["data"]["result"]:
-                    metric = item.get("metric", {}) or {}
-                    setting_name = metric.get("setting_name", "")
-                    setting_value = metric.get("setting_value", "")
-                    if setting_name == "server_version" and setting_value:
-                        version_str = setting_value
-                    elif setting_name == "server_version_num" and setting_value:
-                        version_num = setting_value
-            else:
-                print(f"Warning: No version data found (cluster={cluster}, node_name={node_name})")
-        else:
-            print(f"Warning: Version query failed (cluster={cluster}, node_name={node_name}): status={result.get('status')}")
+        for label_name, query in queries:
+            result = self.query_instant(query)
+            if result.get("status") != "success":
+                continue
+            for item in (result.get("data", {}) or {}).get("result", []) or []:
+                metric = item.get("metric", {}) or {}
+                setting_name = metric.get("setting_name") or metric.get("tag_setting_name") or ""
+                setting_value = metric.get("setting_value") or metric.get("tag_setting_value") or ""
+
+                if setting_name == "server_version" and setting_value and not version_str:
+                    version_str = setting_value
+                elif setting_name == "server_version_num" and setting_value and not version_num:
+                    version_num = setting_value
+
+            if version_str or version_num:
+                break
+
+        if not (version_str or version_num):
+            logger.warning(f"No version data found (cluster={cluster}, node_name={node_name})")
 
         server_version = version_str or "Unknown"
         version_info: Dict[str, str] = {
@@ -254,7 +351,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing version information
         """
-        print(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
+        logger.info(f"Generating A002 Version Information report for cluster='{cluster}', node_name='{node_name}'...")
         version_info = self._get_postgres_version_info(cluster, node_name)
         return self.format_report_data("A002", {"version": version_info}, node_name)
 
@@ -269,7 +366,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing settings information
         """
-        print("Generating A003 PostgreSQL Settings report...")
+        logger.info("Generating A003 PostgreSQL Settings report...")
 
         # Query all PostgreSQL settings using the pgwatch_settings_configured metric with last_over_time
         # This metric has labels for each setting name
@@ -302,9 +399,9 @@ class PostgresReportGenerator:
                     "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                 }
         else:
-            print(f"Warning: A003 - No settings data returned for cluster={cluster}, node_name={node_name}")
-            print(f"Query result status: {result.get('status')}")
-            print(f"Query result data: {result.get('data', {})}")
+            logger.warning(f"A003 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.info(f"Query result status: {result.get('status')}")
+            logger.info(f"Query result data: {result.get('data', {})}")
 
         return self.format_report_data("A003", settings_data, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
@@ -319,7 +416,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing cluster information
         """
-        print("Generating A004 Cluster Information report...")
+        logger.info("Generating A004 Cluster Information report...")
 
         # Query cluster information
         cluster_queries = {
@@ -381,7 +478,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing altered settings information
         """
-        print("Generating A007 Altered Settings report...")
+        logger.info("Generating A007 Altered Settings report...")
 
         # Query settings by source using the pgwatch_settings_is_default metric with last_over_time
         # This returns settings where is_default = 0 (i.e., non-default/altered settings)
@@ -409,8 +506,8 @@ class PostgresReportGenerator:
                     "pretty_value": pretty_value
                 }
         else:
-            print(f"Warning: A007 - No altered settings data returned for cluster={cluster}, node_name={node_name}")
-            print(f"Query result status: {result.get('status')}")
+            logger.warning(f"A007 - No altered settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.info(f"Query result status: {result.get('status')}")
 
         return self.format_report_data("A007", altered_settings, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
@@ -426,7 +523,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing invalid indexes information
         """
-        print("Generating H001 Invalid Indexes report...")
+        logger.info("Generating H001 Invalid Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -475,6 +572,10 @@ class PostgresReportGenerator:
 
                     invalid_indexes.append(invalid_index)
                     total_size += index_size_bytes
+            
+            # Skip databases with no invalid indexes
+            if not invalid_indexes:
+                continue
 
             db_size_bytes = database_sizes.get(db_name, 0)
             invalid_indexes_by_db[db_name] = {
@@ -504,7 +605,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing unused indexes information
         """
-        print("Generating H002 Unused Indexes report...")
+        logger.info("Generating H002 Unused Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -537,7 +638,7 @@ class PostgresReportGenerator:
             # Get index definitions from Postgres sink database for this specific database
             index_definitions = self.get_index_definitions_from_sink(db_name)
             # Query stats_reset timestamp for this database
-            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[3h])'
+            stats_reset_query = f'last_over_time(pgwatch_stats_reset_stats_reset_epoch{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
             stats_reset_result = self.query_instant(stats_reset_query)
             
             stats_reset_epoch = None
@@ -551,7 +652,7 @@ class PostgresReportGenerator:
                     days_since_reset = (datetime.now() - datetime.fromtimestamp(stats_reset_epoch)).days
 
             # Query unused indexes for each database using last_over_time to get most recent value
-            unused_indexes_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}"}}[3h])'
+            unused_indexes_query = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
             unused_result = self.query_instant(unused_indexes_query)
 
             unused_indexes = []
@@ -566,7 +667,7 @@ class PostgresReportGenerator:
                     index_size_bytes = float(item['value'][1]) if item.get('value') else 0
 
                     # Query other related metrics for this index
-                    idx_scan_query = f'last_over_time(pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", dbname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[3h])'
+                    idx_scan_query = f'last_over_time(pgwatch_unused_indexes_idx_scan{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}", schema_name="{schema_name}", table_name="{table_name}", index_name="{index_name}"}}[3h])'
                     idx_scan_result = self.query_instant(idx_scan_query)
                     idx_scan = float(idx_scan_result['data']['result'][0]['value'][1]) if idx_scan_result.get('data',
                                                                                                               {}).get(
@@ -593,6 +694,10 @@ class PostgresReportGenerator:
 
             # Sort by index size descending
             unused_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
+            
+            # Skip databases with no unused indexes
+            if not unused_indexes:
+                continue
             
             total_unused_size = sum(idx['index_size_bytes'] for idx in unused_indexes)
 
@@ -632,7 +737,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing redundant indexes information
         """
-        print("Generating H004 Redundant Indexes report...")
+        logger.info("Generating H004 Redundant Indexes report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -711,6 +816,10 @@ class PostgresReportGenerator:
 
             # Sort by index size descending
             redundant_indexes.sort(key=lambda x: x['index_size_bytes'], reverse=True)
+            
+            # Skip databases with no redundant indexes
+            if not redundant_indexes:
+                continue
 
             db_size_bytes = database_sizes.get(db_name, 0)
             redundant_indexes_by_db[db_name] = {
@@ -741,7 +850,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing pg_stat_statements and pg_stat_kcache settings information
         """
-        print("Generating D004 pgstatstatements and pgstatkcache Settings report...")
+        logger.info("Generating D004 pgstatstatements and pgstatkcache Settings report...")
 
         # Define relevant pg_stat_statements and pg_stat_kcache settings
         pgstat_settings = [
@@ -788,7 +897,7 @@ class PostgresReportGenerator:
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
         else:
-            print(f"Warning: D004 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.warning(f"D004 - No settings data returned for cluster={cluster}, node_name={node_name}")
 
         # Check if pg_stat_kcache extension is available and working by querying its metrics
         kcache_status = self._check_pg_stat_kcache_status(cluster, node_name)
@@ -920,7 +1029,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing autovacuum settings information
         """
-        print("Generating F001 Autovacuum: Current Settings report...")
+        logger.info("Generating F001 Autovacuum: Current Settings report...")
 
         # Define autovacuum related settings
         autovacuum_settings = [
@@ -987,7 +1096,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing btree index bloat information
         """
-        print("Generating F005 Autovacuum: Btree Index Bloat (Estimated) report...")
+        logger.info("Generating F005 Autovacuum: Btree Index Bloat (Estimated) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
@@ -1124,6 +1233,10 @@ class PostgresReportGenerator:
 
                         value = float(item['value'][1]) if item.get('value') else 0
                         bloated_indexes[index_key][metric_type] = value
+            
+            # Skip databases with no bloat data
+            if not bloated_indexes:
+                continue
 
             # Convert to list and add pretty formatting
             bloated_indexes_list = []
@@ -1192,7 +1305,7 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing memory-related settings information
         """
-        print("Generating G001 Memory-related Settings report...")
+        logger.info("Generating G001 Memory-related Settings report...")
 
         # Define memory-related settings
         memory_settings = [
@@ -1251,7 +1364,7 @@ class PostgresReportGenerator:
                         "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
                     }
         else:
-            print(f"Warning: G001 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.warning(f"G001 - No settings data returned for cluster={cluster}, node_name={node_name}")
 
         # Calculate some memory usage estimates and recommendations
         memory_analysis = self._analyze_memory_settings(memory_data)
@@ -1366,13 +1479,13 @@ class PostgresReportGenerator:
         Returns:
             Dictionary containing heap bloat information
         """
-        print("Generating F004 Autovacuum: Heap Bloat (Estimated) report...")
+        logger.info("Generating F004 Autovacuum: Heap Bloat (Estimated) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: F004 - No databases found")
+            logger.warning("F004 - No databases found")
 
         # Get database sizes
         db_sizes_query = f'last_over_time(pgwatch_db_size_size_b{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
@@ -1458,7 +1571,11 @@ class PostgresReportGenerator:
                         bloated_tables[table_key][metric_type] = value
                 else:
                     if metric_type == 'real_size_mib':  # Only log once per database
-                        print(f"Warning: F004 - No bloat data for database {db_name}, metric {metric_type}")
+                        logger.warning(f"F004 - No bloat data for database {db_name}, metric {metric_type}")
+            
+            # Skip databases with no bloat data
+            if not bloated_tables:
+                continue
 
             # Convert to list and add pretty formatting
             bloated_tables_list = []
@@ -1504,59 +1621,106 @@ class PostgresReportGenerator:
         )
 
     def generate_k001_query_calls_report(self, cluster: str = "local", node_name: str = "node-01",
-                                         time_range_minutes: int = 60) -> Dict[str, Any]:
+                                         time_range_minutes: int = 60, use_hourly: bool = True) -> Dict[str, Any]:
         """
         Generate K001 Globally Aggregated Query Metrics report (sorted by calls).
         
         Args:
             cluster: Cluster name
             node_name: Node name
-            time_range_minutes: Time range in minutes for metrics collection
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
             Dictionary containing query metrics sorted by calls
         """
-        print("Generating K001 Globally Aggregated Query Metrics report...")
+        logger.info("Generating K001 Globally Aggregated Query Metrics report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K001 - No databases found")
-
-        # Calculate time range
-        end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=time_range_minutes)
+            logger.warning("K001 - No databases found")
 
         queries_by_db = {}
-        for db_name in databases:
-            print(f"K001: Processing database {db_name}...")
-            # Get pg_stat_statements metrics for this database
-            query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
-
-            if not query_metrics:
-                print(f"Warning: K001 - No query metrics returned for database {db_name}")
-
-            # Sort by calls (descending)
-            sorted_metrics = sorted(query_metrics, key=lambda x: x.get('calls', 0), reverse=True)
-
-            # Calculate totals for this database
-            total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
-            total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
-            total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
-
-            queries_by_db[db_name] = {
-                "query_metrics": sorted_metrics,
-                "summary": {
-                    "total_queries": len(sorted_metrics),
-                    "total_calls": total_calls,
-                    "total_time_ms": total_time,
-                    "total_rows": total_rows,
-                    "time_range_minutes": time_range_minutes,
-                    "start_time": start_time.isoformat(),
-                    "end_time": end_time.isoformat()
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            metric_name = "pgwatch_pg_stat_statements_calls"
+            
+            for db_name in databases:
+                logger.info(f"K001: Processing database {db_name} (hourly mode)...")
+                
+                per_query, other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, metric_name, hours=hours
+                )
+                
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"K001 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate total calls per query across all hours
+                query_totals = []
+                for queryid, hourly_values in per_query.items():
+                    total_calls = sum(hourly_values)
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_calls": total_calls,
+                        "hourly_calls": hourly_values
+                    })
+                
+                # Sort by total calls (descending)
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_calls', 0), reverse=True)
+                
+                # Calculate totals
+                total_calls = sum(q.get('total_calls', 0) for q in sorted_metrics) + sum(other)
+                
+                queries_by_db[db_name] = {
+                    "query_metrics": sorted_metrics,
+                    "other_calls_hourly": other,
+                    "summary": {
+                        "total_queries_tracked": len(sorted_metrics),
+                        "total_calls": total_calls,
+                        "total_calls_tracked_queries": sum(q.get('total_calls', 0) for q in sorted_metrics),
+                        "total_calls_other": sum(other),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline
+                    }
                 }
-            }
+        else:
+            # Fallback to original logic for sub-hourly or when explicitly disabled
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=time_range_minutes)
+
+            for db_name in databases:
+                logger.info(f"K001: Processing database {db_name}...")
+                # Get pg_stat_statements metrics for this database
+                query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+                if not query_metrics:
+                    logger.warning(f"K001 - No query metrics returned for database {db_name}")
+
+                # Sort by calls (descending)
+                sorted_metrics = sorted(query_metrics, key=lambda x: x.get('calls', 0), reverse=True)
+
+                # Calculate totals for this database
+                total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+                total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+                total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+
+                queries_by_db[db_name] = {
+                    "query_metrics": sorted_metrics,
+                    "summary": {
+                        "total_queries": len(sorted_metrics),
+                        "total_calls": total_calls,
+                        "total_time_ms": total_time,
+                        "total_rows": total_rows,
+                        "time_range_minutes": time_range_minutes,
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat()
+                    }
+                }
 
         return self.format_report_data(
             "K001",
@@ -1566,65 +1730,1012 @@ class PostgresReportGenerator:
         )
 
     def generate_k003_top_queries_report(self, cluster: str = "local", node_name: str = "node-01",
-                                         time_range_minutes: int = 60, limit: int = 50) -> Dict[str, Any]:
+                                         time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
         """
-        Generate K003 Top-50 Queries by total_time report.
+        Generate K003 Top Queries by total_time (exec + plan) report.
         
         Args:
             cluster: Cluster name
             node_name: Node name
-            time_range_minutes: Time range in minutes for metrics collection
-            limit: Number of top queries to return (default: 50)
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
             
         Returns:
-            Dictionary containing top queries sorted by total execution time
+            Dictionary containing top queries sorted by total execution time (exec + plan)
         """
-        print("Generating K003 Top-50 Queries by total_time report...")
+        logger.info("Generating K003 Top Queries by total_time (exec + plan) report...")
 
         # Get all databases
         databases = self.get_all_databases(cluster, node_name)
         
         if not databases:
-            print("Warning: K003 - No databases found")
-
-        # Calculate time range
-        end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=time_range_minutes)
+            logger.warning("K003 - No databases found")
 
         queries_by_db = {}
-        for db_name in databases:
-            print(f"K003: Processing database {db_name}...")
-            # Get pg_stat_statements metrics for this database
-            query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
-
-            if not query_metrics:
-                print(f"Warning: K003 - No query metrics returned for database {db_name}")
-
-            # Sort by total_time (descending) and limit to top N per database
-            sorted_metrics = sorted(query_metrics, key=lambda x: x.get('total_time', 0), reverse=True)[:limit]
-
-            # Calculate totals for the top queries in this database
-            total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
-            total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
-            total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
-
-            queries_by_db[db_name] = {
-                "top_queries": sorted_metrics,
-                "summary": {
-                    "queries_returned": len(sorted_metrics),
-                    "total_calls": total_calls,
-                    "total_time_ms": total_time,
-                    "total_rows": total_rows,
-                    "time_range_minutes": time_range_minutes,
-                    "start_time": start_time.isoformat(),
-                    "end_time": end_time.isoformat(),
-                    "limit": limit
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            
+            for db_name in databases:
+                logger.info(f"K003: Processing database {db_name} (hourly mode)...")
+                
+                # Get exec time
+                exec_per_query, exec_other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, "pgwatch_pg_stat_statements_exec_time_total", hours=hours
+                )
+                
+                # Get plan time (might not be available in older PG versions)
+                plan_per_query, plan_other, _ = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, "pgwatch_pg_stat_statements_plan_time_total", hours=hours
+                )
+                
+                # Check if plan time is actually non-zero (not just if data exists)
+                total_plan_time = sum(sum(values) for values in plan_per_query.values()) + sum(plan_other)
+                plan_time_available = total_plan_time > 0
+                
+                if not exec_per_query and sum(exec_other) == 0:
+                    logger.warning(f"K003 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Combine exec and plan time per query across all hours
+                all_queryids = set(exec_per_query.keys()) | set(plan_per_query.keys())
+                query_totals = []
+                
+                for queryid in all_queryids:
+                    exec_values = exec_per_query.get(queryid, [0] * hours)
+                    plan_values = plan_per_query.get(queryid, [0] * hours)
+                    
+                    # Combine exec + plan for each hour
+                    hourly_total_time = [e + p for e, p in zip(exec_values, plan_values)]
+                    total_time = sum(hourly_total_time)
+                    total_exec_time = sum(exec_values)
+                    total_plan_time = sum(plan_values)
+                    
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_time_ms": total_time,
+                        "total_exec_time_ms": total_exec_time,
+                        "total_plan_time_ms": total_plan_time,
+                        "hourly_time_ms": hourly_total_time,
+                        "hourly_exec_time_ms": exec_values,
+                        "hourly_plan_time_ms": plan_values if plan_time_available else None
+                    })
+                
+                # Sort by total_time (descending) and limit to top N
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_time_ms', 0), reverse=True)[:limit]
+                
+                # Calculate other time (exec + plan)
+                other_time_hourly = [e + p for e, p in zip(exec_other, plan_other)]
+                
+                # Calculate totals
+                total_time = sum(q.get('total_time_ms', 0) for q in sorted_metrics) + sum(other_time_hourly)
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_time_hourly": other_time_hourly,
+                    "other_exec_time_hourly": exec_other,
+                    "other_plan_time_hourly": plan_other if plan_time_available else None,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_time_ms": total_time,
+                        "total_time_tracked_queries_ms": sum(q.get('total_time_ms', 0) for q in sorted_metrics),
+                        "total_time_other_ms": sum(other_time_hourly),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit,
+                        "plan_time_available": plan_time_available,
+                        "note": "Includes both exec and plan time" if plan_time_available else "Plan time unavailable, showing exec time only"
+                    }
                 }
-            }
+        else:
+            # Fallback to original logic for sub-hourly or when explicitly disabled
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=time_range_minutes)
+
+            for db_name in databases:
+                logger.info(f"K003: Processing database {db_name}...")
+                # Get pg_stat_statements metrics for this database
+                query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+                if not query_metrics:
+                    logger.warning(f"K003 - No query metrics returned for database {db_name}")
+
+                # Sort by total_time (descending) and limit to top N per database
+                sorted_metrics = sorted(query_metrics, key=lambda x: x.get('total_time', 0), reverse=True)[:limit]
+
+                # Calculate totals for the top queries in this database
+                total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+                total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+                total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_calls": total_calls,
+                        "total_time_ms": total_time,
+                        "total_rows": total_rows,
+                        "time_range_minutes": time_range_minutes,
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                        "limit": limit
+                    }
+                }
 
         return self.format_report_data(
             "K003",
             queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_m001_mean_time_report(self, cluster: str = "local", node_name: str = "node-01",
+                                       time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate M001 Top Queries by mean execution time report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by mean execution time
+        """
+        logger.info("Generating M001 Top Queries by mean execution time report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("M001 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            
+            for db_name in databases:
+                logger.info(f"M001: Processing database {db_name} (hourly mode)...")
+                
+                # Get both time and calls metrics
+                time_per_query, time_other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, "pgwatch_pg_stat_statements_exec_time_total", hours=hours
+                )
+                calls_per_query, calls_other, _ = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, "pgwatch_pg_stat_statements_calls", hours=hours
+                )
+                
+                if not time_per_query and sum(time_other) == 0:
+                    logger.warning(f"M001 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate mean time per query across all hours
+                query_means = []
+                for queryid in time_per_query.keys():
+                    total_time = sum(time_per_query[queryid])
+                    total_calls = sum(calls_per_query.get(queryid, [0] * hours))
+                    
+                    if total_calls > 0:
+                        mean_time = total_time / total_calls
+                        query_means.append({
+                            "queryid": queryid,
+                            "mean_time_ms": mean_time,
+                            "total_time_ms": total_time,
+                            "total_calls": total_calls,
+                            "hourly_time_ms": time_per_query[queryid],
+                            "hourly_calls": calls_per_query.get(queryid, [0] * hours)
+                        })
+                
+                # Sort by mean_time (descending) and limit to top N
+                sorted_metrics = sorted(query_means, key=lambda x: x.get('mean_time_ms', 0), reverse=True)[:limit]
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_time_hourly": time_other,
+                    "other_calls_hourly": calls_other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_time_tracked_queries_ms": sum(q.get('total_time_ms', 0) for q in sorted_metrics),
+                        "total_calls_tracked_queries": sum(q.get('total_calls', 0) for q in sorted_metrics),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback to original logic for sub-hourly or when explicitly disabled
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=time_range_minutes)
+
+            for db_name in databases:
+                logger.info(f"M001: Processing database {db_name}...")
+                # Get pg_stat_statements metrics for this database
+                query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+                if not query_metrics:
+                    logger.warning(f"M001 - No query metrics returned for database {db_name}")
+
+                # Calculate mean execution time for each query
+                queries_with_mean = []
+                for q in query_metrics:
+                    calls = q.get('calls', 0)
+                    total_time = q.get('total_time', 0)
+                    if calls > 0:
+                        mean_time = total_time / calls
+                        q['mean_time'] = mean_time
+                        queries_with_mean.append(q)
+
+                # Sort by mean_time (descending) and limit to top N per database
+                sorted_metrics = sorted(queries_with_mean, key=lambda x: x.get('mean_time', 0), reverse=True)[:limit]
+
+                # Calculate totals for the top queries in this database
+                total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+                total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+                total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_calls": total_calls,
+                        "total_time_ms": total_time,
+                        "total_rows": total_rows,
+                        "time_range_minutes": time_range_minutes,
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                        "limit": limit
+                    }
+                }
+
+        return self.format_report_data(
+            "M001",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_m002_rows_report(self, cluster: str = "local", node_name: str = "node-01",
+                                  time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate M002 Top Queries by rows (I/O intensity) report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by rows processed
+        """
+        logger.info("Generating M002 Top Queries by rows report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("M002 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            metric_name = "pgwatch_pg_stat_statements_rows"
+            
+            for db_name in databases:
+                logger.info(f"M002: Processing database {db_name} (hourly mode)...")
+                
+                per_query, other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, metric_name, hours=hours
+                )
+                
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"M002 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate total rows per query across all hours
+                query_totals = []
+                for queryid, hourly_values in per_query.items():
+                    total_rows = sum(hourly_values)
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_rows": total_rows,
+                        "hourly_rows": hourly_values
+                    })
+                
+                # Sort by total_rows (descending) and limit to top N
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_rows', 0), reverse=True)[:limit]
+                
+                # Calculate totals
+                total_rows = sum(q.get('total_rows', 0) for q in sorted_metrics) + sum(other)
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_rows_hourly": other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_rows": total_rows,
+                        "total_rows_tracked_queries": sum(q.get('total_rows', 0) for q in sorted_metrics),
+                        "total_rows_other": sum(other),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback to original logic for sub-hourly or when explicitly disabled
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=time_range_minutes)
+
+            for db_name in databases:
+                logger.info(f"M002: Processing database {db_name}...")
+                # Get pg_stat_statements metrics for this database
+                query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+                if not query_metrics:
+                    logger.warning(f"M002 - No query metrics returned for database {db_name}")
+
+                # Sort by rows (descending) and limit to top N per database
+                sorted_metrics = sorted(query_metrics, key=lambda x: x.get('rows', 0), reverse=True)[:limit]
+
+                # Calculate totals for the top queries in this database
+                total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+                total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+                total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_calls": total_calls,
+                        "total_time_ms": total_time,
+                        "total_rows": total_rows,
+                        "time_range_minutes": time_range_minutes,
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                        "limit": limit
+                    }
+                }
+
+        return self.format_report_data(
+            "M002",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_m003_io_time_report(self, cluster: str = "local", node_name: str = "node-01",
+                                     time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate M003 Top Queries by I/O time report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by total I/O time
+        """
+        logger.info("Generating M003 Top Queries by I/O time report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("M003 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            
+            for db_name in databases:
+                logger.info(f"M003: Processing database {db_name} (hourly mode)...")
+                
+                # Get both read and write I/O time metrics
+                read_per_query, read_other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, "pgwatch_pg_stat_statements_block_read_total", hours=hours
+                )
+                write_per_query, write_other, _ = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, "pgwatch_pg_stat_statements_block_write_total", hours=hours
+                )
+                
+                if not read_per_query and not write_per_query and sum(read_other) == 0 and sum(write_other) == 0:
+                    logger.warning(f"M003 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Combine read and write times, calculate total I/O time per query
+                all_queryids = set(read_per_query.keys()) | set(write_per_query.keys())
+                query_io_totals = []
+                
+                for queryid in all_queryids:
+                    read_values = read_per_query.get(queryid, [0] * hours)
+                    write_values = write_per_query.get(queryid, [0] * hours)
+                    
+                    # Combine read and write for each hour
+                    hourly_io_time = [r + w for r, w in zip(read_values, write_values)]
+                    total_io_time = sum(hourly_io_time)
+                    
+                    query_io_totals.append({
+                        "queryid": queryid,
+                        "total_io_time_ms": total_io_time,
+                        "total_read_time_ms": sum(read_values),
+                        "total_write_time_ms": sum(write_values),
+                        "hourly_io_time_ms": hourly_io_time,
+                        "hourly_read_time_ms": read_values,
+                        "hourly_write_time_ms": write_values
+                    })
+                
+                # Sort by total_io_time (descending) and limit to top N
+                sorted_metrics = sorted(query_io_totals, key=lambda x: x.get('total_io_time_ms', 0), reverse=True)[:limit]
+                
+                # Calculate other I/O time
+                other_io_time_hourly = [r + w for r, w in zip(read_other, write_other)]
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_io_time_hourly": other_io_time_hourly,
+                    "other_read_time_hourly": read_other,
+                    "other_write_time_hourly": write_other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_io_time_tracked_queries_ms": sum(q.get('total_io_time_ms', 0) for q in sorted_metrics),
+                        "total_io_time_other_ms": sum(other_io_time_hourly),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback to original logic for sub-hourly or when explicitly disabled
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=time_range_minutes)
+
+            for db_name in databases:
+                logger.info(f"M003: Processing database {db_name}...")
+                # Get pg_stat_statements metrics for this database
+                query_metrics = self._get_pgss_metrics_data_by_db(cluster, node_name, db_name, start_time, end_time)
+
+                if not query_metrics:
+                    logger.warning(f"M003 - No query metrics returned for database {db_name}")
+
+                # Calculate total I/O time for each query
+                queries_with_io_time = []
+                for q in query_metrics:
+                    blk_read_time = q.get('blk_read_time', 0)
+                    blk_write_time = q.get('blk_write_time', 0)
+                    total_io_time = blk_read_time + blk_write_time
+                    q['total_io_time'] = total_io_time
+                    queries_with_io_time.append(q)
+
+                # Sort by total_io_time (descending) and limit to top N per database
+                sorted_metrics = sorted(queries_with_io_time, key=lambda x: x.get('total_io_time', 0), reverse=True)[:limit]
+
+                # Calculate totals for the top queries in this database
+                total_calls = sum(q.get('calls', 0) for q in sorted_metrics)
+                total_time = sum(q.get('total_time', 0) for q in sorted_metrics)
+                total_rows = sum(q.get('rows', 0) for q in sorted_metrics)
+                total_io_time = sum(q.get('total_io_time', 0) for q in sorted_metrics)
+
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_calls": total_calls,
+                        "total_time_ms": total_time,
+                        "total_rows": total_rows,
+                        "total_io_time_ms": total_io_time,
+                        "time_range_minutes": time_range_minutes,
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                        "limit": limit
+                    }
+                }
+
+        return self.format_report_data(
+            "M003",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_k004_temp_bytes_report(self, cluster: str = "local", node_name: str = "node-01",
+                                        time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate K004 Top Queries by temp bytes written report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by temp bytes written
+        """
+        logger.info("Generating K004 Top Queries by temp bytes written report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("K004 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            metric_name = "pgwatch_pg_stat_statements_temp_bytes_written"
+            
+            for db_name in databases:
+                logger.info(f"K004: Processing database {db_name} (hourly mode)...")
+                
+                per_query, other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, metric_name, hours=hours
+                )
+                
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"K004 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate total temp bytes per query across all hours
+                query_totals = []
+                for queryid, hourly_values in per_query.items():
+                    total_bytes = sum(hourly_values)
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_temp_bytes": total_bytes,
+                        "hourly_temp_bytes": hourly_values
+                    })
+                
+                # Sort by total_temp_bytes (descending) and limit to top N
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_temp_bytes', 0), reverse=True)[:limit]
+                
+                # Calculate totals
+                total_bytes = sum(q.get('total_temp_bytes', 0) for q in sorted_metrics) + sum(other)
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_temp_bytes_hourly": other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_temp_bytes": total_bytes,
+                        "total_temp_bytes_tracked_queries": sum(q.get('total_temp_bytes', 0) for q in sorted_metrics),
+                        "total_temp_bytes_other": sum(other),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback for sub-hourly (not typically needed)
+            pass
+
+        return self.format_report_data(
+            "K004",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_k005_wal_bytes_report(self, cluster: str = "local", node_name: str = "node-01",
+                                       time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate K005 Top Queries by WAL generation report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by WAL bytes generated
+        """
+        logger.info("Generating K005 Top Queries by WAL generation report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("K005 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            metric_name = "pgwatch_pg_stat_statements_wal_bytes"
+            
+            for db_name in databases:
+                logger.info(f"K005: Processing database {db_name} (hourly mode)...")
+                
+                per_query, other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, metric_name, hours=hours
+                )
+                
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"K005 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate total WAL bytes per query across all hours
+                query_totals = []
+                for queryid, hourly_values in per_query.items():
+                    total_bytes = sum(hourly_values)
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_wal_bytes": total_bytes,
+                        "hourly_wal_bytes": hourly_values
+                    })
+                
+                # Sort by total_wal_bytes (descending) and limit to top N
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_wal_bytes', 0), reverse=True)[:limit]
+                
+                # Calculate totals
+                total_bytes = sum(q.get('total_wal_bytes', 0) for q in sorted_metrics) + sum(other)
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_wal_bytes_hourly": other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_wal_bytes": total_bytes,
+                        "total_wal_bytes_tracked_queries": sum(q.get('total_wal_bytes', 0) for q in sorted_metrics),
+                        "total_wal_bytes_other": sum(other),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback for sub-hourly (not typically needed)
+            pass
+
+        return self.format_report_data(
+            "K005",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_k006_shared_read_report(self, cluster: str = "local", node_name: str = "node-01",
+                                         time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate K006 Top Queries by shared blocks read report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by shared blocks read
+        """
+        logger.info("Generating K006 Top Queries by shared blocks read report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("K006 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            metric_name = "pgwatch_pg_stat_statements_shared_bytes_read_total"
+            
+            for db_name in databases:
+                logger.info(f"K006: Processing database {db_name} (hourly mode)...")
+                
+                per_query, other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, metric_name, hours=hours
+                )
+                
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"K006 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate total shared read bytes per query across all hours
+                query_totals = []
+                for queryid, hourly_values in per_query.items():
+                    total_bytes = sum(hourly_values)
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_shared_read_bytes": total_bytes,
+                        "hourly_shared_read_bytes": hourly_values
+                    })
+                
+                # Sort by total_shared_read_bytes (descending) and limit to top N
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_shared_read_bytes', 0), reverse=True)[:limit]
+                
+                # Calculate totals
+                total_bytes = sum(q.get('total_shared_read_bytes', 0) for q in sorted_metrics) + sum(other)
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_shared_read_bytes_hourly": other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_shared_read_bytes": total_bytes,
+                        "total_shared_read_bytes_tracked_queries": sum(q.get('total_shared_read_bytes', 0) for q in sorted_metrics),
+                        "total_shared_read_bytes_other": sum(other),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback for sub-hourly (not typically needed)
+            pass
+
+        return self.format_report_data(
+            "K006",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_k007_shared_hit_report(self, cluster: str = "local", node_name: str = "node-01",
+                                        time_range_minutes: int = 60, limit: int = 100, use_hourly: bool = True) -> Dict[str, Any]:
+        """
+        Generate K007 Top Queries by shared blocks hit report.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+            
+        Returns:
+            Dictionary containing top queries sorted by shared blocks hit
+        """
+        logger.info("Generating K007 Top Queries by shared blocks hit report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("K007 - No databases found")
+
+        queries_by_db = {}
+        
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+            metric_name = "pgwatch_pg_stat_statements_shared_bytes_hit_total"
+            
+            for db_name in databases:
+                logger.info(f"K007: Processing database {db_name} (hourly mode)...")
+                
+                per_query, other, timeline = self._get_hourly_topk_pgss_data(
+                    cluster, node_name, db_name, metric_name, hours=hours
+                )
+                
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"K007 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+                
+                # Calculate total shared hit bytes per query across all hours
+                query_totals = []
+                for queryid, hourly_values in per_query.items():
+                    total_bytes = sum(hourly_values)
+                    query_totals.append({
+                        "queryid": queryid,
+                        "total_shared_hit_bytes": total_bytes,
+                        "hourly_shared_hit_bytes": hourly_values
+                    })
+                
+                # Sort by total_shared_hit_bytes (descending) and limit to top N
+                sorted_metrics = sorted(query_totals, key=lambda x: x.get('total_shared_hit_bytes', 0), reverse=True)[:limit]
+                
+                # Calculate totals
+                total_bytes = sum(q.get('total_shared_hit_bytes', 0) for q in sorted_metrics) + sum(other)
+                
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_shared_hit_bytes_hourly": other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_shared_hit_bytes": total_bytes,
+                        "total_shared_hit_bytes_tracked_queries": sum(q.get('total_shared_hit_bytes', 0) for q in sorted_metrics),
+                        "total_shared_hit_bytes_other": sum(other),
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit
+                    }
+                }
+        else:
+            # Fallback for sub-hourly (not typically needed)
+            pass
+
+        return self.format_report_data(
+            "K007",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_n001_wait_events_report(self, cluster: str = "local", node_name: str = "node-01",
+                                         hours: int = 24) -> Dict[str, Any]:
+        """
+        Generate N001 Wait Events report with hourly breakdown grouped by wait_event_type and query_id.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            hours: Number of hours to analyze (default: 24)
+            
+        Returns:
+            Dictionary containing wait events grouped by type and query_id with hourly occurrences
+        """
+        logger.info("Generating N001 Wait Events report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+        
+        if not databases:
+            logger.warning("N001 - No databases found")
+
+        # Build timeline
+        now = int(time.time())
+        end_s = self._floor_hour(now)
+        start_s, timeline = self._build_timeline(end_s, hours, step_s=3600)
+
+        wait_events_by_db = {}
+        
+        for db_name in databases:
+            logger.info(f"N001: Processing database {db_name}...")
+            
+            # Query wait events from Prometheus
+            # pgwatch_wait_events_total has labels: wait_event_type, wait_event, query_id, datname
+            filters = [
+                f'cluster="{cluster}"',
+                f'node_name="{node_name}"',
+                f'datname="{db_name}"'
+            ]
+            filter_str = '{' + ','.join(filters) + '}'
+            
+            # Get wait events data over the time range with hourly step
+            metric_name = f'pgwatch_wait_events_total{filter_str}'
+            
+            try:
+                result = self.query_range(metric_name, datetime.fromtimestamp(start_s), 
+                                        datetime.fromtimestamp(end_s), step="3600s")
+                
+                if not result:
+                    logger.warning(f"N001 - No wait events data for database {db_name}")
+                    continue
+                
+                # Build timestamp to hour index map
+                ts_to_hour = {ts: idx for idx, ts in enumerate(timeline)}
+                
+                # Process results to group by wait_event_type -> query_id with hourly breakdown
+                wait_events_grouped = {}
+                
+                for series in result:
+                    metric = series.get('metric', {})
+                    wait_event_type = metric.get('wait_event_type', 'Unknown')
+                    wait_event = metric.get('wait_event', 'Unknown')
+                    query_id = metric.get('query_id', '0')
+                    
+                    # Get the values (timestamp, value pairs)
+                    values = series.get('values', [])
+                    
+                    # Group by wait_event_type
+                    if wait_event_type not in wait_events_grouped:
+                        wait_events_grouped[wait_event_type] = {
+                            'queries': {},
+                            'total_occurrences': 0,
+                            'unique_queries': 0
+                        }
+                    
+                    # Add query_id under this wait_event_type
+                    if query_id not in wait_events_grouped[wait_event_type]['queries']:
+                        wait_events_grouped[wait_event_type]['queries'][query_id] = {
+                            'occurrences': 0,
+                            'hourly_occurrences': [0] * hours,
+                            'wait_events': {}
+                        }
+                    
+                    # Process hourly values
+                    for timestamp, value in values:
+                        try:
+                            count = float(value)
+                            if count == 0:
+                                continue
+                            
+                            ts = int(timestamp)
+                            if ts not in ts_to_hour:
+                                continue
+                            
+                            hour_idx = ts_to_hour[ts]
+                            
+                            # Update hourly arrays for query only
+                            wait_events_grouped[wait_event_type]['queries'][query_id]['hourly_occurrences'][hour_idx] += int(count)
+                            
+                            # Track individual wait events
+                            if wait_event not in wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events']:
+                                wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events'][wait_event] = {
+                                    'occurrences': 0
+                                }
+                            wait_events_grouped[wait_event_type]['queries'][query_id]['wait_events'][wait_event]['occurrences'] += int(count)
+                            
+                        except (ValueError, TypeError):
+                            continue
+                
+                # Calculate totals
+                for wait_type in wait_events_grouped:
+                    for query_id in wait_events_grouped[wait_type]['queries']:
+                        query_data = wait_events_grouped[wait_type]['queries'][query_id]
+                        query_data['occurrences'] = sum(query_data['hourly_occurrences'])
+                    
+                    # Calculate total_occurrences from all queries
+                    wait_events_grouped[wait_type]['total_occurrences'] = sum(
+                        q['occurrences'] for q in wait_events_grouped[wait_type]['queries'].values()
+                    )
+                
+                # Skip databases with no wait events data
+                if not wait_events_grouped:
+                    logger.warning(f"N001 - No wait events data for database {db_name}")
+                    continue
+                
+                # Count unique queries and convert to list
+                for wait_type in wait_events_grouped:
+                    wait_events_grouped[wait_type]['unique_queries'] = len(wait_events_grouped[wait_type]['queries'])
+                    
+                    queries_list = []
+                    for query_id, data in wait_events_grouped[wait_type]['queries'].items():
+                        queries_list.append({
+                            'query_id': query_id,
+                            'occurrences': data['occurrences'],
+                            'hourly_occurrences': data['hourly_occurrences'],
+                            'wait_events': data['wait_events']
+                        })
+                    # Sort by occurrences descending
+                    queries_list.sort(key=lambda x: x['occurrences'], reverse=True)
+                    wait_events_grouped[wait_type]['queries_list'] = queries_list
+                    # Remove the dict version
+                    del wait_events_grouped[wait_type]['queries']
+                
+                wait_events_by_db[db_name] = {
+                    'wait_event_types': wait_events_grouped,
+                    'summary': {
+                        'time_range_hours': hours,
+                        'start_time': datetime.fromtimestamp(start_s).isoformat(),
+                        'end_time': datetime.fromtimestamp(end_s).isoformat(),
+                        'wait_event_types_count': len(wait_events_grouped),
+                        'total_occurrences': sum(wt['total_occurrences'] for wt in wait_events_grouped.values()),
+                        'hourly_timestamps': timeline
+                    }
+                }
+                
+            except Exception as e:
+                logger.error(f"Error querying wait events for database {db_name}: {e}")
+                continue
+
+        return self.format_report_data(
+            "N001",
+            wait_events_by_db,
             node_name,
             postgres_version=self._get_postgres_version_info(cluster, node_name),
         )
@@ -1695,7 +2806,7 @@ class PostgresReportGenerator:
                     end_data.extend(end_result)
 
             except Exception as e:
-                print(f"Warning: Failed to query metric {metric}: {e}")
+                logger.warning(f"Failed to query metric {metric}: {e}")
                 continue
 
         # Process the data to calculate differences
@@ -1729,9 +2840,9 @@ class PostgresReportGenerator:
                 if result.get('status') == 'success':
                     return result.get('data', {}).get('result', [])
             else:
-                print(f"Range query failed with status {response.status_code}: {response.text}")
+                logger.error(f"Range query failed with status {response.status_code}: {response.text}")
         except Exception as e:
-            print(f"Range query error: {e}")
+            logger.error(f"Range query error: {e}")
 
         return []
 
@@ -1865,6 +2976,167 @@ class PostgresReportGenerator:
 
         return metrics_dict
 
+    def _floor_hour(self, ts: int) -> int:
+        """
+        Floor timestamp to the nearest hour.
+        
+        Args:
+            ts: Unix timestamp in seconds
+            
+        Returns:
+            Floored timestamp
+        """
+        return (ts // 3600) * 3600
+
+    def _build_timeline(self, end_s: int, hours: int = 24, step_s: int = 3600) -> Tuple[int, List[int]]:
+        """
+        Build a timeline of hourly timestamps.
+        
+        Args:
+            end_s: End timestamp (floored to hour)
+            hours: Number of hours to cover (default: 24)
+            step_s: Step size in seconds (default: 3600 = 1 hour)
+            
+        Returns:
+            Tuple of (start_timestamp, list of timestamps)
+        """
+        start_s = end_s - (hours - 1) * step_s
+        return start_s, [start_s + i * step_s for i in range(hours)]
+
+    def _build_qid_regex(self, qids: List[str]) -> str:
+        """
+        Build a PromQL regex pattern for queryid matching.
+        
+        Args:
+            qids: List of query IDs
+            
+        Returns:
+            PromQL regex pattern
+        """
+        # queryid is integer-like (can be negative). DO NOT escape '-' for PromQL strings.
+        for q in qids:
+            if not re.fullmatch(r"-?\d+", q):
+                raise ValueError(f"Unexpected queryid: {q}")
+        return "^(?:" + "|".join(qids) + ")$"
+
+    def _to_series_map(self, result: List[Dict]) -> Dict[str, Dict[int, float]]:
+        """
+        Convert Prometheus query_range result to a map of series.
+        
+        Args:
+            result: Prometheus query_range result
+            
+        Returns:
+            Dict mapping queryid to dict of timestamp -> value
+        """
+        out = {}
+        for s in result:
+            qid = (s.get("metric") or {}).get("queryid", "__single__")
+            pts = {int(ts): float(v) for ts, v in s.get("values", [])}
+            out[qid] = pts
+        return out
+
+    def _densify(self, series_pts: Dict[str, Dict[int, float]], qids: List[str], 
+                 timeline: List[int], fill: float = 0.0) -> Dict[str, List[float]]:
+        """
+        Densify sparse series data to have values for all timeline points.
+        
+        Args:
+            series_pts: Map of queryid to timestamp -> value
+            qids: List of query IDs to densify
+            timeline: List of timestamps
+            fill: Fill value for missing data points (default: 0.0)
+            
+        Returns:
+            Dict mapping queryid to list of values aligned to timeline
+        """
+        return {
+            qid: [series_pts.get(qid, {}).get(ts, fill) for ts in timeline] 
+            for qid in qids
+        }
+
+    def _get_hourly_topk_pgss_data(self, cluster: str, node_name: str, db_name: str,
+                                   metric_name: str = "pgwatch_pg_stat_statements_calls",
+                                   hours: int = 24, step_s: int = 3600, 
+                                   k: int = 3) -> Tuple[Dict[str, List[float]], List[float], List[int]]:
+        """
+        Get hourly topk pg_stat_statements data for a specific database and metric.
+        
+        This method finds queries that appear in top-k for any hour within the time range,
+        then returns per-hour data for those queries plus an "other" category.
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            db_name: Database name
+            metric_name: Prometheus metric name (default: pgwatch_pg_stat_statements_calls)
+            hours: Number of hours to look back (default: 24)
+            step_s: Step size in seconds (default: 3600 = 1 hour)
+            k: Number of top queries per hour (default: 3)
+            
+        Returns:
+            Tuple of (per_query_dict, other_list, timeline)
+            - per_query_dict: Dict mapping queryid to list of hourly values
+            - other_list: List of hourly values for queries not in top-k
+            - timeline: List of timestamps for the hourly data points
+        """
+        now = int(time.time())
+        end_s = self._floor_hour(now)
+        start_s, timeline = self._build_timeline(end_s, hours, step_s)
+
+        # Build filters for this database
+        filters = [f'cluster="{cluster}"', f'node_name="{node_name}"', f'datname="{db_name}"']
+        filter_str = '{' + ','.join(filters) + '}'
+
+        # Convert step to string format for Prometheus API
+        step_str = f"{step_s}s"
+
+        # Find union of queryids that ever appear in hourly top-k
+        q_topk = f'topk({k}, sum by (queryid) (increase({metric_name}{filter_str}[1h])))'
+        topk_result = self.query_range(q_topk, datetime.fromtimestamp(start_s), 
+                                      datetime.fromtimestamp(end_s), step=step_str)
+        
+        union = sorted({
+            (s.get("metric") or {}).get("queryid") 
+            for s in topk_result 
+            if (s.get("metric") or {}).get("queryid") is not None
+        })
+
+        # Get total per hour (for "other" calculation)
+        q_total = f"sum(increase({metric_name}{filter_str}[1h]))"
+        total_result = self.query_range(q_total, datetime.fromtimestamp(start_s), 
+                                       datetime.fromtimestamp(end_s), step=step_str)
+        total_map = self._to_series_map(total_result).get("__single__", {})
+        total = [total_map.get(ts, 0.0) for ts in timeline]
+
+        if not union:
+            per_query = {}
+            other = total[:]  # Everything is "other"
+            return per_query, other, timeline
+
+        # Get hourly series for all union queryids (densified to N points each)
+        qid_re = self._build_qid_regex(union)
+        # Add queryid filter to the existing filters
+        union_filters = filters + [f'queryid=~"{qid_re}"']
+        union_filter_str = '{' + ','.join(union_filters) + '}'
+        q_union = f'sum by (queryid) (increase({metric_name}{union_filter_str}[1h]))'
+        union_result = self.query_range(q_union, datetime.fromtimestamp(start_s), 
+                                       datetime.fromtimestamp(end_s), step=step_str)
+        union_pts = self._to_series_map(union_result)
+        per_query = self._densify(union_pts, union, timeline, fill=0.0)
+
+        # Calculate other = total - sum(union)
+        other = []
+        for i in range(hours):
+            union_sum = sum(per_query[qid][i] for qid in union)
+            o = total[i] - union_sum
+            # Handle floating point precision issues
+            if o < 0 and o > -1e-6:
+                o = 0.0
+            other.append(o)
+
+        return per_query, other, timeline
+
     def format_bytes(self, bytes_value: float) -> str:
         """Format bytes value for human readable display."""
         if bytes_value == 0:
@@ -1933,7 +3205,7 @@ class PostgresReportGenerator:
             # Multi-node structure: data is already in {node_name: {"data": ...}} format
             # postgres_version should already be embedded per-node; warn if passed here
             if postgres_version:
-                print(f"Warning: postgres_version parameter ignored for multi-node data in {check_id}")
+                logger.warning(f"postgres_version parameter ignored for multi-node data in {check_id}")
             results = data
         else:
             # Single-node structure: wrap data in host key
@@ -2021,8 +3293,12 @@ class PostgresReportGenerator:
             "J001": "Capacity planning",
             "K001": "Globally aggregated query metrics",
             "K002": "Workload type",
-            "K003": "Top-50 queries by total_time",
+            "K003": "Top queries by total_time",
             "L001": "Table sizes",
+            "M001": "Top queries by mean execution time",
+            "M002": "Top queries by rows (I/O intensity)",
+            "M003": "Top queries by I/O time",
+            "N001": "Wait events grouped by type and query",
             "L002": "Data types being used",
             "L003": "Integer out-of-range risks in PKs",
             "L004": "Tables without PK/UK",
@@ -2217,11 +3493,11 @@ class PostgresReportGenerator:
             
             # If no nodes found, fall back to default
             if not nodes_to_process:
-                print(f"Warning: No nodes found in cluster '{cluster}', using default 'node-01'")
+                logger.warning(f"No nodes found in cluster '{cluster}', using default 'node-01'")
                 nodes_to_process = ["node-01"]
                 all_nodes = {"primary": "node-01", "standbys": []}
             else:
-                print(f"Combining reports from nodes: {nodes_to_process}")
+                logger.info(f"Combining reports from nodes: {nodes_to_process}")
         else:
             # Use single node (backward compatibility)
             if node_name is None:
@@ -2245,21 +3521,41 @@ class PostgresReportGenerator:
             ('H004', self.generate_h004_redundant_indexes_report),
             ('K001', self.generate_k001_query_calls_report),
             ('K003', self.generate_k003_top_queries_report),
+            ('K004', self.generate_k004_temp_bytes_report),
+            ('K005', self.generate_k005_wal_bytes_report),
+            ('K006', self.generate_k006_shared_read_report),
+            ('K007', self.generate_k007_shared_hit_report),
+            ('M001', self.generate_m001_mean_time_report),
+            ('M002', self.generate_m002_rows_report),
+            ('M003', self.generate_m003_io_time_report),
+            ('N001', self.generate_n001_wait_events_report),
         ]
 
         for check_id, report_func in report_types:
+            # Determine if this report needs hourly parameters
+            pgss_hourly_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+            wait_events_reports = ['N001']
+            report_kwargs = {}
+            if check_id in pgss_hourly_reports:
+                report_kwargs['time_range_minutes'] = 1440  # 24 hours
+            elif check_id in wait_events_reports:
+                report_kwargs['hours'] = 24  # 24 hours
+            
             if len(nodes_to_process) == 1:
                 # Single node - generate report normally
-                reports[check_id] = report_func(cluster, nodes_to_process[0])
+                reports[check_id] = report_func(cluster, nodes_to_process[0], **report_kwargs)
             else:
                 # Multiple nodes - combine reports
                 combined_results = {}
                 for node in nodes_to_process:
-                    print(f"Generating {check_id} report for node {node}...")
-                    node_report = report_func(cluster, node)
+                    logger.info(f"Generating {check_id} report for node {node}...")
+                    node_report = report_func(cluster, node, **report_kwargs)
                     # Extract the data from the node report
                     if 'results' in node_report and node in node_report['results']:
                         combined_results[node] = node_report['results'][node]
+                    
+                    # Free node report memory immediately
+                    del node_report
                 
                 # Create combined report with all nodes
                 reports[check_id] = self.format_report_data(
@@ -2268,8 +3564,371 @@ class PostgresReportGenerator:
                     all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
                     all_nodes
                 )
+                
+                # Free combined results after creating report
+                del combined_results
+            
+            # Periodic garbage collection during report generation
+            if len(reports) % 5 == 0:
+                gc.collect()
 
         return reports
+
+    def generate_queries_json(self, query_text_limit: int = 1000) -> Dict[str, List[str]]:
+        """
+        DEPRECATED: This method is no longer used.
+        Query information is now only included in individual query_{queryid}.json files.
+        
+        Generate JSON with queryid lists per database.
+
+        Args:
+            query_text_limit: Not used anymore, kept for backward compatibility
+        
+        Returns:
+            Dictionary with database names as keys, containing lists of queryids
+        """
+        logger.warning("DEPRECATED: generate_queries_json is no longer used")
+        queries_with_text = self.get_queryid_queries_from_sink(query_text_limit)
+        
+        # Convert from {db: {queryid: text}} to {db: [queryid, ...]}
+        queries_only = {}
+        for db_name, queries in queries_with_text.items():
+            queries_only[db_name] = list(queries.keys())
+        
+        return queries_only
+
+    def extract_queryids_from_reports(self, reports: Dict[str, Any]) -> Dict[str, set]:
+        """
+        Extract all unique queryids from the hourly reports (K001-K007, M001-M003, N001).
+        
+        Args:
+            reports: Dictionary of generated reports keyed by check_id
+            
+        Returns:
+            Dictionary mapping database names to sets of queryids
+        """
+        queryids_by_db: Dict[str, set] = {}
+        
+        def extract_from_query_metrics(container: Dict, target_key: str = 'query_metrics', 
+                                       id_field: str = 'queryid'):
+            """Helper to extract queryids from a container that may have nested structure."""
+            if not isinstance(container, dict):
+                return
+            
+            # Direct: container has query_metrics
+            if target_key in container:
+                for query in container.get(target_key, []):
+                    qid = query.get(id_field)
+                    if qid and str(qid) != '0':
+                        # Try to find db_name from context or use a placeholder
+                        yield str(qid), None
+            
+            # Check for 'data' wrapper: container -> data -> db_name -> query_metrics
+            if 'data' in container and isinstance(container['data'], dict):
+                for db_name, db_data in container['data'].items():
+                    if isinstance(db_data, dict) and target_key in db_data:
+                        for query in db_data.get(target_key, []):
+                            qid = query.get(id_field)
+                            if qid and str(qid) != '0':
+                                yield str(qid), db_name
+            
+            # Direct db_name -> query_metrics (no data wrapper)
+            for key, value in container.items():
+                if key == 'data':
+                    continue
+                if isinstance(value, dict) and target_key in value:
+                    for query in value.get(target_key, []):
+                        qid = query.get(id_field)
+                        if qid and str(qid) != '0':
+                            yield str(qid), key
+        
+        # Reports with queryid field in query_metrics list
+        pgss_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+        
+        for report_id in pgss_reports:
+            if report_id not in reports:
+                continue
+            
+            report = reports[report_id]
+            results = report.get('results', {})
+            
+            # Handle multi-node structure: results -> node_name -> data -> db_name -> query_metrics
+            for node_key, node_data in results.items():
+                if isinstance(node_data, dict):
+                    for queryid, db_name in extract_from_query_metrics(node_data):
+                        if db_name:
+                            if db_name not in queryids_by_db:
+                                queryids_by_db[db_name] = set()
+                            queryids_by_db[db_name].add(queryid)
+        
+        # N001 Wait Events report - has query_id in queries_list under wait_event_types
+        if 'N001' in reports:
+            report = reports['N001']
+            results = report.get('results', {})
+            
+            for node_key, node_data in results.items():
+                if not isinstance(node_data, dict):
+                    continue
+                
+                # Check for 'data' wrapper
+                data_container = node_data.get('data', node_data)
+                
+                for db_name, db_data in data_container.items():
+                    if not isinstance(db_data, dict):
+                        continue
+                    
+                    wait_types = db_data.get('wait_event_types', {})
+                    if not wait_types:
+                        continue
+                    
+                    if db_name not in queryids_by_db:
+                        queryids_by_db[db_name] = set()
+                    
+                    for wait_type, wait_data in wait_types.items():
+                        for query in wait_data.get('queries_list', []):
+                            query_id = query.get('query_id')
+                            if query_id and str(query_id) != '0':
+                                queryids_by_db[db_name].add(str(query_id))
+        
+        # Log summary
+        total_queryids = sum(len(qids) for qids in queryids_by_db.values())
+        logger.info(f"Extracted {total_queryids} unique queryids from hourly reports across {len(queryids_by_db)} database(s)")
+        
+        return queryids_by_db
+
+    def get_query_metrics_from_prometheus(self, cluster: str, node_name: str, db_name: str,
+                                          queryid: str, hours: int = 24) -> Dict[str, Any]:
+        """
+        Get all pg_stat_statements metrics for a specific query directly from Prometheus.
+        Fetches daily totals for all metrics shown on Dashboard 3 (Single queryid analysis).
+        
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            db_name: Database name
+            queryid: Query ID
+            hours: Number of hours to aggregate (default: 24 for daily totals)
+            
+        Returns:
+            Dictionary of metrics with daily totals
+        """
+        metrics = {}
+        
+        # Build filters for this specific query
+        filters = [
+            f'cluster="{cluster}"',
+            f'node_name="{node_name}"',
+            f'datname="{db_name}"',
+            f'queryid="{queryid}"'
+        ]
+        filter_str = '{' + ','.join(filters) + '}'
+        
+        # Time range - calculate exact 24h window
+        now = int(time.time())
+        end_s = self._floor_hour(now)
+        start_s = end_s - (hours * 3600)  # Exact hours back from end
+        
+        # All pg_stat_statements metrics to fetch (matching Dashboard 3)
+        pgss_metrics = {
+            'calls': 'pgwatch_pg_stat_statements_calls',
+            'exec_time_ms': 'pgwatch_pg_stat_statements_exec_time_total',
+            'plan_time_ms': 'pgwatch_pg_stat_statements_plan_time_total',
+            'rows': 'pgwatch_pg_stat_statements_rows',
+            'shared_blks_hit_bytes': 'pgwatch_pg_stat_statements_shared_bytes_hit_total',
+            'shared_blks_read_bytes': 'pgwatch_pg_stat_statements_shared_bytes_read_total',
+            'shared_blks_dirtied_bytes': 'pgwatch_pg_stat_statements_shared_bytes_dirtied_total',
+            'shared_blks_written_bytes': 'pgwatch_pg_stat_statements_shared_bytes_written_total',
+            'wal_bytes': 'pgwatch_pg_stat_statements_wal_bytes',
+            'wal_fpi': 'pgwatch_pg_stat_statements_wal_fpi',
+            'wal_records': 'pgwatch_pg_stat_statements_wal_records',
+            'temp_bytes_read': 'pgwatch_pg_stat_statements_temp_bytes_read',
+            'temp_bytes_written': 'pgwatch_pg_stat_statements_temp_bytes_written',
+            'blk_read_time_ms': 'pgwatch_pg_stat_statements_block_read_total',
+            'blk_write_time_ms': 'pgwatch_pg_stat_statements_block_write_total',
+            'jit_generation_time_ms': 'pgwatch_pg_stat_statements_jit_generation_time',
+            'jit_inlining_time_ms': 'pgwatch_pg_stat_statements_jit_inlining_time',
+            'jit_optimization_time_ms': 'pgwatch_pg_stat_statements_jit_optimization_time',
+            'jit_emission_time_ms': 'pgwatch_pg_stat_statements_jit_emission_time',
+        }
+        
+        # Fetch each metric
+        for metric_key, metric_name in pgss_metrics.items():
+            try:
+                # Query for total increase over the time range
+                query = f'sum(increase({metric_name}{filter_str}[{hours}h]))'
+                result = self.query_instant(query)
+                
+                if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                    for item in result['data']['result']:
+                        value = float(item['value'][1]) if item.get('value') else 0
+                        # Only include metrics that have non-zero values
+                        if value > 0:
+                            metrics[metric_key] = value
+                        break
+            except Exception:
+                # Silently skip metrics that fail (some may not exist for older PG versions)
+                pass
+        
+        # Add time range info
+        metrics['time_range'] = {
+            'hours': hours,
+            'start_time': datetime.fromtimestamp(start_s).isoformat(),
+            'end_time': datetime.fromtimestamp(end_s).isoformat()
+        }
+        
+        return metrics
+
+    def generate_per_query_jsons(self, reports: Dict[str, Any], cluster: str,
+                                 node_name: str = None,
+                                 query_text_limit: int = 1000,
+                                 hours: int = 24,
+                                 write_immediately: bool = False,
+                                 api_url: str = None,
+                                 token: str = None,
+                                 report_id: str = None) -> List[Dict[str, Any]]:
+        """
+        Generate individual JSON files for each query mentioned in hourly reports.
+        Fetches all metrics directly from Prometheus (matching Dashboard 3).
+
+        Args:
+            reports: Dictionary of generated reports keyed by check_id
+            cluster: Cluster name
+            node_name: Node name (optional, will use primary if not specified)
+            query_text_limit: Maximum number of characters for each query text
+            hours: Number of hours for metric aggregation (default: 24)
+            write_immediately: If True, write files immediately to reduce memory usage
+            api_url: API URL for uploads (only used if write_immediately is True)
+            token: API token for uploads (only used if write_immediately is True)
+            report_id: Report ID for uploads (only used if write_immediately is True)
+            
+        Returns:
+            List of dictionaries with 'filename' (and optionally 'data' if not written immediately)
+        """
+        logger.info("Generating per-query JSON files...")
+        
+        # Extract all queryids from reports
+        queryids_by_db = self.extract_queryids_from_reports(reports)
+        
+        if not queryids_by_db:
+            logger.warning("No queryids found in hourly reports")
+            return []
+
+        # Determine which nodes to include (match generate_all_reports logic)
+        if node_name is None:
+            nodes = self.get_all_nodes(cluster)
+            nodes_to_process: List[str] = []
+            if nodes.get("primary"):
+                nodes_to_process.append(nodes["primary"])
+            nodes_to_process.extend(nodes.get("standbys", []))
+
+            # If no nodes found, fall back to default
+            if not nodes_to_process:
+                logger.warning(f"No nodes found in cluster '{cluster}', using default 'node-01'")
+                nodes_to_process = ["node-01"]
+                nodes = {"primary": "node-01", "standbys": []}
+        else:
+            # Single node (backward compatibility)
+            nodes_to_process = [node_name]
+            nodes = {"primary": node_name, "standbys": []}
+        
+        # Get query texts from sink - only for databases found in reports (memory optimization)
+        db_names_list = list(queryids_by_db.keys())
+        logger.info(f"Fetching query texts for {len(db_names_list)} database(s): {db_names_list}")
+        query_texts = self.get_queryid_queries_from_sink(query_text_limit, db_names=db_names_list)
+        
+        query_files = []
+        # Invert {db: set(queryid)} -> {queryid: set(db)}
+        dbs_by_queryid: Dict[str, set] = {}
+        for db_name, queryids in queryids_by_db.items():
+            for qid in queryids:
+                if not qid:
+                    continue
+                dbs_by_queryid.setdefault(qid, set()).add(db_name)
+
+        total_queries = len(dbs_by_queryid)
+        processed = 0
+
+        # Process deterministically (helps debugging)
+        for queryid in sorted(dbs_by_queryid.keys()):
+            processed += 1
+            dbs_for_query = sorted(list(dbs_by_queryid[queryid]))
+            logger.info(f"Processing query {processed}/{total_queries}: {queryid[:20]}... (dbs={len(dbs_for_query)}, nodes={len(nodes_to_process)})")
+
+            # Query text is expected to be identical across DBs; pick first non-empty.
+            query_text = None
+            for db_name in dbs_for_query:
+                qt = (query_texts.get(db_name, {}) or {}).get(queryid)
+                if qt:
+                    query_text = qt
+                    break
+
+            # Build results: results[node_name][db_name] = {"metrics": {...}}
+            results_by_node: Dict[str, Dict[str, Any]] = {}
+            time_range = None
+
+            for n in nodes_to_process:
+                node_block: Dict[str, Any] = {}
+                for db_name in dbs_for_query:
+                    metrics = self.get_query_metrics_from_prometheus(
+                        cluster, n, db_name, queryid, hours=hours
+                    )
+                    # Pull out time_range once and keep per-db metrics clean
+                    if time_range is None and isinstance(metrics, dict):
+                        time_range = metrics.pop("time_range", None)
+                    elif isinstance(metrics, dict):
+                        metrics.pop("time_range", None)
+
+                    node_block[db_name] = {"metrics": metrics}
+                results_by_node[n] = node_block
+
+            # Create filename: {cluster}_query_{queryid}.json
+            filename = f"{cluster}_query_{queryid}.json"
+
+            # Build the final JSON object (keep timestamptz as the last field)
+            now = datetime.now(timezone.utc).isoformat()
+            query_data = {
+                "cluster_id": cluster,
+                "query_id": queryid,
+                "query_text": query_text,
+                "nodes": nodes,
+                "results": results_by_node,
+            }
+            if time_range:
+                query_data["time_range"] = time_range
+            query_data["timestamptz"] = now
+
+            if write_immediately:
+                # Write to disk immediately to reduce memory usage
+                with open(filename, "w") as f:
+                    json.dump(query_data, f, indent=2)
+                logger.info(f"Generated query file: {filename}")
+
+                # Upload if API credentials provided
+                if api_url and token and report_id:
+                    self.upload_report_file(api_url, token, report_id, filename)
+
+                # Only store filename, not data
+                query_files.append({"filename": filename})
+
+                # Free memory immediately after writing
+                del query_data
+            else:
+                # Store in memory (legacy behavior)
+                query_files.append({
+                    "filename": filename,
+                    "data": query_data
+                })
+
+            # Free memory periodically to reduce peak usage
+            if processed % 10 == 0:
+                gc.collect()
+        
+        # Final cleanup
+        del query_texts
+        gc.collect()
+        
+        logger.info(f"Generated {len(query_files)} per-query JSON files")
+        return query_files
 
     def get_all_clusters(self) -> List[str]:
         """
@@ -2291,11 +3950,11 @@ class PostgresReportGenerator:
                     cluster_set.add(cluster_name)
         else:
             # Debug output
-            print(f"Debug - get_all_clusters query status: {result.get('status')}")
-            print(f"Debug - get_all_clusters result count: {len(result.get('data', {}).get('result', []))}")
+            logger.info(f"Debug - get_all_clusters query status: {result.get('status')}")
+            logger.info(f"Debug - get_all_clusters result count: {len(result.get('data', {}).get('result', []))}")
         
         if cluster_set:
-            print(f"Found {len(cluster_set)} cluster(s): {sorted(list(cluster_set))}")
+            logger.info(f"Found {len(cluster_set)} cluster(s): {sorted(list(cluster_set))}")
         
         return sorted(list(cluster_set))
 
@@ -2327,9 +3986,9 @@ class PostgresReportGenerator:
         node_list = sorted(list(node_set))
         
         if node_list:
-            print(f"  Found {len(node_list)} node(s) in cluster '{cluster}': {node_list}")
+            logger.info(f"Found {len(node_list)} node(s) in cluster '{cluster}': {node_list}")
         else:
-            print(f"  Warning: No nodes found in cluster '{cluster}'")
+            logger.warning(f"No nodes found in cluster '{cluster}'")
         
         # Use pgwatch_db_stats_in_recovery_int to determine primary vs standby
         # in_recovery = 0 means primary, in_recovery = 1 means standby
@@ -2342,7 +4001,7 @@ class PostgresReportGenerator:
                 if recovery_result['data']['result']:
                     in_recovery_value = float(recovery_result['data']['result'][0]['value'][1])
                     is_standby = (in_recovery_value > 0)
-                    print(f"  Node '{node_name}': in_recovery={int(in_recovery_value)} ({'standby' if is_standby else 'primary'})")
+                    logger.info(f"Node '{node_name}': in_recovery={int(in_recovery_value)} ({'standby' if is_standby else 'primary'})")
             
             if is_standby:
                 nodes["standbys"].append(node_name)
@@ -2352,10 +4011,10 @@ class PostgresReportGenerator:
                     nodes["primary"] = node_name
                 else:
                     # If we have multiple primaries (shouldn't happen), treat as replicas
-                    print(f"  Warning: Multiple primary nodes detected, treating '{node_name}' as replica")
+                    logger.warning(f"Multiple primary nodes detected, treating '{node_name}' as replica")
                     nodes["standbys"].append(node_name)
         
-        print(f"  Result: primary={nodes['primary']}, replicas={nodes['standbys']}")
+        logger.info(f"Result: primary={nodes['primary']}, replicas={nodes['standbys']}")
         return nodes
 
     def get_all_databases(self, cluster: str = "local", node_name: str = "node-01") -> List[str]:
@@ -2389,20 +4048,38 @@ class PostgresReportGenerator:
             for item in wrap_res['data']['result']:
                 add_db(item["metric"].get("datname", ""))
 
-        # 2) Custom reports using dbname
+        # 2) Custom reports - unused indexes now uses datname, redundant still uses dbname
         unused_q = f'last_over_time(pgwatch_unused_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        unused_res = self.query_instant(unused_q)
+        if unused_res.get('status') == 'success' and unused_res.get('data', {}).get('result'):
+            for item in unused_res['data']['result']:
+                add_db(item["metric"].get("datname", ""))
+        
         redun_q = f'last_over_time(pgwatch_redundant_indexes_index_size_bytes{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
-        for q in (unused_q, redun_q):
-            res = self.query_instant(q)
-            if res.get('status') == 'success' and res.get('data', {}).get('result'):
-                for item in res['data']['result']:
-                    add_db(item["metric"].get("dbname", ""))
+        redun_res = self.query_instant(redun_q)
+        if redun_res.get('status') == 'success' and redun_res.get('data', {}).get('result'):
+            for item in redun_res['data']['result']:
+                add_db(item["metric"].get("dbname", ""))
 
         # 3) Btree bloat family
         bloat_q = f'last_over_time(pgwatch_pg_btree_bloat_bloat_pct{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
         bloat_res = self.query_instant(bloat_q)
         if bloat_res.get('status') == 'success' and bloat_res.get('data', {}).get('result'):
             for item in bloat_res['data']['result']:
+                add_db(item["metric"].get("datname", ""))
+        
+        # 4) pg_stat_statements metrics (calls)
+        pgss_q = f'last_over_time(pgwatch_pg_stat_statements_calls{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        pgss_res = self.query_instant(pgss_q)
+        if pgss_res.get('status') == 'success' and pgss_res.get('data', {}).get('result'):
+            for item in pgss_res['data']['result']:
+                add_db(item["metric"].get("datname", ""))
+        
+        # 5) Wait events
+        wait_q = f'last_over_time(pgwatch_wait_events_total{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        wait_res = self.query_instant(wait_q)
+        if wait_res.get('status') == 'success' and wait_res.get('data', {}).get('result'):
+            for item in wait_res['data']['result']:
                 add_db(item["metric"].get("datname", ""))
 
         return databases
@@ -2476,18 +4153,18 @@ class PostgresReportGenerator:
                     end_data.extend(end_result)
 
             except Exception as e:
-                print(f"Warning: Failed to query metric {metric} for database {db_name}: {e}")
+                logger.warning(f"Failed to query metric {metric} for database {db_name}: {e}")
                 continue
         
         if metrics_found == 0:
-            print(f"Warning: No pg_stat_statements metrics found for database {db_name}")
-            print(f"  Checked time range: {start_time.isoformat()} to {end_time.isoformat()}")
+            logger.warning(f"No pg_stat_statements metrics found for database {db_name}")
+            logger.info(f"Checked time range: {start_time.isoformat()} to {end_time.isoformat()}")
 
         # Process the data to calculate differences
         result = self._process_pgss_data(start_data, end_data, start_time, end_time, METRIC_NAME_MAPPING)
         
         if not result:
-            print(f"Warning: _process_pgss_data returned empty result for database {db_name}")
+            logger.warning(f"_process_pgss_data returned empty result for database {db_name}")
             
         return result
 
@@ -2502,7 +4179,7 @@ class PostgresReportGenerator:
             epoch: Epoch identifier
             
         Returns:
-            Report ID
+            Report ID or None if creation fails
         """
         request_data = {
             "access_token": token,
@@ -2510,21 +4187,59 @@ class PostgresReportGenerator:
             "epoch": epoch,
         }
 
-        response = make_request(api_url, "/rpc/checkup_report_create", request_data)
-        report_id = response.get("report_id")
-        if not report_id:
-            message = response.get("message", "Cannot create report.")
-            raise Exception(message)
-
-        return int(report_id)
+        try:
+            response = make_request(api_url, "/rpc/checkup_report_create", request_data)
+            report_id = response.get("report_id")
+            if not report_id:
+                message = response.get("message", "Cannot create report.")
+                logger.warning(f"{message}")
+                return None
+            
+            logger.info(f"Created report ID: {report_id}")
+            return int(report_id)
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if hasattr(e, 'response') else 'unknown'
+            if status == 404:
+                logger.warning("API endpoint not available (404). Reports will be saved locally only.")
+            elif status == 400:
+                logger.info(f"Request data: {len(json.dumps(request_data))} chars")
+                logger.warning("API rejected request (400 Bad Request). Reports will be saved locally only.")
+                logger.warning("This may indicate authentication issues or API format changes.")
+            else:
+                logger.error(f"Failed to create report (HTTP {status}): {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to create report: {e}")
+            return None
 
     def upload_report_file(self, api_url, token, report_id, path):
+        """
+        Upload a report file to the API.
+        
+        Note: The API endpoint may not be available in all deployments.
+        Use --no-upload flag to skip API uploads.
+        """
         file_type = os.path.splitext(path)[1].lower().lstrip(".")
         file_name = os.path.basename(path)
-        check_id = file_name[:4] if file_name[4:5] == "_" else ""
 
-        with open(path, "r") as f:
-            data = f.read()
+        data = Path(path).read_text(encoding="utf-8")
+
+        # Prefer extracting check_id from JSON payload (filenames vary: A002.json, cluster_A002.json, etc.)
+        # Per-query JSON files intentionally do not have checkId (see reporter/schemas/query.schema.json).
+        check_id = ""
+        generate_issue = False
+        if file_type == "json":
+            try:
+                payload = json.loads(data)
+                if isinstance(payload, dict):
+                    maybe = payload.get("checkId")
+                    if isinstance(maybe, str) and maybe:
+                        check_id = maybe
+                        generate_issue = True
+            except Exception:
+                logger.warning(f"Upload: failed to parse JSON file '{file_name}', uploading without check_id")
+                # Keep check_id empty / generate_issue False to avoid mislabeling.
+                pass
 
         request_data = {
             "access_token": token,
@@ -2533,12 +4248,28 @@ class PostgresReportGenerator:
             "filename": file_name,
             "data": data,
             "type": file_type,
-            "generate_issue": True
+            "generate_issue": generate_issue
         }
 
-        response = make_request(api_url, "/rpc/checkup_report_file_post", request_data)
-        if "message" in response:
-            raise Exception(response["message"])
+        try:
+            # Try the primary endpoint
+            response = make_request(api_url, "/rpc/checkup_report_file_post", request_data)
+            if "message" in response:
+                raise Exception(response["message"])
+            logger.info(f"Uploaded: {file_name}")
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if hasattr(e, 'response') else 'unknown'
+            if status == 404:
+                logger.warning(f"Upload endpoint not available (404). File saved locally: {path}")
+            elif status == 400:
+                logger.warning(f"Upload rejected by API (400 Bad Request). File saved locally: {path}")
+                logger.warning("This may indicate the API endpoint format has changed or authentication issue.")
+            else:
+                logger.error(f"Upload failed for {file_name} (HTTP {status}). File saved locally: {path}")
+            logger.info("Use --no-upload flag to skip API uploads and suppress these warnings.")
+        except Exception as e:
+            logger.error(f"Upload failed for {file_name}: {e}")
+            logger.info(f"File saved locally: {path}")
 
 
 def make_request(api_url, endpoint, request_data):
@@ -2562,7 +4293,7 @@ def main():
                         help='Disable combining primary and replica reports into single report')
     parser.add_argument('--check-id',
                         choices=['A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002',
-                                 'H004', 'K001', 'K003', 'ALL'],
+                                 'H004', 'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003', 'N001', 'ALL'],
                         help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                         help='Output file (default: stdout)')
@@ -2588,7 +4319,7 @@ def main():
 
     # Test connection
     if not generator.test_connection():
-        print("Error: Cannot connect to Prometheus. Make sure it's running and accessible.")
+        logger.error("Cannot connect to Prometheus. Make sure it's running and accessible.")
         sys.exit(1)
 
     try:
@@ -2599,16 +4330,16 @@ def main():
         else:
             clusters_to_process = generator.get_all_clusters()
             if not clusters_to_process:
-                print("Warning: No clusters found, using default 'local'")
+                logger.warning("No clusters found, using default 'local'")
                 clusters_to_process = ['local']
             else:
-                print(f"Discovered clusters: {clusters_to_process}")
+                logger.info(f"Discovered clusters: {clusters_to_process}")
         
         # Process each cluster
         for cluster in clusters_to_process:
-            print(f"\n{'='*60}")
-            print(f"Processing cluster: {cluster}")
-            print(f"{'='*60}\n")
+            logger.info("=" * 60)
+            logger.info(f"Processing cluster: {cluster}")
+            logger.info("=" * 60)
             
             # Set default node_name if not provided and not combining nodes
             combine_nodes = not args.no_combine_nodes
@@ -2617,35 +4348,50 @@ def main():
                 
             if args.check_id == 'ALL' or args.check_id is None:
                 # Generate all reports for this cluster
+                report_id = None
                 if not args.no_upload:
                     # Use cluster name as project name if not specified
                     project_name = args.project_name if args.project_name != 'project-name' else cluster
                     report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
+                    # If report creation failed, disable uploads for this cluster
+                    if report_id is None:
+                        logger.info(f"Skipping API uploads for cluster {cluster}")
                 
                 reports = generator.generate_all_reports(cluster, args.node_name, combine_nodes)
                 
-                # Save reports with cluster name prefix
-                for report in reports:
-                    output_filename = f"{cluster}_{report}.json" if len(clusters_to_process) > 1 else f"{report}.json"
-                    with open(output_filename, "w") as f:
-                        json.dump(reports[report], f, indent=2)
-                    print(f"Generated report: {output_filename}")
-                    if not args.no_upload:
-                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                # Generate per-query JSON files BEFORE deleting reports (needs queryids from reports)
+                # Use write_immediately=True to avoid accumulating all data in memory
+                logger.info("Generating per-query JSON files (streaming mode to reduce memory usage)...")
+                query_files = generator.generate_per_query_jsons(
+                    reports, cluster, node_name=args.node_name, 
+                    query_text_limit=1000, hours=24,
+                    write_immediately=True,
+                    api_url=args.api_url if (not args.no_upload and report_id) else None,
+                    token=args.token if (not args.no_upload and report_id) else None,
+                    report_id=report_id if (not args.no_upload and report_id) else None
+                )
                 
-                if args.output == '-':
-                    pass
-                elif len(clusters_to_process) == 1:
-                    # Single cluster - use specified output
-                    with open(args.output, 'w') as f:
-                        json.dump(reports, f, indent=2)
-                    print(f"All reports written to {args.output}")
-                else:
-                    # Multiple clusters - create combined output
-                    combined_output = f"{cluster}_all_reports.json"
-                    with open(combined_output, 'w') as f:
-                        json.dump(reports, f, indent=2)
-                    print(f"All reports for cluster {cluster} written to {combined_output}")
+                # Clean up query files list
+                del query_files
+                gc.collect()
+                
+                # Save reports with cluster name prefix
+                for report_key in list(reports.keys()):  # Use list() to avoid dict modification during iteration
+                    output_filename = f"{cluster}_{report_key}.json" if len(clusters_to_process) > 1 else f"{report_key}.json"
+                    with open(output_filename, "w") as f:
+                        json.dump(reports[report_key], f, indent=2)
+                    logger.info(f"Generated report: {output_filename}")
+                    if not args.no_upload and report_id:
+                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                    
+                    # Free memory immediately after writing each report
+                    del reports[report_key]
+                    if len(reports) > 0 and len(reports) % 5 == 0:
+                        gc.collect()
+                
+                # Free memory after writing all reports to disk
+                del reports
+                gc.collect()
             else:
                 # Generate specific report - use node_name or default
                 if args.node_name is None:
@@ -2676,24 +4422,54 @@ def main():
                 elif args.check_id == 'H004':
                     report = generator.generate_h004_redundant_indexes_report(cluster, args.node_name)
                 elif args.check_id == 'K001':
-                    report = generator.generate_k001_query_calls_report(cluster, args.node_name)
+                    report = generator.generate_k001_query_calls_report(cluster, args.node_name, time_range_minutes=1440)
                 elif args.check_id == 'K003':
-                    report = generator.generate_k003_top_queries_report(cluster, args.node_name)
+                    report = generator.generate_k003_top_queries_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'K004':
+                    report = generator.generate_k004_temp_bytes_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'K005':
+                    report = generator.generate_k005_wal_bytes_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'K006':
+                    report = generator.generate_k006_shared_read_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'K007':
+                    report = generator.generate_k007_shared_hit_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'M001':
+                    report = generator.generate_m001_mean_time_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'M002':
+                    report = generator.generate_m002_rows_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'M003':
+                    report = generator.generate_m003_io_time_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'N001':
+                    report = generator.generate_n001_wait_events_report(cluster, args.node_name, hours=24)
 
                 output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
                 
                 if args.output == '-' and len(clusters_to_process) == 1:
-                    print(json.dumps(report, indent=2))
+                    # Report payload to stdout must remain raw JSON (not prefixed with log metadata).
+                    sys.stdout.write(json.dumps(report, indent=2) + "\n")
                 else:
                     with open(output_filename, 'w') as f:
                         json.dump(report, f, indent=2)
-                    print(f"Report written to {output_filename}")
+                    logger.info(f"Report written to {output_filename}")
                     if not args.no_upload:
                         project_name = args.project_name if args.project_name != 'project-name' else cluster
                         report_id = generator.create_report(args.api_url, args.token, project_name, args.epoch)
-                        generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+                        if report_id:
+                            generator.upload_report_file(args.api_url, args.token, report_id, output_filename)
+            
+            # Free memory after processing each cluster
+            logger.info(f"Freeing memory after processing cluster {cluster}...")
+            
+            # Close and reconnect postgres to free any accumulated memory
+            if generator.pg_conn:
+                logger.info("Reconnecting to Postgres sink to free memory...")
+                generator.close_postgres_sink()
+                # Connection will be recreated on next use
+            
+            gc.collect()
+            
     except Exception as e:
-        print(f"Error generating reports: {e}")
+        logger.error(f"Error generating reports: {e}")
         raise e
         sys.exit(1)
     finally:

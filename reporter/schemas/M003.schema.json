@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "M003 report schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "version": { "type": ["string", "null"] },
+    "build_ts": { "type": ["string", "null"] },
+    "checkId": { "const": "M003" },
+    "checkTitle": { "const": "Top queries by I/O time" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "hourlyNumbers": {
+      "type": "array",
+      "items": { "type": "number" }
+    },
+    "queryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queryid",
+        "total_io_time_ms",
+        "total_read_time_ms",
+        "total_write_time_ms",
+        "hourly_io_time_ms",
+        "hourly_read_time_ms",
+        "hourly_write_time_ms"
+      ],
+      "properties": {
+        "queryid": { "type": "string" },
+        "total_io_time_ms": { "type": "number" },
+        "total_read_time_ms": { "type": "number" },
+        "total_write_time_ms": { "type": "number" },
+        "hourly_io_time_ms": { "$ref": "#/$defs/hourlyNumbers" },
+        "hourly_read_time_ms": { "$ref": "#/$defs/hourlyNumbers" },
+        "hourly_write_time_ms": { "$ref": "#/$defs/hourlyNumbers" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queries_returned",
+        "total_io_time_tracked_queries_ms",
+        "total_io_time_other_ms",
+        "time_range_hours",
+        "hourly_timestamps",
+        "limit"
+      ],
+      "properties": {
+        "queries_returned": { "type": "integer" },
+        "total_io_time_tracked_queries_ms": { "type": "number" },
+        "total_io_time_other_ms": { "type": "number" },
+        "time_range_hours": { "type": "integer" },
+        "hourly_timestamps": { "$ref": "#/$defs/timeline" },
+        "limit": { "type": "integer" }
+      }
+    },
+    "dbEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top_queries",
+        "other_io_time_hourly",
+        "other_read_time_hourly",
+        "other_write_time_hourly",
+        "summary"
+      ],
+      "properties": {
+        "top_queries": { "type": "array", "items": { "$ref": "#/$defs/queryEntry" } },
+        "other_io_time_hourly": { "$ref": "#/$defs/hourlyNumbers" },
+        "other_read_time_hourly": { "$ref": "#/$defs/hourlyNumbers" },
+        "other_write_time_hourly": { "$ref": "#/$defs/hourlyNumbers" },
+        "summary": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/dbEntry" }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}
+
+
