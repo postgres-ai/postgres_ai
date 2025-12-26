@@ -1,4 +1,4 @@
-import { maskSecret, normalizeBaseUrl } from "./util";
+import { formatHttpError, maskSecret, normalizeBaseUrl } from "./util";
 
 export interface IssueActionItem {
   id: string;
@@ -98,16 +98,7 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListI
       throw new Error(`Failed to parse issues response: ${data}`);
     }
   } else {
-    let errMsg = `Failed to fetch issues: HTTP ${response.status}`;
-    if (data) {
-      try {
-        const errObj = JSON.parse(data);
-        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-      } catch {
-        errMsg += `\n${data}`;
-      }
-    }
-    throw new Error(errMsg);
+    throw new Error(formatHttpError("Failed to fetch issues", response.status, data));
   }
 }
 
@@ -164,16 +155,7 @@ export async function fetchIssueComments(params: FetchIssueCommentsParams): Prom
       throw new Error(`Failed to parse issue comments response: ${data}`);
     }
   } else {
-    let errMsg = `Failed to fetch issue comments: HTTP ${response.status}`;
-    if (data) {
-      try {
-        const errObj = JSON.parse(data);
-        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-      } catch {
-        errMsg += `\n${data}`;
-      }
-    }
-    throw new Error(errMsg);
+    throw new Error(formatHttpError("Failed to fetch issue comments", response.status, data));
   }
 }
 
@@ -237,16 +219,7 @@ export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail 
       throw new Error(`Failed to parse issue response: ${data}`);
     }
   } else {
-    let errMsg = `Failed to fetch issue: HTTP ${response.status}`;
-    if (data) {
-      try {
-        const errObj = JSON.parse(data);
-        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-      } catch {
-        errMsg += `\n${data}`;
-      }
-    }
-    throw new Error(errMsg);
+    throw new Error(formatHttpError("Failed to fetch issue", response.status, data));
   }
 }
 
@@ -318,15 +291,6 @@ export async function createIssueComment(params: CreateIssueCommentParams): Prom
       throw new Error(`Failed to parse create comment response: ${data}`);
     }
   } else {
-    let errMsg = `Failed to create issue comment: HTTP ${response.status}`;
-    if (data) {
-      try {
-        const errObj = JSON.parse(data);
-        errMsg += `\n${JSON.stringify(errObj, null, 2)}`;
-      } catch {
-        errMsg += `\n${data}`;
-      }
-    }
-    throw new Error(errMsg);
+    throw new Error(formatHttpError("Failed to create issue comment", response.status, data));
   }
 }
