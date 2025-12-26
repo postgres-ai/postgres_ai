@@ -53,7 +53,7 @@ export interface ClusterMetric {
 }
 
 /**
- * Invalid index entry (H001)
+ * Invalid index entry (H001) - matches H001.schema.json invalidIndex
  */
 export interface InvalidIndex {
   schema_name: string;
@@ -66,40 +66,49 @@ export interface InvalidIndex {
 }
 
 /**
- * Unused index entry (H002)
+ * Unused index entry (H002) - matches H002.schema.json unusedIndex
  */
 export interface UnusedIndex {
   schema_name: string;
   table_name: string;
   index_name: string;
+  index_definition: string;
   reason: string;
-  index_size_bytes: number;
-  index_size_pretty: string;
   idx_scan: number;
-  all_scans: number;
-  index_scan_pct: number;
-  writes: number;
-  scans_per_write: number;
-  table_size_bytes: number;
-  table_size_pretty: string;
+  index_size_bytes: number;
+  idx_is_btree: boolean;
   supports_fk: boolean;
+  index_size_pretty: string;
 }
 
 /**
- * Redundant index entry (H004)
+ * Stats reset info for H002 - matches H002.schema.json statsReset
+ */
+export interface StatsReset {
+  stats_reset_epoch: number | null;
+  stats_reset_time: string | null;
+  days_since_reset: number | null;
+  postmaster_startup_epoch: number | null;
+  postmaster_startup_time: string | null;
+}
+
+/**
+ * Redundant index entry (H004) - matches H004.schema.json redundantIndex
  */
 export interface RedundantIndex {
   schema_name: string;
   table_name: string;
   index_name: string;
+  relation_name: string;
   access_method: string;
   reason: string;
   index_size_bytes: number;
-  index_size_pretty: string;
   table_size_bytes: number;
-  table_size_pretty: string;
   index_usage: number;
   supports_fk: boolean;
+  index_definition: string;
+  index_size_pretty: string;
+  table_size_pretty: string;
 }
 
 /**
@@ -235,12 +244,35 @@ export const METRICS_SQL = {
   `,
 
   // Invalid indexes (H001) - indexes where indisvalid = false
+  // Matches H001.schema.json invalidIndex structure
   invalidIndexes: `
+    WITH fk_indexes AS (
+      SELECT
+        n.nspname as schema_name,
+        ci.relname as index_name,
+        cr.relname as table_name,
+        (confrelid::regclass)::text as fk_table_ref,
+        array_to_string(indclass, ', ') as opclasses
+      FROM pg_index i
+      JOIN pg_class ci ON ci.oid = i.indexrelid AND ci.relkind = 'i'
+      JOIN pg_class cr ON cr.oid = i.indrelid AND cr.relkind = 'r'
+      JOIN pg_namespace n ON n.oid = ci.relnamespace
+      JOIN pg_constraint cn ON cn.conrelid = cr.oid
+      WHERE cn.contype = 'f'
+        AND i.indisunique = false
+    )
     SELECT
       n.nspname as schema_name,
       t.relname as table_name,
       i.relname as index_name,
-      pg_relation_size(i.oid) as index_size_bytes
+      COALESCE(NULLIF(quote_ident(n.nspname), 'public') || '.', '') || quote_ident(t.relname) as relation_name,
+      pg_relation_size(i.oid) as index_size_bytes,
+      (
+        SELECT COUNT(1) > 0
+        FROM fk_indexes fi
+        WHERE fi.fk_table_ref = t.relname
+          AND fi.schema_name = n.nspname
+      ) as supports_fk
     FROM pg_index idx
     JOIN pg_class i ON i.oid = idx.indexrelid
     JOIN pg_class t ON t.oid = idx.indrelid
@@ -251,6 +283,7 @@ export const METRICS_SQL = {
   `,
 
   // Unused indexes (H002) - indexes with zero scans, excluding unique/PK indexes
+  // Matches H002.schema.json unusedIndex structure
   unusedIndexes: `
     WITH fk_indexes AS (
       SELECT
@@ -271,16 +304,6 @@ export const METRICS_SQL = {
         AND ci.relpages > 0
         AND COALESCE(si.idx_scan, 0) < 10
     ),
-    table_scans AS (
-      SELECT
-        relid,
-        COALESCE(idx_scan, 0) + COALESCE(seq_scan, 0) as all_scans,
-        COALESCE(n_tup_ins, 0) + COALESCE(n_tup_upd, 0) + COALESCE(n_tup_del, 0) as writes,
-        pg_relation_size(relid) as table_size
-      FROM pg_stat_all_tables
-      JOIN pg_class c ON c.oid = relid
-      WHERE c.relpages > 0
-    ),
     indexes AS (
       SELECT
         i.indrelid,
@@ -288,9 +311,9 @@ export const METRICS_SQL = {
         n.nspname as schema_name,
         cr.relname as table_name,
         ci.relname as index_name,
+        pg_get_indexdef(i.indexrelid) as index_definition,
         COALESCE(si.idx_scan, 0) as idx_scan,
         pg_relation_size(i.indexrelid) as index_size_bytes,
-        ci.relpages,
         (CASE WHEN a.amname = 'btree' THEN true ELSE false END) as idx_is_btree,
         array_to_string(i.indclass, ', ') as opclasses
       FROM pg_index i
@@ -309,14 +332,9 @@ export const METRICS_SQL = {
       i.schema_name,
       i.table_name,
       i.index_name,
+      i.index_definition,
       i.idx_scan,
-      ts.all_scans,
-      ROUND((CASE WHEN ts.all_scans = 0 THEN 0.0 ELSE i.idx_scan::numeric / ts.all_scans * 100 END)::numeric, 2) as index_scan_pct,
-      ts.writes,
-      ROUND((CASE WHEN ts.writes = 0 THEN i.idx_scan::numeric ELSE i.idx_scan::numeric / ts.writes END)::numeric, 2) as scans_per_write,
       i.index_size_bytes,
-      ts.table_size as table_size_bytes,
-      i.relpages,
       i.idx_is_btree,
       (
         SELECT COUNT(1) > 0
@@ -326,14 +344,26 @@ export const METRICS_SQL = {
           AND fi.opclasses LIKE (i.opclasses || '%')
       ) as supports_fk
     FROM indexes i
-    JOIN table_scans ts ON ts.relid = i.indrelid
     WHERE i.idx_scan = 0
       AND i.idx_is_btree
     ORDER BY i.index_size_bytes DESC
     LIMIT 50
   `,
 
+  // Stats reset info for H002
+  statsReset: `
+    SELECT
+      EXTRACT(EPOCH FROM stats_reset) as stats_reset_epoch,
+      stats_reset::text as stats_reset_time,
+      EXTRACT(DAY FROM (now() - stats_reset))::integer as days_since_reset,
+      EXTRACT(EPOCH FROM pg_postmaster_start_time()) as postmaster_startup_epoch,
+      pg_postmaster_start_time()::text as postmaster_startup_time
+    FROM pg_stat_database
+    WHERE datname = current_database()
+  `,
+
   // Redundant indexes (H004) - indexes covered by other indexes
+  // Matches H004.schema.json redundantIndex structure
   redundantIndexes: `
     WITH fk_indexes AS (
       SELECT
@@ -369,12 +399,14 @@ export const METRICS_SQL = {
         i2.indexrelid as index_id,
         tnsp.nspname as schema_name,
         trel.relname as table_name,
+        COALESCE(NULLIF(quote_ident(tnsp.nspname), 'public') || '.', '') || quote_ident(trel.relname) as relation_name,
         pg_relation_size(trel.oid) as table_size_bytes,
         irel.relname as index_name,
         am1.amname as access_method,
         (i1.indexrelid::regclass)::text as reason,
         pg_relation_size(i2.indexrelid) as index_size_bytes,
         COALESCE(s.idx_scan, 0) as index_usage,
+        pg_get_indexdef(i2.indexrelid) as index_definition,
         i2.opclasses
       FROM (
         SELECT indrelid, indexrelid, opclasses, indclass, indexprs, indpred, indisprimary, indisunique, columns
@@ -436,17 +468,20 @@ export const METRICS_SQL = {
       schema_name,
       table_name,
       index_name,
+      relation_name,
       access_method,
       reason,
       index_size_bytes,
       table_size_bytes,
       index_usage,
-      supports_fk
+      supports_fk,
+      index_definition
     FROM deduped
     ORDER BY index_id, index_size_bytes DESC
     LIMIT 50
   `,
 };
+
 
 /**
  * Parse PostgreSQL version number into major and minor components
@@ -698,10 +733,10 @@ export async function getInvalidIndexes(client: Client): Promise<InvalidIndex[]>
     schema_name: row.schema_name,
     table_name: row.table_name,
     index_name: row.index_name,
-    relation_name: `${row.schema_name}.${row.table_name}`,
+    relation_name: row.relation_name,
     index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
     index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
-    supports_fk: false, // Invalid indexes don't support FK lookups
+    supports_fk: row.supports_fk === true || row.supports_fk === "t",
   }));
 }
 
@@ -714,18 +749,29 @@ export async function getUnusedIndexes(client: Client): Promise<UnusedIndex[]> {
     schema_name: row.schema_name,
     table_name: row.table_name,
     index_name: row.index_name,
+    index_definition: row.index_definition || "",
     reason: row.reason,
-    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
-    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
     idx_scan: parseInt(row.idx_scan, 10) || 0,
-    all_scans: parseInt(row.all_scans, 10) || 0,
-    index_scan_pct: parseFloat(row.index_scan_pct) || 0,
-    writes: parseInt(row.writes, 10) || 0,
-    scans_per_write: parseFloat(row.scans_per_write) || 0,
-    table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
-    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
+    index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
+    idx_is_btree: row.idx_is_btree === true || row.idx_is_btree === "t",
     supports_fk: row.supports_fk === true || row.supports_fk === "t",
+    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
   }));
+}
+
+/**
+ * Get stats reset info (H002)
+ */
+export async function getStatsReset(client: Client): Promise<StatsReset> {
+  const result = await client.query(METRICS_SQL.statsReset);
+  const row = result.rows[0] || {};
+  return {
+    stats_reset_epoch: row.stats_reset_epoch ? parseFloat(row.stats_reset_epoch) : null,
+    stats_reset_time: row.stats_reset_time || null,
+    days_since_reset: row.days_since_reset ? parseInt(row.days_since_reset, 10) : null,
+    postmaster_startup_epoch: row.postmaster_startup_epoch ? parseFloat(row.postmaster_startup_epoch) : null,
+    postmaster_startup_time: row.postmaster_startup_time || null,
+  };
 }
 
 /**
@@ -737,14 +783,16 @@ export async function getRedundantIndexes(client: Client): Promise<RedundantInde
     schema_name: row.schema_name,
     table_name: row.table_name,
     index_name: row.index_name,
+    relation_name: row.relation_name,
     access_method: row.access_method,
     reason: row.reason,
     index_size_bytes: parseInt(row.index_size_bytes, 10) || 0,
-    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
     table_size_bytes: parseInt(row.table_size_bytes, 10) || 0,
-    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
     index_usage: parseInt(row.index_usage, 10) || 0,
     supports_fk: row.supports_fk === true || row.supports_fk === "t",
+    index_definition: row.index_definition || "",
+    index_size_pretty: formatBytes(parseInt(row.index_size_bytes, 10) || 0),
+    table_size_pretty: formatBytes(parseInt(row.table_size_bytes, 10) || 0),
   }));
 }
 
@@ -900,17 +948,27 @@ export async function generateH001(client: Client, nodeName: string = "node-01")
   const report = createBaseReport("H001", "Invalid indexes", nodeName);
   const invalidIndexes = await getInvalidIndexes(client);
   const postgresVersion = await getPostgresVersion(client);
+  
+  // Get current database name and size
+  const dbResult = await client.query("SELECT current_database() as datname, pg_database_size(current_database()) as size_bytes");
+  const dbName = dbResult.rows[0]?.datname || "postgres";
+  const dbSizeBytes = parseInt(dbResult.rows[0]?.size_bytes, 10) || 0;
 
   // Calculate totals
   const totalCount = invalidIndexes.length;
   const totalSizeBytes = invalidIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
 
+  // Structure data by database name per schema
   report.results[nodeName] = {
     data: {
-      invalid_indexes: invalidIndexes,
-      total_count: totalCount,
-      total_size_bytes: totalSizeBytes,
-      total_size_pretty: formatBytes(totalSizeBytes),
+      [dbName]: {
+        invalid_indexes: invalidIndexes,
+        total_count: totalCount,
+        total_size_bytes: totalSizeBytes,
+        total_size_pretty: formatBytes(totalSizeBytes),
+        database_size_bytes: dbSizeBytes,
+        database_size_pretty: formatBytes(dbSizeBytes),
+      },
     },
     postgres_version: postgresVersion,
   };
@@ -925,17 +983,29 @@ export async function generateH002(client: Client, nodeName: string = "node-01")
   const report = createBaseReport("H002", "Unused indexes", nodeName);
   const unusedIndexes = await getUnusedIndexes(client);
   const postgresVersion = await getPostgresVersion(client);
+  const statsReset = await getStatsReset(client);
+  
+  // Get current database name and size
+  const dbResult = await client.query("SELECT current_database() as datname, pg_database_size(current_database()) as size_bytes");
+  const dbName = dbResult.rows[0]?.datname || "postgres";
+  const dbSizeBytes = parseInt(dbResult.rows[0]?.size_bytes, 10) || 0;
 
   // Calculate totals
   const totalCount = unusedIndexes.length;
   const totalSizeBytes = unusedIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
 
+  // Structure data by database name per schema
   report.results[nodeName] = {
     data: {
-      unused_indexes: unusedIndexes,
-      total_count: totalCount,
-      total_size_bytes: totalSizeBytes,
-      total_size_pretty: formatBytes(totalSizeBytes),
+      [dbName]: {
+        unused_indexes: unusedIndexes,
+        total_count: totalCount,
+        total_size_bytes: totalSizeBytes,
+        total_size_pretty: formatBytes(totalSizeBytes),
+        database_size_bytes: dbSizeBytes,
+        database_size_pretty: formatBytes(dbSizeBytes),
+        stats_reset: statsReset,
+      },
     },
     postgres_version: postgresVersion,
   };
@@ -950,17 +1020,27 @@ export async function generateH004(client: Client, nodeName: string = "node-01")
   const report = createBaseReport("H004", "Redundant indexes", nodeName);
   const redundantIndexes = await getRedundantIndexes(client);
   const postgresVersion = await getPostgresVersion(client);
+  
+  // Get current database name and size
+  const dbResult = await client.query("SELECT current_database() as datname, pg_database_size(current_database()) as size_bytes");
+  const dbName = dbResult.rows[0]?.datname || "postgres";
+  const dbSizeBytes = parseInt(dbResult.rows[0]?.size_bytes, 10) || 0;
 
   // Calculate totals
   const totalCount = redundantIndexes.length;
   const totalSizeBytes = redundantIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
 
+  // Structure data by database name per schema
   report.results[nodeName] = {
     data: {
-      redundant_indexes: redundantIndexes,
-      total_count: totalCount,
-      total_size_bytes: totalSizeBytes,
-      total_size_pretty: formatBytes(totalSizeBytes),
+      [dbName]: {
+        redundant_indexes: redundantIndexes,
+        total_count: totalCount,
+        total_size_bytes: totalSizeBytes,
+        total_size_pretty: formatBytes(totalSizeBytes),
+        database_size_bytes: dbSizeBytes,
+        database_size_pretty: formatBytes(dbSizeBytes),
+      },
     },
     postgres_version: postgresVersion,
   };

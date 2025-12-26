@@ -58,8 +58,22 @@ function createMockClient(versionRows: any[], settingsRows: any[], options: Mock
         return { rows: alteredSettingsRows };
       }
       // Database sizes (A004)
-      if (sql.includes("pg_database") && sql.includes("pg_database_size")) {
+      if (sql.includes("pg_database") && sql.includes("pg_database_size") && !sql.includes("current_database")) {
         return { rows: databaseSizesRows };
+      }
+      // Current database info (H001, H002, H004)
+      if (sql.includes("current_database()") && sql.includes("pg_database_size")) {
+        return { rows: [{ datname: "testdb", size_bytes: "1073741824" }] };
+      }
+      // Stats reset info (H002)
+      if (sql.includes("stats_reset") && sql.includes("pg_stat_database")) {
+        return { rows: [{ 
+          stats_reset_epoch: "1704067200", 
+          stats_reset_time: "2024-01-01 00:00:00+00",
+          days_since_reset: "30",
+          postmaster_startup_epoch: "1704067200",
+          postmaster_startup_time: "2024-01-01 00:00:00+00"
+        }] };
       }
       // Cluster stats (A004)
       if (sql.includes("pg_stat_database") && sql.includes("xact_commit")) {
@@ -624,7 +638,7 @@ describe("H001 - Invalid indexes", () => {
   test("getInvalidIndexes returns invalid indexes", async () => {
     const mockClient = createMockClient([], [], {
       invalidIndexesRows: [
-        { schema_name: "public", table_name: "users", index_name: "users_email_idx", index_size_bytes: "1048576" },
+        { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", supports_fk: false },
       ],
     });
 
@@ -635,6 +649,8 @@ describe("H001 - Invalid indexes", () => {
     expect(indexes[0].index_name).toBe("users_email_idx");
     expect(indexes[0].index_size_bytes).toBe(1048576);
     expect(indexes[0].index_size_pretty).toBeTruthy();
+    expect(indexes[0].relation_name).toBe("users");
+    expect(indexes[0].supports_fk).toBe(false);
   });
 
   test("generateH001 creates report with invalid indexes", async () => {
@@ -646,7 +662,7 @@ describe("H001 - Invalid indexes", () => {
       [],
       {
         invalidIndexesRows: [
-          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", index_size_bytes: "2097152" },
+          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", supports_fk: false },
         ],
       }
     );
@@ -656,11 +672,16 @@ describe("H001 - Invalid indexes", () => {
     expect(report.checkTitle).toBe("Invalid indexes");
     expect("test-node" in report.results).toBe(true);
 
+    // Data is now keyed by database name
     const data = report.results["test-node"].data;
-    expect("invalid_indexes" in data).toBe(true);
-    expect(data.total_count).toBe(1);
-    expect(data.total_size_bytes).toBe(2097152);
-    expect(data.total_size_pretty).toBeTruthy();
+    expect("testdb" in data).toBe(true);
+    const dbData = data["testdb"] as any;
+    expect(dbData.invalid_indexes).toBeTruthy();
+    expect(dbData.total_count).toBe(1);
+    expect(dbData.total_size_bytes).toBe(2097152);
+    expect(dbData.total_size_pretty).toBeTruthy();
+    expect(dbData.database_size_bytes).toBeTruthy();
+    expect(dbData.database_size_pretty).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
 
@@ -673,7 +694,7 @@ describe("H001 - Invalid indexes", () => {
       [],
       {
         invalidIndexesRows: [
-          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", index_size_bytes: "2097152" },
+          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", supports_fk: false },
         ],
       }
     );
@@ -688,7 +709,9 @@ describe("H001 - Invalid indexes", () => {
     expect(Array.isArray(report.nodes.standbys)).toBe(true);
     expect("test-node" in report.results).toBe(true);
     expect(report.results["test-node"].postgres_version).toBeTruthy();
-    expect(report.results["test-node"].data.invalid_indexes).toBeTruthy();
+    // Data is now keyed by database name
+    expect("testdb" in report.results["test-node"].data).toBe(true);
+    expect((report.results["test-node"].data as any)["testdb"].invalid_indexes).toBeTruthy();
   });
 });
 
@@ -701,14 +724,11 @@ describe("H002 - Unused indexes", () => {
           schema_name: "public",
           table_name: "products",
           index_name: "products_old_idx",
+          index_definition: "CREATE INDEX products_old_idx ON public.products USING btree (old_column)",
           reason: "Never Used Indexes",
           index_size_bytes: "4194304",
           idx_scan: "0",
-          all_scans: "1000",
-          index_scan_pct: "0.00",
-          writes: "500",
-          scans_per_write: "0.00",
-          table_size_bytes: "10485760",
+          idx_is_btree: true,
           supports_fk: false,
         },
       ],
@@ -721,6 +741,8 @@ describe("H002 - Unused indexes", () => {
     expect(indexes[0].index_size_bytes).toBe(4194304);
     expect(indexes[0].idx_scan).toBe(0);
     expect(indexes[0].supports_fk).toBe(false);
+    expect(indexes[0].index_definition).toBeTruthy();
+    expect(indexes[0].idx_is_btree).toBe(true);
   });
 
   test("generateH002 creates report with unused indexes", async () => {
@@ -736,14 +758,11 @@ describe("H002 - Unused indexes", () => {
             schema_name: "public",
             table_name: "logs",
             index_name: "logs_created_idx",
+            index_definition: "CREATE INDEX logs_created_idx ON public.logs USING btree (created_at)",
             reason: "Never Used Indexes",
             index_size_bytes: "8388608",
             idx_scan: "0",
-            all_scans: "5000",
-            index_scan_pct: "0.00",
-            writes: "2000",
-            scans_per_write: "0.00",
-            table_size_bytes: "52428800",
+            idx_is_btree: true,
             supports_fk: false,
           },
         ],
@@ -755,11 +774,15 @@ describe("H002 - Unused indexes", () => {
     expect(report.checkTitle).toBe("Unused indexes");
     expect("test-node" in report.results).toBe(true);
 
+    // Data is now keyed by database name
     const data = report.results["test-node"].data;
-    expect("unused_indexes" in data).toBe(true);
-    expect(data.total_count).toBe(1);
-    expect(data.total_size_bytes).toBe(8388608);
-    expect(data.total_size_pretty).toBeTruthy();
+    expect("testdb" in data).toBe(true);
+    const dbData = data["testdb"] as any;
+    expect(dbData.unused_indexes).toBeTruthy();
+    expect(dbData.total_count).toBe(1);
+    expect(dbData.total_size_bytes).toBe(8388608);
+    expect(dbData.total_size_pretty).toBeTruthy();
+    expect(dbData.stats_reset).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
 
@@ -776,14 +799,11 @@ describe("H002 - Unused indexes", () => {
             schema_name: "public",
             table_name: "logs",
             index_name: "logs_created_idx",
+            index_definition: "CREATE INDEX logs_created_idx ON public.logs USING btree (created_at)",
             reason: "Never Used Indexes",
             index_size_bytes: "8388608",
             idx_scan: "0",
-            all_scans: "5000",
-            index_scan_pct: "0.00",
-            writes: "2000",
-            scans_per_write: "0.00",
-            table_size_bytes: "52428800",
+            idx_is_btree: true,
             supports_fk: false,
           },
         ],
@@ -800,7 +820,9 @@ describe("H002 - Unused indexes", () => {
     expect(Array.isArray(report.nodes.standbys)).toBe(true);
     expect("test-node" in report.results).toBe(true);
     expect(report.results["test-node"].postgres_version).toBeTruthy();
-    expect(report.results["test-node"].data.unused_indexes).toBeTruthy();
+    // Data is now keyed by database name
+    expect("testdb" in report.results["test-node"].data).toBe(true);
+    expect((report.results["test-node"].data as any)["testdb"].unused_indexes).toBeTruthy();
   });
 });
 
@@ -813,12 +835,14 @@ describe("H004 - Redundant indexes", () => {
           schema_name: "public",
           table_name: "orders",
           index_name: "orders_user_id_idx",
+          relation_name: "orders",
           access_method: "btree",
           reason: "public.orders_user_id_created_idx",
           index_size_bytes: "2097152",
           table_size_bytes: "16777216",
           index_usage: "0",
           supports_fk: false,
+          index_definition: "CREATE INDEX orders_user_id_idx ON public.orders USING btree (user_id)",
         },
       ],
     });
@@ -830,6 +854,8 @@ describe("H004 - Redundant indexes", () => {
     expect(indexes[0].reason).toBe("public.orders_user_id_created_idx");
     expect(indexes[0].index_size_bytes).toBe(2097152);
     expect(indexes[0].supports_fk).toBe(false);
+    expect(indexes[0].index_definition).toBeTruthy();
+    expect(indexes[0].relation_name).toBe("orders");
   });
 
   test("generateH004 creates report with redundant indexes", async () => {
@@ -845,12 +871,14 @@ describe("H004 - Redundant indexes", () => {
             schema_name: "public",
             table_name: "products",
             index_name: "products_category_idx",
+            relation_name: "products",
             access_method: "btree",
             reason: "public.products_category_name_idx",
             index_size_bytes: "4194304",
             table_size_bytes: "33554432",
             index_usage: "5",
             supports_fk: false,
+            index_definition: "CREATE INDEX products_category_idx ON public.products USING btree (category)",
           },
         ],
       }
@@ -861,11 +889,15 @@ describe("H004 - Redundant indexes", () => {
     expect(report.checkTitle).toBe("Redundant indexes");
     expect("test-node" in report.results).toBe(true);
 
+    // Data is now keyed by database name
     const data = report.results["test-node"].data;
-    expect("redundant_indexes" in data).toBe(true);
-    expect(data.total_count).toBe(1);
-    expect(data.total_size_bytes).toBe(4194304);
-    expect(data.total_size_pretty).toBeTruthy();
+    expect("testdb" in data).toBe(true);
+    const dbData = data["testdb"] as any;
+    expect(dbData.redundant_indexes).toBeTruthy();
+    expect(dbData.total_count).toBe(1);
+    expect(dbData.total_size_bytes).toBe(4194304);
+    expect(dbData.total_size_pretty).toBeTruthy();
+    expect(dbData.database_size_bytes).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
 
@@ -882,12 +914,14 @@ describe("H004 - Redundant indexes", () => {
             schema_name: "public",
             table_name: "products",
             index_name: "products_category_idx",
+            relation_name: "products",
             access_method: "btree",
             reason: "public.products_category_name_idx",
             index_size_bytes: "4194304",
             table_size_bytes: "33554432",
             index_usage: "5",
             supports_fk: false,
+            index_definition: "CREATE INDEX products_category_idx ON public.products USING btree (category)",
           },
         ],
       }
@@ -903,7 +937,9 @@ describe("H004 - Redundant indexes", () => {
     expect(Array.isArray(report.nodes.standbys)).toBe(true);
     expect("test-node" in report.results).toBe(true);
     expect(report.results["test-node"].postgres_version).toBeTruthy();
-    expect(report.results["test-node"].data.redundant_indexes).toBeTruthy();
+    // Data is now keyed by database name
+    expect("testdb" in report.results["test-node"].data).toBe(true);
+    expect((report.results["test-node"].data as any)["testdb"].redundant_indexes).toBeTruthy();
   });
 });
 
