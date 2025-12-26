@@ -99,6 +99,25 @@ function createMockClient(versionRows: any[], settingsRows: any[], options: Mock
       if (sql.includes("redundant_indexes") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
       }
+      // D004: pg_stat_statements extension check
+      if (sql.includes("pg_extension") && sql.includes("pg_stat_statements")) {
+        return { rows: [] }; // Extension not installed by default
+      }
+      // D004: pg_stat_kcache extension check
+      if (sql.includes("pg_extension") && sql.includes("pg_stat_kcache")) {
+        return { rows: [] }; // Extension not installed by default
+      }
+      // G001: Memory settings query
+      if (sql.includes("pg_size_bytes") && sql.includes("shared_buffers") && sql.includes("work_mem")) {
+        return { rows: [{
+          shared_buffers_bytes: "134217728",
+          wal_buffers_bytes: "4194304",
+          work_mem_bytes: "4194304",
+          maintenance_work_mem_bytes: "67108864",
+          effective_cache_size_bytes: "4294967296",
+          max_connections: 100,
+        }] };
+      }
       throw new Error(`Unexpected query: ${sql}`);
     },
   };
@@ -208,6 +227,21 @@ describe("CHECK_INFO", () => {
     expect("H004" in checkup.CHECK_INFO).toBe(true);
     expect(checkup.CHECK_INFO.H004).toBe("Redundant indexes");
   });
+
+  test("contains D004", () => {
+    expect("D004" in checkup.CHECK_INFO).toBe(true);
+    expect(checkup.CHECK_INFO.D004).toBe("pg_stat_statements and pg_stat_kcache settings");
+  });
+
+  test("contains F001", () => {
+    expect("F001" in checkup.CHECK_INFO).toBe(true);
+    expect(checkup.CHECK_INFO.F001).toBe("Autovacuum: current settings");
+  });
+
+  test("contains G001", () => {
+    expect("G001" in checkup.CHECK_INFO).toBe(true);
+    expect(checkup.CHECK_INFO.G001).toBe("Memory-related settings");
+  });
 });
 
 // Tests for REPORT_GENERATORS
@@ -250,6 +284,21 @@ describe("REPORT_GENERATORS", () => {
   test("has generator for H004", () => {
     expect("H004" in checkup.REPORT_GENERATORS).toBe(true);
     expect(typeof checkup.REPORT_GENERATORS.H004).toBe("function");
+  });
+
+  test("has generator for D004", () => {
+    expect("D004" in checkup.REPORT_GENERATORS).toBe(true);
+    expect(typeof checkup.REPORT_GENERATORS.D004).toBe("function");
+  });
+
+  test("has generator for F001", () => {
+    expect("F001" in checkup.REPORT_GENERATORS).toBe(true);
+    expect(typeof checkup.REPORT_GENERATORS.F001).toBe("function");
+  });
+
+  test("has generator for G001", () => {
+    expect("G001" in checkup.REPORT_GENERATORS).toBe(true);
+    expect(typeof checkup.REPORT_GENERATORS.G001).toBe("function");
   });
 
   test("REPORT_GENERATORS and CHECK_INFO have same keys", () => {

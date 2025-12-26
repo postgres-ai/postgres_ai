@@ -28,6 +28,7 @@ function validateReport(report: any, checkId: string): { valid: boolean; errors:
 // Mock client for testing
 function createMockClient(options: {
   versionRows?: any[];
+  settingsRows?: any[];
   invalidIndexesRows?: any[];
   unusedIndexesRows?: any[];
   redundantIndexesRows?: any[];
@@ -36,6 +37,12 @@ function createMockClient(options: {
     versionRows = [
       { name: "server_version", setting: "16.3" },
       { name: "server_version_num", setting: "160003" },
+    ],
+    settingsRows = [
+      { name: "shared_buffers", setting: "128MB", unit: "", category: "Resource Usage / Memory", context: "postmaster", vartype: "string", pretty_value: "128 MB" },
+      { name: "work_mem", setting: "4MB", unit: "", category: "Resource Usage / Memory", context: "user", vartype: "string", pretty_value: "4 MB" },
+      { name: "autovacuum", setting: "on", unit: "", category: "Autovacuum", context: "sighup", vartype: "bool", pretty_value: "on" },
+      { name: "pg_stat_statements.max", setting: "5000", unit: "", category: "Custom", context: "superuser", vartype: "integer", pretty_value: "5000" },
     ],
     invalidIndexesRows = [],
     unusedIndexesRows = [],
@@ -46,6 +53,10 @@ function createMockClient(options: {
     query: async (sql: string) => {
       if (sql.includes("server_version") && sql.includes("server_version_num") && !sql.includes("order by")) {
         return { rows: versionRows };
+      }
+      // Full settings query
+      if (sql.includes("pg_settings") && sql.includes("order by") && sql.includes("is_default")) {
+        return { rows: settingsRows };
       }
       if (sql.includes("current_database()") && sql.includes("pg_database_size")) {
         return { rows: [{ datname: "testdb", size_bytes: "1073741824" }] };
@@ -67,6 +78,25 @@ function createMockClient(options: {
       }
       if (sql.includes("redundant_indexes") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
+      }
+      // D004: pg_stat_statements extension check
+      if (sql.includes("pg_extension") && sql.includes("pg_stat_statements")) {
+        return { rows: [] }; // Extension not installed
+      }
+      // D004: pg_stat_kcache extension check
+      if (sql.includes("pg_extension") && sql.includes("pg_stat_kcache")) {
+        return { rows: [] }; // Extension not installed
+      }
+      // G001: Memory settings query
+      if (sql.includes("pg_size_bytes") && sql.includes("shared_buffers") && sql.includes("work_mem")) {
+        return { rows: [{
+          shared_buffers_bytes: "134217728",
+          wal_buffers_bytes: "4194304",
+          work_mem_bytes: "4194304",
+          maintenance_work_mem_bytes: "67108864",
+          effective_cache_size_bytes: "4294967296",
+          max_connections: 100,
+        }] };
       }
       throw new Error(`Unexpected query: ${sql}`);
     },
@@ -181,6 +211,45 @@ describe("H004 schema validation", () => {
     const result = validateReport(report, "H004");
     if (!result.valid) {
       console.error("H004 validation errors:", result.errors);
+    }
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("D004 schema validation", () => {
+  test("D004 report validates against schema (extensions not installed)", async () => {
+    const mockClient = createMockClient();
+    const report = await checkup.REPORT_GENERATORS.D004(mockClient as any, "node-01");
+    
+    const result = validateReport(report, "D004");
+    if (!result.valid) {
+      console.error("D004 validation errors:", result.errors);
+    }
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("F001 schema validation", () => {
+  test("F001 report validates against schema", async () => {
+    const mockClient = createMockClient();
+    const report = await checkup.REPORT_GENERATORS.F001(mockClient as any, "node-01");
+    
+    const result = validateReport(report, "F001");
+    if (!result.valid) {
+      console.error("F001 validation errors:", result.errors);
+    }
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("G001 schema validation", () => {
+  test("G001 report validates against schema", async () => {
+    const mockClient = createMockClient();
+    const report = await checkup.REPORT_GENERATORS.G001(mockClient as any, "node-01");
+    
+    const result = validateReport(report, "G001");
+    if (!result.valid) {
+      console.error("G001 validation errors:", result.errors);
     }
     expect(result.valid).toBe(true);
   });
