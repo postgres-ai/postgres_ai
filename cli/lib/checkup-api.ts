@@ -54,13 +54,17 @@ function unwrapRpcResponse(parsed: unknown): any {
   return parsed as any;
 }
 
+// Default timeout for HTTP requests (30 seconds)
+const HTTP_TIMEOUT_MS = 30_000;
+
 async function postRpc<T>(params: {
   apiKey: string;
   apiBaseUrl: string;
   rpcName: string;
   bodyObj: Record<string, unknown>;
+  timeoutMs?: number;
 }): Promise<T> {
-  const { apiKey, apiBaseUrl, rpcName, bodyObj } = params;
+  const { apiKey, apiBaseUrl, rpcName, bodyObj, timeoutMs = HTTP_TIMEOUT_MS } = params;
   if (!apiKey) throw new Error("API key is required");
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/rpc/${rpcName}`);
@@ -81,6 +85,7 @@ async function postRpc<T>(params: {
       {
         method: "POST",
         headers,
+        timeout: timeoutMs,
       },
       (res) => {
         let data = "";
@@ -108,7 +113,26 @@ async function postRpc<T>(params: {
         });
       }
     );
-    req.on("error", (err: Error) => reject(err));
+    
+    // Handle timeout event
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
+    });
+    
+    req.on("error", (err: Error) => {
+      // Provide clearer error for common network issues
+      if ((err as any).code === "ECONNREFUSED") {
+        reject(new Error(`RPC ${rpcName} failed: connection refused to ${url.host}`));
+      } else if ((err as any).code === "ENOTFOUND") {
+        reject(new Error(`RPC ${rpcName} failed: DNS lookup failed for ${url.host}`));
+      } else if ((err as any).code === "ECONNRESET") {
+        reject(new Error(`RPC ${rpcName} failed: connection reset by server`));
+      } else {
+        reject(err);
+      }
+    });
+    
     req.write(body);
     req.end();
   });

@@ -731,8 +731,12 @@ program
     }
 
     const shouldPrintJson = !!opts.json;
-    // `--json` implies "local output" mode — do not upload by default.
-    const shouldUpload = opts.upload !== false && !shouldPrintJson;
+    // `--json` implies "local output" mode — do not upload.
+    // `opts.upload` is: true (--upload), false (--no-upload), or undefined (default).
+    const uploadExplicitlyRequested = opts.upload === true;
+    const uploadExplicitlyDisabled = opts.upload === false || shouldPrintJson;
+    // Default behavior: upload if API key is available, skip silently otherwise.
+    let shouldUpload = !uploadExplicitlyDisabled;
     const generateDefaultProjectName = (): string => {
       // Must start with a letter; use only letters/numbers/underscores.
       return `project_${crypto.randomBytes(6).toString("hex")}`;
@@ -773,10 +777,15 @@ program
       const rootOpts = program.opts() as CliOptions;
       const { apiKey } = getConfig(rootOpts);
       if (!apiKey) {
-        console.error("Error: API key is required for upload");
-        console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
-        process.exitCode = 1;
-        return;
+        if (uploadExplicitlyRequested) {
+          // User explicitly requested upload but has no API key — fail.
+          console.error("Error: API key is required for upload");
+          console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
+          process.exitCode = 1;
+          return;
+        }
+        // No API key and upload wasn't explicitly requested — just skip upload silently.
+        shouldUpload = false;
       }
 
       const cfg = config.readConfig();
@@ -2101,18 +2110,31 @@ auth
           const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
 
           // Step 6: Save token to config
+          // Check if org changed to decide whether to preserve defaultProject
+          const existingConfig = config.readConfig();
+          const existingOrgId = existingConfig.orgId;
+          const existingProject = existingConfig.defaultProject;
+          const orgChanged = existingOrgId && existingOrgId !== orgId;
+          
           config.writeConfig({
             apiKey: apiToken,
             baseUrl: apiBaseUrl,
             orgId: orgId,
           });
-          // When re-authing via OAuth, orgId will be refreshed,
-          // but defaultProject may no longer be valid in the new org.
-          config.deleteConfigKeys(["defaultProject"]);
+          
+          // Only clear defaultProject if org actually changed
+          if (orgChanged && existingProject) {
+            config.deleteConfigKeys(["defaultProject"]);
+            console.log(`\nNote: Organization changed (${existingOrgId} → ${orgId}).`);
+            console.log(`      Default project "${existingProject}" has been cleared.`);
+          }
 
           console.log("\nAuthentication successful!");
           console.log(`API key saved to: ${config.getConfigPath()}`);
           console.log(`Organization ID: ${orgId}`);
+          if (!orgChanged && existingProject) {
+            console.log(`Default project: ${existingProject} (preserved)`);
+          }
           console.log(`\nYou can now use the CLI without specifying an API key.`);
           process.exit(0);
         } catch (err) {
