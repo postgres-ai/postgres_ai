@@ -909,7 +909,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         'A002', 'A003', 'A004', 'A007',
         'D004', 'F001', 'F004', 'F005', 'G001',
         'H001', 'H002', 'H004',
-        'K001', 'K003', 'K004', 'K005', 'K006', 'K007',
+        'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008',
         'M001', 'M002', 'M003',
         'N001',
     }
