@@ -841,196 +841,132 @@ function resolveBuildTs(): string | null {
   }
 }
 
+// ============================================================================
+// Unified Report Generator Helpers
+// ============================================================================
+
 /**
- * Generate A002 report - Postgres major version
+ * Generate a simple version report (A002, A013).
+ * These reports only contain PostgreSQL version information.
  */
-export async function generateA002(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("A002", "Postgres major version", nodeName);
+async function generateVersionReport(
+  client: Client,
+  nodeName: string,
+  checkId: string,
+  checkTitle: string
+): Promise<Report> {
+  const report = createBaseReport(checkId, checkTitle, nodeName);
   const postgresVersion = await getPostgresVersion(client);
-
-  report.results[nodeName] = {
-    data: {
-      version: postgresVersion,
-    },
-  };
-
+  report.results[nodeName] = { data: { version: postgresVersion } };
   return report;
 }
 
 /**
- * Generate A003 report - Postgres settings
+ * Generate a settings-based report (A003, A007).
+ * Fetches settings using provided function and includes postgres_version.
  */
-export async function generateA003(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("A003", "Postgres settings", nodeName);
+async function generateSettingsReport(
+  client: Client,
+  nodeName: string,
+  checkId: string,
+  checkTitle: string,
+  fetchSettings: (client: Client, pgMajorVersion: number) => Promise<Record<string, unknown>>
+): Promise<Report> {
+  const report = createBaseReport(checkId, checkTitle, nodeName);
   const postgresVersion = await getPostgresVersion(client);
   const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
-  const settings = await getSettings(client, pgMajorVersion);
-
-  report.results[nodeName] = {
-    data: settings,
-    postgres_version: postgresVersion,
-  };
-
+  const settings = await fetchSettings(client, pgMajorVersion);
+  report.results[nodeName] = { data: settings, postgres_version: postgresVersion };
   return report;
 }
 
 /**
- * Generate A004 report - Cluster information
+ * Generate an index report (H001, H002, H004).
+ * Common structure: index list + totals + database info, keyed by database name.
  */
+async function generateIndexReport<T extends { index_size_bytes: number }>(
+  client: Client,
+  nodeName: string,
+  checkId: string,
+  checkTitle: string,
+  indexFieldName: string,
+  fetchIndexes: (client: Client, pgMajorVersion: number) => Promise<T[]>,
+  extraFields?: (client: Client, pgMajorVersion: number) => Promise<Record<string, unknown>>
+): Promise<Report> {
+  const report = createBaseReport(checkId, checkTitle, nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const indexes = await fetchIndexes(client, pgMajorVersion);
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
+
+  const totalCount = indexes.length;
+  const totalSizeBytes = indexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
+
+  const dbEntry: Record<string, unknown> = {
+    [indexFieldName]: indexes,
+    total_count: totalCount,
+    total_size_bytes: totalSizeBytes,
+    total_size_pretty: formatBytes(totalSizeBytes),
+    database_size_bytes: dbSizeBytes,
+    database_size_pretty: formatBytes(dbSizeBytes),
+  };
+
+  // Add extra fields if provided (e.g., stats_reset for H002)
+  if (extraFields) {
+    Object.assign(dbEntry, await extraFields(client, pgMajorVersion));
+  }
+
+  report.results[nodeName] = { data: { [dbName]: dbEntry }, postgres_version: postgresVersion };
+  return report;
+}
+
+// ============================================================================
+// Report Generators (using unified helpers)
+// ============================================================================
+
+/** Generate A002 report - Postgres major version */
+export const generateA002 = (client: Client, nodeName = "node-01") =>
+  generateVersionReport(client, nodeName, "A002", "Postgres major version");
+
+/** Generate A003 report - Postgres settings */
+export const generateA003 = (client: Client, nodeName = "node-01") =>
+  generateSettingsReport(client, nodeName, "A003", "Postgres settings", getSettings);
+
+/** Generate A004 report - Cluster information (custom structure) */
 export async function generateA004(client: Client, nodeName: string = "node-01"): Promise<Report> {
   const report = createBaseReport("A004", "Cluster information", nodeName);
   const postgresVersion = await getPostgresVersion(client);
   const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
-  const generalInfo = await getClusterInfo(client, pgMajorVersion);
-  const databaseSizes = await getDatabaseSizes(client);
-
   report.results[nodeName] = {
     data: {
-      general_info: generalInfo,
-      database_sizes: databaseSizes,
+      general_info: await getClusterInfo(client, pgMajorVersion),
+      database_sizes: await getDatabaseSizes(client),
     },
     postgres_version: postgresVersion,
   };
-
   return report;
 }
 
-/**
- * Generate A007 report - Altered settings
- */
-export async function generateA007(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("A007", "Altered settings", nodeName);
-  const postgresVersion = await getPostgresVersion(client);
-  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
-  const alteredSettings = await getAlteredSettings(client, pgMajorVersion);
+/** Generate A007 report - Altered settings */
+export const generateA007 = (client: Client, nodeName = "node-01") =>
+  generateSettingsReport(client, nodeName, "A007", "Altered settings", getAlteredSettings);
 
-  report.results[nodeName] = {
-    data: alteredSettings,
-    postgres_version: postgresVersion,
-  };
+/** Generate A013 report - Postgres minor version */
+export const generateA013 = (client: Client, nodeName = "node-01") =>
+  generateVersionReport(client, nodeName, "A013", "Postgres minor version");
 
-  return report;
-}
+/** Generate H001 report - Invalid indexes */
+export const generateH001 = (client: Client, nodeName = "node-01") =>
+  generateIndexReport(client, nodeName, "H001", "Invalid indexes", "invalid_indexes", getInvalidIndexes);
 
-/**
- * Generate A013 report - Postgres minor version
- */
-export async function generateA013(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("A013", "Postgres minor version", nodeName);
-  const postgresVersion = await getPostgresVersion(client);
+/** Generate H002 report - Unused indexes (includes stats_reset) */
+export const generateH002 = (client: Client, nodeName = "node-01") =>
+  generateIndexReport(client, nodeName, "H002", "Unused indexes", "unused_indexes", getUnusedIndexes,
+    async (c, v) => ({ stats_reset: await getStatsReset(c, v) }));
 
-  report.results[nodeName] = {
-    data: {
-      version: postgresVersion,
-    },
-  };
-
-  return report;
-}
-
-/**
- * Generate H001 report - Invalid indexes
- */
-export async function generateH001(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("H001", "Invalid indexes", nodeName);
-  const postgresVersion = await getPostgresVersion(client);
-  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
-  const invalidIndexes = await getInvalidIndexes(client, pgMajorVersion);
-  
-  // Get current database name and size
-  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
-
-  // Calculate totals
-  const totalCount = invalidIndexes.length;
-  const totalSizeBytes = invalidIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
-
-  // Structure data by database name per schema
-  report.results[nodeName] = {
-    data: {
-      [dbName]: {
-        invalid_indexes: invalidIndexes,
-        total_count: totalCount,
-        total_size_bytes: totalSizeBytes,
-        total_size_pretty: formatBytes(totalSizeBytes),
-        database_size_bytes: dbSizeBytes,
-        database_size_pretty: formatBytes(dbSizeBytes),
-      },
-    },
-    postgres_version: postgresVersion,
-  };
-
-  return report;
-}
-
-/**
- * Generate H002 report - Unused indexes
- */
-export async function generateH002(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("H002", "Unused indexes", nodeName);
-  const postgresVersion = await getPostgresVersion(client);
-  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
-  const unusedIndexes = await getUnusedIndexes(client, pgMajorVersion);
-  const statsReset = await getStatsReset(client, pgMajorVersion);
-  
-  // Get current database name and size
-  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
-
-  // Calculate totals
-  const totalCount = unusedIndexes.length;
-  const totalSizeBytes = unusedIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
-
-  // Structure data by database name per schema
-  report.results[nodeName] = {
-    data: {
-      [dbName]: {
-        unused_indexes: unusedIndexes,
-        total_count: totalCount,
-        total_size_bytes: totalSizeBytes,
-        total_size_pretty: formatBytes(totalSizeBytes),
-        database_size_bytes: dbSizeBytes,
-        database_size_pretty: formatBytes(dbSizeBytes),
-        stats_reset: statsReset,
-      },
-    },
-    postgres_version: postgresVersion,
-  };
-
-  return report;
-}
-
-/**
- * Generate H004 report - Redundant indexes
- */
-export async function generateH004(client: Client, nodeName: string = "node-01"): Promise<Report> {
-  const report = createBaseReport("H004", "Redundant indexes", nodeName);
-  const postgresVersion = await getPostgresVersion(client);
-  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
-  const redundantIndexes = await getRedundantIndexes(client, pgMajorVersion);
-  
-  // Get current database name and size
-  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
-
-  // Calculate totals
-  const totalCount = redundantIndexes.length;
-  const totalSizeBytes = redundantIndexes.reduce((sum, idx) => sum + idx.index_size_bytes, 0);
-
-  // Structure data by database name per schema
-  report.results[nodeName] = {
-    data: {
-      [dbName]: {
-        redundant_indexes: redundantIndexes,
-        total_count: totalCount,
-        total_size_bytes: totalSizeBytes,
-        total_size_pretty: formatBytes(totalSizeBytes),
-        database_size_bytes: dbSizeBytes,
-        database_size_pretty: formatBytes(dbSizeBytes),
-      },
-    },
-    postgres_version: postgresVersion,
-  };
-
-  return report;
-}
+/** Generate H004 report - Redundant indexes */
+export const generateH004 = (client: Client, nodeName = "node-01") =>
+  generateIndexReport(client, nodeName, "H004", "Redundant indexes", "redundant_indexes", getRedundantIndexes);
 
 /**
  * Generate D004 report - pg_stat_statements and pg_stat_kcache settings.
