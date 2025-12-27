@@ -3,6 +3,8 @@
  */
 
 export interface MockClientOptions {
+  /** Database name returned by current_database() queries (default: "testdb") */
+  databaseName?: string;
   settingsRows?: any[];
   databaseSizesRows?: any[];
   dbStatsRows?: any[];
@@ -31,6 +33,7 @@ const defaultSettingsRows = [
  */
 export function createMockClient(options: MockClientOptions = {}) {
   const {
+    databaseName = "testdb",
     settingsRows = defaultSettingsRows,
     databaseSizesRows = [],
     dbStatsRows = [],
@@ -57,7 +60,7 @@ export function createMockClient(options: MockClientOptions = {}) {
       }
       // db_size metric (current database size from metrics.yml)
       if (sql.includes("pg_database_size(current_database())") && sql.includes("size_b")) {
-        return { rows: [{ tag_datname: "testdb", size_b: "1073741824" }] };
+        return { rows: [{ tag_datname: databaseName, size_b: "1073741824" }] };
       }
       // db_stats metric (from metrics.yml)
       if (sql.includes("pg_stat_database") && sql.includes("xact_commit") && sql.includes("pg_control_system")) {
@@ -65,7 +68,7 @@ export function createMockClient(options: MockClientOptions = {}) {
       }
       // Stats reset metric (from metrics.yml)
       if (sql.includes("stats_reset") && sql.includes("pg_stat_database") && sql.includes("seconds_since_reset")) {
-        return { rows: [{ tag_database_name: "testdb", stats_reset_epoch: "1704067200", seconds_since_reset: "2592000" }] };
+        return { rows: [{ tag_database_name: databaseName, stats_reset_epoch: "1704067200", seconds_since_reset: "2592000" }] };
       }
       // Postmaster startup time (simple inline - used by getStatsReset)
       if (sql.includes("pg_postmaster_start_time") && sql.includes("postmaster_startup_epoch")) {
