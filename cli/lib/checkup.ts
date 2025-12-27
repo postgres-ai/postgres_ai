@@ -356,7 +356,7 @@ export async function getAlteredSettings(client: Client, pgMajorVersion: number 
 
   for (const row of result.rows) {
     // Filter for non-default settings (is_default = 0 means non-default)
-    if (row.is_default === 0 || row.is_default === false) {
+    if (!toBool(row.is_default)) {
       const name = row.tag_setting_name;
       const settingValue = row.tag_setting_value;
       const unit = row.tag_unit || "";
@@ -577,7 +577,7 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
       relation_name: String(transformed.relation_name || ""),
       index_size_bytes: indexSizeBytes,
       index_size_pretty: formatBytes(indexSizeBytes),
-      supports_fk: transformed.supports_fk === true || transformed.supports_fk === 1,
+      supports_fk: toBool(transformed.supports_fk),
     };
   });
 }
@@ -600,8 +600,8 @@ export async function getUnusedIndexes(client: Client, pgMajorVersion: number = 
       reason: String(transformed.reason || ""),
       idx_scan: parseInt(String(transformed.idx_scan || 0), 10),
       index_size_bytes: indexSizeBytes,
-      idx_is_btree: transformed.idx_is_btree === true || transformed.idx_is_btree === "t",
-      supports_fk: transformed.supports_fk === true || transformed.supports_fk === 1,
+      idx_is_btree: toBool(transformed.idx_is_btree),
+      supports_fk: toBool(transformed.supports_fk),
       index_size_pretty: formatBytes(indexSizeBytes),
     };
   });
@@ -742,7 +742,7 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
       index_size_bytes: indexSizeBytes,
       table_size_bytes: tableSizeBytes,
       index_usage: parseInt(String(transformed.index_usage || 0), 10),
-      supports_fk: transformed.supports_fk === true || transformed.supports_fk === 1,
+      supports_fk: toBool(transformed.supports_fk),
       index_definition: String(transformed.index_definition || ""),
       index_size_pretty: formatBytes(indexSizeBytes),
       table_size_pretty: formatBytes(tableSizeBytes),
