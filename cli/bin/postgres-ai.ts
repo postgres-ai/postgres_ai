@@ -157,8 +157,8 @@ function createTtySpinner(
     },
     stop: (finalText?: string) => {
       if (stopped) return;
+      clearInterval(timer);  // Clear interval first to prevent pending callbacks
       stopped = true;
-      clearInterval(timer);
       process.stdout.write("\r\x1b[2K");
       if (finalText && finalText.trim()) {
         process.stdout.write(finalText);
