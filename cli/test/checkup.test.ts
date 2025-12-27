@@ -4,6 +4,7 @@ import { resolve } from "path";
 // Import from source directly since we're using Bun
 import * as checkup from "../lib/checkup";
 import * as api from "../lib/checkup-api";
+import { createMockClient } from "./test-utils";
 
 
 function runCli(args: string[], env: Record<string, string> = {}) {
@@ -16,111 +17,6 @@ function runCli(args: string[], env: Record<string, string> = {}) {
     status: result.exitCode,
     stdout: new TextDecoder().decode(result.stdout),
     stderr: new TextDecoder().decode(result.stderr),
-  };
-}
-
-// Mock client for testing report generators
-interface MockClientOptions {
-  settingsRows?: any[];  // Settings metric rows (tag_setting_name, tag_setting_value, etc.)
-  databaseSizesRows?: any[];
-  dbStatsRows?: any[];  // db_stats metric rows (numbackends, xact_commit, etc.)
-  connectionStatesRows?: any[];
-  uptimeRows?: any[];
-  invalidIndexesRows?: any[];
-  unusedIndexesRows?: any[];
-  redundantIndexesRows?: any[];
-}
-
-function createMockClient(versionRows: any[], _legacySettingsRows: any[], options: MockClientOptions = {}) {
-  const {
-    settingsRows = [],
-    databaseSizesRows = [],
-    dbStatsRows = [],
-    connectionStatesRows = [],
-    uptimeRows = [],
-    invalidIndexesRows = [],
-    unusedIndexesRows = [],
-    redundantIndexesRows = [],
-  } = options;
-
-  return {
-    query: async (sql: string) => {
-      // Version query (simple inline - used by getPostgresVersion)
-      if (sql.includes("server_version") && sql.includes("server_version_num") && sql.includes("pg_settings") && !sql.includes("tag_setting_name")) {
-        return { rows: versionRows };
-      }
-      // Settings metric query (from metrics.yml - has tag_setting_name, tag_setting_value)
-      if (sql.includes("tag_setting_name") && sql.includes("tag_setting_value") && sql.includes("pg_settings")) {
-        return { rows: settingsRows };
-      }
-      // Database sizes (simple inline - lists all databases)
-      if (sql.includes("pg_database") && sql.includes("pg_database_size") && sql.includes("datistemplate")) {
-        return { rows: databaseSizesRows };
-      }
-      // db_size metric (current database size from metrics.yml)
-      if (sql.includes("pg_database_size(current_database())") && sql.includes("size_b")) {
-        return { rows: [{ tag_datname: "testdb", size_b: "1073741824" }] };
-      }
-      // db_stats metric (from metrics.yml)
-      if (sql.includes("pg_stat_database") && sql.includes("xact_commit") && sql.includes("pg_control_system")) {
-        return { rows: dbStatsRows };
-      }
-      // Stats reset metric (from metrics.yml)
-      if (sql.includes("stats_reset") && sql.includes("pg_stat_database") && sql.includes("seconds_since_reset")) {
-        return { rows: [{ 
-          tag_database_name: "testdb",
-          stats_reset_epoch: "1704067200", 
-          seconds_since_reset: "2592000"  // 30 days in seconds
-        }] };
-      }
-      // Postmaster startup time (simple inline - used by getStatsReset)
-      if (sql.includes("pg_postmaster_start_time") && sql.includes("postmaster_startup_epoch")) {
-        return { rows: [{ 
-          postmaster_startup_epoch: "1704067200",
-          postmaster_startup_time: "2024-01-01 00:00:00+00"
-        }] };
-      }
-      // Connection states (simple inline)
-      if (sql.includes("pg_stat_activity") && sql.includes("state") && sql.includes("group by")) {
-        return { rows: connectionStatesRows };
-      }
-      // Uptime info (simple inline)
-      if (sql.includes("pg_postmaster_start_time()") && sql.includes("uptime") && !sql.includes("postmaster_startup_epoch")) {
-        return { rows: uptimeRows };
-      }
-      // Invalid indexes (H001) - from metrics.yml
-      if (sql.includes("indisvalid = false") && sql.includes("fk_indexes")) {
-        return { rows: invalidIndexesRows };
-      }
-      // Unused indexes (H002) - from metrics.yml
-      if (sql.includes("Never Used Indexes") && sql.includes("idx_scan = 0")) {
-        return { rows: unusedIndexesRows };
-      }
-      // Redundant indexes (H004) - from metrics.yml
-      if (sql.includes("redundant_indexes_grouped") && sql.includes("columns like")) {
-        return { rows: redundantIndexesRows };
-      }
-      // D004: pg_stat_statements extension check
-      if (sql.includes("pg_extension") && sql.includes("pg_stat_statements")) {
-        return { rows: [] }; // Extension not installed by default
-      }
-      // D004: pg_stat_kcache extension check
-      if (sql.includes("pg_extension") && sql.includes("pg_stat_kcache")) {
-        return { rows: [] }; // Extension not installed by default
-      }
-      // G001: Memory settings query
-      if (sql.includes("pg_size_bytes") && sql.includes("shared_buffers") && sql.includes("work_mem")) {
-        return { rows: [{
-          shared_buffers_bytes: "134217728",
-          wal_buffers_bytes: "4194304",
-          work_mem_bytes: "4194304",
-          maintenance_work_mem_bytes: "67108864",
-          effective_cache_size_bytes: "4294967296",
-          max_connections: 100,
-        }] };
-      }
-      throw new Error(`Unexpected query: ${sql}`);
-    },
   };
 }
 
@@ -259,10 +155,12 @@ describe("formatBytes", () => {
 // Mock client tests for report generators
 describe("Report generators with mock client", () => {
   test("getPostgresVersion extracts version info", async () => {
-    const mockClient = createMockClient([
-      { name: "server_version", setting: "16.3" },
-      { name: "server_version_num", setting: "160003" },
-    ], []);
+    const mockClient = createMockClient({
+      versionRows: [
+        { name: "server_version", setting: "16.3" },
+        { name: "server_version_num", setting: "160003" },
+      ],
+    });
 
     const version = await checkup.getPostgresVersion(mockClient as any);
     expect(version.version).toBe("16.3");
@@ -272,7 +170,7 @@ describe("Report generators with mock client", () => {
   });
 
   test("getSettings transforms rows to keyed object", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       settingsRows: [
         {
           tag_setting_name: "shared_buffers",
@@ -308,10 +206,12 @@ describe("Report generators with mock client", () => {
   });
 
   test("generateA002 creates report with version data", async () => {
-    const mockClient = createMockClient([
-      { name: "server_version", setting: "16.3" },
-      { name: "server_version_num", setting: "160003" },
-    ], []);
+    const mockClient = createMockClient({
+      versionRows: [
+        { name: "server_version", setting: "16.3" },
+        { name: "server_version_num", setting: "160003" },
+      ],
+    });
 
     const report = await checkup.generateA002(mockClient as any, "test-node");
     expect(report.checkId).toBe("A002");
@@ -323,27 +223,24 @@ describe("Report generators with mock client", () => {
   });
 
   test("generateA003 creates report with settings and version", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
-        settingsRows: [
-          {
-            tag_setting_name: "shared_buffers",
-            tag_setting_value: "16384",
-            tag_unit: "8kB",
-            tag_category: "Resource Usage / Memory",
-            tag_vartype: "integer",
-            is_default: 1,
-            setting_normalized: "134217728",
-            unit_normalized: "bytes",
-          },
-        ],
-      }
-    );
+      settingsRows: [
+        {
+          tag_setting_name: "shared_buffers",
+          tag_setting_value: "16384",
+          tag_unit: "8kB",
+          tag_category: "Resource Usage / Memory",
+          tag_vartype: "integer",
+          is_default: 1,
+          setting_normalized: "134217728",
+          unit_normalized: "bytes",
+        },
+      ],
+    });
 
     const report = await checkup.generateA003(mockClient as any, "test-node");
     expect(report.checkId).toBe("A003");
@@ -355,10 +252,12 @@ describe("Report generators with mock client", () => {
   });
 
   test("generateA013 creates report with minor version data", async () => {
-    const mockClient = createMockClient([
-      { name: "server_version", setting: "16.3" },
-      { name: "server_version_num", setting: "160003" },
-    ], []);
+    const mockClient = createMockClient({
+      versionRows: [
+        { name: "server_version", setting: "16.3" },
+        { name: "server_version_num", setting: "160003" },
+      ],
+    });
 
     const report = await checkup.generateA013(mockClient as any, "test-node");
     expect(report.checkId).toBe("A013");
@@ -370,13 +269,11 @@ describe("Report generators with mock client", () => {
   });
 
   test("generateAllReports returns reports for all checks", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
         settingsRows: [
           {
             tag_setting_name: "shared_buffers",
@@ -437,7 +334,7 @@ describe("Report generators with mock client", () => {
 // Tests for A007 (Altered settings)
 describe("A007 - Altered settings", () => {
   test("getAlteredSettings returns non-default settings", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       settingsRows: [
         { tag_setting_name: "shared_buffers", tag_setting_value: "256MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0, setting_normalized: null, unit_normalized: null },
         { tag_setting_name: "work_mem", tag_setting_value: "64MB", tag_unit: "", tag_category: "Resource Usage / Memory", tag_vartype: "string", is_default: 0, setting_normalized: null, unit_normalized: null },
@@ -454,13 +351,11 @@ describe("A007 - Altered settings", () => {
   });
 
   test("generateA007 creates report with altered settings", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
         settingsRows: [
           { tag_setting_name: "max_connections", tag_setting_value: "200", tag_unit: "", tag_category: "Connections and Authentication", tag_vartype: "integer", is_default: 0, setting_normalized: null, unit_normalized: null },
         ],
@@ -481,7 +376,7 @@ describe("A007 - Altered settings", () => {
 // Tests for A004 (Cluster information)
 describe("A004 - Cluster information", () => {
   test("getDatabaseSizes returns database sizes", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       databaseSizesRows: [
         { datname: "postgres", size_bytes: "1073741824" },
         { datname: "mydb", size_bytes: "536870912" },
@@ -496,7 +391,7 @@ describe("A004 - Cluster information", () => {
   });
 
   test("getClusterInfo returns cluster metrics", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       dbStatsRows: [{
         numbackends: 10,
         xact_commit: 1000,
@@ -535,13 +430,11 @@ describe("A004 - Cluster information", () => {
   });
 
   test("generateA004 creates report with cluster info and database sizes", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
         databaseSizesRows: [
           { datname: "postgres", size_bytes: "1073741824" },
         ],
@@ -585,7 +478,7 @@ describe("A004 - Cluster information", () => {
 // Tests for H001 (Invalid indexes)
 describe("H001 - Invalid indexes", () => {
   test("getInvalidIndexes returns invalid indexes", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       invalidIndexesRows: [
         { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", supports_fk: false },
       ],
@@ -603,13 +496,11 @@ describe("H001 - Invalid indexes", () => {
   });
 
   test("generateH001 creates report with invalid indexes", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
         invalidIndexesRows: [
           { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", supports_fk: false },
         ],
@@ -639,7 +530,7 @@ describe("H001 - Invalid indexes", () => {
 // Tests for H002 (Unused indexes)
 describe("H002 - Unused indexes", () => {
   test("getUnusedIndexes returns unused indexes", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       unusedIndexesRows: [
         {
           schema_name: "public",
@@ -667,13 +558,11 @@ describe("H002 - Unused indexes", () => {
   });
 
   test("generateH002 creates report with unused indexes", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
         unusedIndexesRows: [
           {
             schema_name: "public",
@@ -712,7 +601,7 @@ describe("H002 - Unused indexes", () => {
 // Tests for H004 (Redundant indexes)
 describe("H004 - Redundant indexes", () => {
   test("getRedundantIndexes returns redundant indexes", async () => {
-    const mockClient = createMockClient([], [], {
+    const mockClient = createMockClient({
       redundantIndexesRows: [
         {
           schema_name: "public",
@@ -752,13 +641,11 @@ describe("H004 - Redundant indexes", () => {
   });
 
   test("generateH004 creates report with redundant indexes", async () => {
-    const mockClient = createMockClient(
-      [
+    const mockClient = createMockClient({
+      versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-      [],
-      {
         redundantIndexesRows: [
           {
             schema_name: "public",

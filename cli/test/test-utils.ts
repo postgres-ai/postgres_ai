@@ -5,6 +5,8 @@
 export interface MockClientOptions {
   /** Database name returned by current_database() queries (default: "testdb") */
   databaseName?: string;
+  /** Version rows for pg_settings version query (default: PG 16.3) */
+  versionRows?: any[];
   settingsRows?: any[];
   databaseSizesRows?: any[];
   dbStatsRows?: any[];
@@ -15,7 +17,7 @@ export interface MockClientOptions {
   redundantIndexesRows?: any[];
 }
 
-const defaultVersionRows = [
+const DEFAULT_VERSION_ROWS = [
   { name: "server_version", setting: "16.3" },
   { name: "server_version_num", setting: "160003" },
 ];
@@ -34,6 +36,7 @@ const defaultSettingsRows = [
 export function createMockClient(options: MockClientOptions = {}) {
   const {
     databaseName = "testdb",
+    versionRows = DEFAULT_VERSION_ROWS,
     settingsRows = defaultSettingsRows,
     databaseSizesRows = [],
     dbStatsRows = [],
@@ -48,7 +51,7 @@ export function createMockClient(options: MockClientOptions = {}) {
     query: async (sql: string) => {
       // Version query (simple inline - used by getPostgresVersion)
       if (sql.includes("server_version") && sql.includes("server_version_num") && sql.includes("pg_settings") && !sql.includes("tag_setting_name")) {
-        return { rows: defaultVersionRows };
+        return { rows: versionRows };
       }
       // Settings metric query (from metrics.yml - has tag_setting_name, tag_setting_value)
       if (sql.includes("tag_setting_name") && sql.includes("tag_setting_value") && sql.includes("pg_settings")) {
