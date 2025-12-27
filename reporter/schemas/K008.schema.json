@@ -1,15 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "K007 report schema",
+  "title": "K008 report schema",
   "type": "object",
   "additionalProperties": false,
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
-    "generation_mode": { "type": ["string", "null"] },
-    "checkId": { "const": "K007" },
-    "checkTitle": { "const": "Top queries by shared blocks hit" },
+    "checkId": { "const": "K008" },
+    "checkTitle": { "const": "Top queries by shared blocks hit+read" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {
@@ -50,11 +49,11 @@
     "queryEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["queryid", "total_shared_hit_bytes", "hourly_shared_hit_bytes"],
+      "required": ["queryid", "total_shared_hit_read_bytes", "hourly_shared_hit_read_bytes"],
       "properties": {
         "queryid": { "type": "string" },
-        "total_shared_hit_bytes": { "type": "number" },
-        "hourly_shared_hit_bytes": { "$ref": "#/$defs/hourlyNumbers" }
+        "total_shared_hit_read_bytes": { "type": "number" },
+        "hourly_shared_hit_read_bytes": { "$ref": "#/$defs/hourlyNumbers" }
       }
     },
     "summary": {
@@ -62,18 +61,18 @@
       "additionalProperties": false,
       "required": [
         "queries_returned",
-        "total_shared_hit_bytes",
-        "total_shared_hit_bytes_tracked_queries",
-        "total_shared_hit_bytes_other",
+        "total_shared_hit_read_bytes",
+        "total_shared_hit_read_bytes_tracked_queries",
+        "total_shared_hit_read_bytes_other",
         "time_range_hours",
         "hourly_timestamps",
         "limit"
       ],
       "properties": {
         "queries_returned": { "type": "integer" },
-        "total_shared_hit_bytes": { "type": "number" },
-        "total_shared_hit_bytes_tracked_queries": { "type": "number" },
-        "total_shared_hit_bytes_other": { "type": "number" },
+        "total_shared_hit_read_bytes": { "type": "number" },
+        "total_shared_hit_read_bytes_tracked_queries": { "type": "number" },
+        "total_shared_hit_read_bytes_other": { "type": "number" },
         "time_range_hours": { "type": "integer" },
         "hourly_timestamps": { "$ref": "#/$defs/timeline" },
         "limit": { "type": "integer" }
@@ -82,10 +81,10 @@
     "dbEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["top_queries", "other_shared_hit_bytes_hourly", "summary"],
+      "required": ["top_queries", "other_shared_hit_read_bytes_hourly", "summary"],
       "properties": {
         "top_queries": { "type": "array", "items": { "$ref": "#/$defs/queryEntry" } },
-        "other_shared_hit_bytes_hourly": { "$ref": "#/$defs/hourlyNumbers" },
+        "other_shared_hit_read_bytes_hourly": { "$ref": "#/$defs/hourlyNumbers" },
         "summary": { "$ref": "#/$defs/summary" }
       }
     },

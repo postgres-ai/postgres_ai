@@ -4,7 +4,8 @@ PostgreSQL Reports Generator using PromQL
 
 This script generates JSON reports containing Observations for specific PostgreSQL
 check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004,
-K001, K003, M001, M002, M003, N001) by querying Prometheus metrics using PromQL.
+K001, K003, K004, K005, K006, K007, K008, M001, M002, M003, N001) by querying
+Prometheus metrics using PromQL.
 
 IMPORTANT: Scope of this module
 -------------------------------
@@ -28,7 +29,7 @@ import time
 import re
 import gc
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Sequence
 import argparse
 import sys
 import os
@@ -2670,6 +2671,108 @@ class PostgresReportGenerator:
             postgres_version=self._get_postgres_version_info(cluster, node_name),
         )
 
+    def generate_k008_shared_hit_read_report(
+        self,
+        cluster: str = "local",
+        node_name: str = "node-01",
+        time_range_minutes: int = 60,
+        limit: int = 100,
+        use_hourly: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Generate K008 Top Queries by shared blocks (hit + read) report.
+
+        Notes:
+        - Our hourly topk utility (`_get_hourly_topk_pgss_data`) can only rank by a single metric.
+          Here we fetch hit and read separately and then combine them in Python (similar to K003).
+
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            time_range_minutes: Time range in minutes for metrics collection (used when use_hourly=False)
+            limit: Number of top queries to return (default: 100)
+            use_hourly: Use hourly topk aggregation logic (default: True)
+
+        Returns:
+            Dictionary containing top queries sorted by (shared hit + shared read) bytes
+        """
+        logger.info("Generating K008 Top Queries by shared blocks (hit + read) report...")
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+
+        if not databases:
+            logger.warning("K008 - No databases found")
+
+        queries_by_db: Dict[str, Any] = {}
+
+        if use_hourly and time_range_minutes >= 60:
+            # Use hourly topk aggregation
+            hours = time_range_minutes // 60
+
+            hit_metric = "pgwatch_pg_stat_statements_shared_bytes_hit_total"
+            read_metric = "pgwatch_pg_stat_statements_shared_bytes_read_total"
+
+            for db_name in databases:
+                logger.info(f"K008: Processing database {db_name} (hourly mode)...")
+
+                per_query, other, timeline = self._get_hourly_topk_pgss_data_sum2(
+                    cluster,
+                    node_name,
+                    db_name,
+                    hit_metric,
+                    read_metric,
+                    hours=hours,
+                )
+
+                if not per_query and sum(other) == 0:
+                    logger.warning(f"K008 - No query metrics returned for database {db_name}")
+                    continue  # Skip databases with no data
+
+                query_totals = []
+                for queryid, hourly_total_bytes in per_query.items():
+                    total_bytes = sum(hourly_total_bytes)
+                    query_totals.append(
+                        {
+                            "queryid": queryid,
+                            "total_shared_hit_read_bytes": total_bytes,
+                            "hourly_shared_hit_read_bytes": hourly_total_bytes,
+                        }
+                    )
+
+                # Sort by total_shared_hit_read_bytes (descending) and limit to top N
+                sorted_metrics = sorted(
+                    query_totals, key=lambda x: x.get("total_shared_hit_read_bytes", 0), reverse=True
+                )[:limit]
+
+                tracked_total = sum(q.get("total_shared_hit_read_bytes", 0) for q in sorted_metrics)
+                other_total = sum(other)
+                total_bytes = tracked_total + other_total
+
+                queries_by_db[db_name] = {
+                    "top_queries": sorted_metrics,
+                    "other_shared_hit_read_bytes_hourly": other,
+                    "summary": {
+                        "queries_returned": len(sorted_metrics),
+                        "total_shared_hit_read_bytes": total_bytes,
+                        "total_shared_hit_read_bytes_tracked_queries": tracked_total,
+                        "total_shared_hit_read_bytes_other": other_total,
+                        "time_range_hours": hours,
+                        "hourly_timestamps": timeline,
+                        "limit": limit,
+                    },
+                }
+        else:
+            # Fallback for sub-hourly (not typically needed)
+            pass
+
+        return self.format_report_data(
+            "K008",
+            queries_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
     def generate_n001_wait_events_report(self, cluster: str = "local", node_name: str = "node-01",
                                          hours: int = 24) -> Dict[str, Any]:
         """
@@ -3150,6 +3253,100 @@ class PostgresReportGenerator:
             for qid in qids
         }
 
+    def _get_hourly_topk_pgss_data_multi(
+        self,
+        cluster: str,
+        node_name: str,
+        db_name: str,
+        metric_names: Sequence[str],
+        hours: int = 24,
+        step_s: int = 3600,
+        k: int = 3,
+    ) -> Tuple[Dict[str, List[float]], List[float], List[int]]:
+        """
+        Generalization of `_get_hourly_topk_pgss_data` that ranks and returns per-hour series by the
+        sum of one or more pg_stat_statements Prometheus metrics.
+        """
+        metric_names = [m for m in metric_names if m]
+        if not metric_names:
+            raise ValueError("metric_names must contain at least one metric name")
+
+        now = int(time.time())
+        end_s = self._floor_hour(now)
+        start_s, timeline = self._build_timeline(end_s, hours, step_s)
+
+        filters = [f'cluster="{cluster}"', f'node_name="{node_name}"', f'datname="{db_name}"']
+        filter_str = '{' + ','.join(filters) + '}'
+        step_str = f"{step_s}s"
+
+        def _sum_by_qid_increase(metric: str, fstr: str) -> str:
+            return f"sum by (queryid) (increase({metric}{fstr}[1h]))"
+
+        def _sum_increase(metric: str, fstr: str) -> str:
+            return f"sum(increase({metric}{fstr}[1h]))"
+
+        # Find union of queryids that ever appear in hourly top-k by the sum of metrics.
+        topk_expr = " + ".join(_sum_by_qid_increase(m, filter_str) for m in metric_names)
+        q_topk = f"topk({k}, ({topk_expr}))"
+        topk_result = self.query_range(
+            q_topk, datetime.fromtimestamp(start_s), datetime.fromtimestamp(end_s), step=step_str
+        )
+        union = sorted(
+            {
+                (s.get("metric") or {}).get("queryid")
+                for s in topk_result
+                if (s.get("metric") or {}).get("queryid") is not None
+            }
+        )
+
+        # Total per hour (for "other" calculation)
+        total_expr = " + ".join(_sum_increase(m, filter_str) for m in metric_names)
+        q_total = f"({total_expr})"
+        total_result = self.query_range(
+            q_total, datetime.fromtimestamp(start_s), datetime.fromtimestamp(end_s), step=step_str
+        )
+        total_map = self._to_series_map(total_result).get("__single__", {})
+        total = [total_map.get(ts, 0.0) for ts in timeline]
+
+        if not union:
+            return {}, total[:], timeline
+
+        # Hourly series for all union queryids (densified to N points each)
+        qid_re = self._build_qid_regex(union)
+        union_filters = filters + [f'queryid=~"{qid_re}"']
+        union_filter_str = '{' + ','.join(union_filters) + '}'
+        union_expr = " + ".join(_sum_by_qid_increase(m, union_filter_str) for m in metric_names)
+        q_union = f"({union_expr})"
+        union_result = self.query_range(
+            q_union, datetime.fromtimestamp(start_s), datetime.fromtimestamp(end_s), step=step_str
+        )
+        union_pts = self._to_series_map(union_result)
+        per_query = self._densify(union_pts, union, timeline, fill=0.0)
+
+        # Calculate other = total - sum(union)
+        other: List[float] = []
+        neg_examples: List[Tuple[int, float, float, float]] = []
+        for i in range(hours):
+            union_sum = sum(per_query[qid][i] for qid in union)
+            o_raw = total[i] - union_sum
+            if o_raw < 0:
+                # Keep small float noise quiet, but surface meaningful negatives.
+                if o_raw < -1e-6 and len(neg_examples) < 5:
+                    neg_examples.append((timeline[i], o_raw, total[i], union_sum))
+                o_raw = 0.0
+            other.append(o_raw)
+
+        if neg_examples:
+            min_neg = min(v[1] for v in neg_examples)
+            logger.warning(
+                "Hourly topk: negative 'other' clamped to 0 "
+                f"(cluster={cluster}, node={node_name}, db={db_name}, metrics={list(metric_names)}, "
+                f"hours={hours}, step_s={step_s}, k={k}, min_other={min_neg:.6g}, "
+                f"examples={neg_examples})"
+            )
+
+        return per_query, other, timeline
+
     def _get_hourly_topk_pgss_data(self, cluster: str, node_name: str, db_name: str,
                                    metric_name: str = "pgwatch_pg_stat_statements_calls",
                                    hours: int = 24, step_s: int = 3600, 
@@ -3175,62 +3372,44 @@ class PostgresReportGenerator:
             - other_list: List of hourly values for queries not in top-k
             - timeline: List of timestamps for the hourly data points
         """
-        now = int(time.time())
-        end_s = self._floor_hour(now)
-        start_s, timeline = self._build_timeline(end_s, hours, step_s)
+        return self._get_hourly_topk_pgss_data_multi(
+            cluster=cluster,
+            node_name=node_name,
+            db_name=db_name,
+            metric_names=[metric_name],
+            hours=hours,
+            step_s=step_s,
+            k=k,
+        )
 
-        # Build filters for this database
-        filters = [f'cluster="{cluster}"', f'node_name="{node_name}"', f'datname="{db_name}"']
-        filter_str = '{' + ','.join(filters) + '}'
+    def _get_hourly_topk_pgss_data_sum2(
+        self,
+        cluster: str,
+        node_name: str,
+        db_name: str,
+        metric_name_a: str,
+        metric_name_b: str,
+        hours: int = 24,
+        step_s: int = 3600,
+        k: int = 3,
+    ) -> Tuple[Dict[str, List[float]], List[float], List[int]]:
+        """
+        Like `_get_hourly_topk_pgss_data`, but ranks by the sum of two metrics per queryid, per hour:
 
-        # Convert step to string format for Prometheus API
-        step_str = f"{step_s}s"
+          sum by(queryid)(increase(A[1h])) + sum by(queryid)(increase(B[1h]))
 
-        # Find union of queryids that ever appear in hourly top-k
-        q_topk = f'topk({k}, sum by (queryid) (increase({metric_name}{filter_str}[1h])))'
-        topk_result = self.query_range(q_topk, datetime.fromtimestamp(start_s), 
-                                      datetime.fromtimestamp(end_s), step=step_str)
-        
-        union = sorted({
-            (s.get("metric") or {}).get("queryid") 
-            for s in topk_result 
-            if (s.get("metric") or {}).get("queryid") is not None
-        })
-
-        # Get total per hour (for "other" calculation)
-        q_total = f"sum(increase({metric_name}{filter_str}[1h]))"
-        total_result = self.query_range(q_total, datetime.fromtimestamp(start_s), 
-                                       datetime.fromtimestamp(end_s), step=step_str)
-        total_map = self._to_series_map(total_result).get("__single__", {})
-        total = [total_map.get(ts, 0.0) for ts in timeline]
-
-        if not union:
-            per_query = {}
-            other = total[:]  # Everything is "other"
-            return per_query, other, timeline
-
-        # Get hourly series for all union queryids (densified to N points each)
-        qid_re = self._build_qid_regex(union)
-        # Add queryid filter to the existing filters
-        union_filters = filters + [f'queryid=~"{qid_re}"']
-        union_filter_str = '{' + ','.join(union_filters) + '}'
-        q_union = f'sum by (queryid) (increase({metric_name}{union_filter_str}[1h]))'
-        union_result = self.query_range(q_union, datetime.fromtimestamp(start_s), 
-                                       datetime.fromtimestamp(end_s), step=step_str)
-        union_pts = self._to_series_map(union_result)
-        per_query = self._densify(union_pts, union, timeline, fill=0.0)
-
-        # Calculate other = total - sum(union)
-        other = []
-        for i in range(hours):
-            union_sum = sum(per_query[qid][i] for qid in union)
-            o = total[i] - union_sum
-            # Handle floating point precision issues
-            if o < 0 and o > -1e-6:
-                o = 0.0
-            other.append(o)
-
-        return per_query, other, timeline
+        This avoids a correctness pitfall where "union(topk by A, topk by B)" can miss a query that is
+        not top-k in either A or B individually, but is top-k by (A+B).
+        """
+        return self._get_hourly_topk_pgss_data_multi(
+            cluster=cluster,
+            node_name=node_name,
+            db_name=db_name,
+            metric_names=[metric_name_a, metric_name_b],
+            hours=hours,
+            step_s=step_s,
+            k=k,
+        )
 
     def format_bytes(self, bytes_value: float) -> str:
         """Format bytes value for human readable display."""
@@ -3559,7 +3738,12 @@ class PostgresReportGenerator:
             "J001": "Capacity planning",
             "K001": "Globally aggregated query metrics",
             "K002": "Workload type",
-            "K003": "Top queries by total_time",
+            "K003": "Top queries by total time (total_exec_time + total_plan_time)",
+            "K004": "Top queries by temp bytes written",
+            "K005": "Top queries by WAL generation",
+            "K006": "Top queries by shared blocks read",
+            "K007": "Top queries by shared blocks hit",
+            "K008": "Top queries by shared blocks hit+read",
             "L001": "Table sizes",
             "M001": "Top queries by mean execution time",
             "M002": "Top queries by rows (I/O intensity)",
@@ -3788,6 +3972,7 @@ class PostgresReportGenerator:
             ('K005', self.generate_k005_wal_bytes_report),
             ('K006', self.generate_k006_shared_read_report),
             ('K007', self.generate_k007_shared_hit_report),
+            ('K008', self.generate_k008_shared_hit_read_report),
             ('M001', self.generate_m001_mean_time_report),
             ('M002', self.generate_m002_rows_report),
             ('M003', self.generate_m003_io_time_report),
@@ -3796,7 +3981,7 @@ class PostgresReportGenerator:
 
         for check_id, report_func in independent_report_types:
             # Determine if this report needs hourly parameters
-            pgss_hourly_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+            pgss_hourly_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008', 'M001', 'M002', 'M003']
             wait_events_reports = ['N001']
             report_kwargs = {}
             if check_id in pgss_hourly_reports:
@@ -3927,9 +4112,21 @@ class PostgresReportGenerator:
         """
         queryids_by_db: Dict[str, set] = {}
         
-        def extract_from_query_metrics(container: Dict, target_key: str = 'query_metrics', 
-                                       id_field: str = 'queryid'):
-            """Helper to extract queryids from a container that may have nested structure."""
+        def extract_from_query_metrics(
+            container: Dict,
+            target_key: str = 'query_metrics',
+            id_field: str = 'queryid'
+        ):
+            """
+            Helper to extract queryids from a container that may have nested structure.
+
+            Notes:
+            - Different reports use different list keys for per-query items:
+              - K001 uses 'query_metrics'
+              - K003-K007 and M001-M003 use 'top_queries'
+            - We only keep queryids when we can associate them with a db_name, because
+              per-query file generation later needs (cluster, node, db, queryid) to query Prometheus.
+            """
             if not isinstance(container, dict):
                 return
             
@@ -3961,7 +4158,7 @@ class PostgresReportGenerator:
                             yield str(qid), key
         
         # Reports with queryid field in query_metrics list
-        pgss_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003']
+        pgss_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008', 'M001', 'M002', 'M003']
         
         for report_id in pgss_reports:
             if report_id not in reports:
@@ -3973,11 +4170,13 @@ class PostgresReportGenerator:
             # Handle multi-node structure: results -> node_name -> data -> db_name -> query_metrics
             for node_key, node_data in results.items():
                 if isinstance(node_data, dict):
-                    for queryid, db_name in extract_from_query_metrics(node_data):
-                        if db_name:
-                            if db_name not in queryids_by_db:
-                                queryids_by_db[db_name] = set()
-                            queryids_by_db[db_name].add(queryid)
+                    # K001 uses 'query_metrics', while most other hourly/topk reports use 'top_queries'.
+                    for list_key in ('query_metrics', 'top_queries'):
+                        for queryid, db_name in extract_from_query_metrics(node_data, target_key=list_key):
+                            if db_name:
+                                if db_name not in queryids_by_db:
+                                    queryids_by_db[db_name] = set()
+                                queryids_by_db[db_name].add(queryid)
         
         # N001 Wait Events report - has query_id in queries_list under wait_event_types
         if 'N001' in reports:
@@ -4098,9 +4297,11 @@ class PostgresReportGenerator:
 
     def generate_per_query_jsons(self, reports: Dict[str, Any], cluster: str,
                                  node_name: str = None,
-                                 query_text_limit: int = 1000,
+                                 # 640 KB should be enough for anybody
+                                 query_text_limit: int = 655360,
                                  hours: int = 24,
                                  write_immediately: bool = False,
+                                 include_cluster_prefix: bool = True,
                                  api_url: str = None,
                                  token: str = None,
                                  report_id: str = None) -> List[Dict[str, Any]]:
@@ -4115,6 +4316,7 @@ class PostgresReportGenerator:
             query_text_limit: Maximum number of characters for each query text
             hours: Number of hours for metric aggregation (default: 24)
             write_immediately: If True, write files immediately to reduce memory usage
+            include_cluster_prefix: If True, prefix per-query filenames with "<cluster>_".
             api_url: API URL for uploads (only used if write_immediately is True)
             token: API token for uploads (only used if write_immediately is True)
             report_id: Report ID for uploads (only used if write_immediately is True)
@@ -4199,8 +4401,10 @@ class PostgresReportGenerator:
                     node_block[db_name] = {"metrics": metrics}
                 results_by_node[n] = node_block
 
-            # Create filename: {cluster}_query_{queryid}.json
-            filename = f"{cluster}_query_{queryid}.json"
+            # Create filename (match per-check report prefix logic)
+            # - Single-cluster: query_<queryid>.json
+            # - Multi-cluster:  <cluster>_query_<queryid>.json
+            filename = f"{cluster}_query_{queryid}.json" if include_cluster_prefix else f"query_{queryid}.json"
 
             # Build the final JSON object (keep timestamptz as the last field)
             now = datetime.now(timezone.utc).isoformat()
@@ -4611,7 +4815,7 @@ def main():
                         help='Disable combining primary and replica reports into single report')
     parser.add_argument('--check-id',
                         choices=['A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002',
-                                 'H004', 'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'M001', 'M002', 'M003', 'N001', 'ALL'],
+                                 'H004', 'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008', 'M001', 'M002', 'M003', 'N001', 'ALL'],
                         help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                         help='Output file (default: stdout)')
@@ -4682,8 +4886,10 @@ def main():
                 logger.info("Generating per-query JSON files (streaming mode to reduce memory usage)...")
                 query_files = generator.generate_per_query_jsons(
                     reports, cluster, node_name=args.node_name, 
-                    query_text_limit=1000, hours=24,
+                    # 640 KB should be enough for anybody
+                    query_text_limit=66560, hours=24,
                     write_immediately=True,
+                    include_cluster_prefix=(len(clusters_to_process) > 1),
                     api_url=args.api_url if (not args.no_upload and report_id) else None,
                     token=args.token if (not args.no_upload and report_id) else None,
                     report_id=report_id if (not args.no_upload and report_id) else None
@@ -4766,6 +4972,8 @@ def main():
                     report = generator.generate_k006_shared_read_report(cluster, args.node_name, time_range_minutes=1440)
                 elif args.check_id == 'K007':
                     report = generator.generate_k007_shared_hit_report(cluster, args.node_name, time_range_minutes=1440)
+                elif args.check_id == 'K008':
+                    report = generator.generate_k008_shared_hit_read_report(cluster, args.node_name, time_range_minutes=1440)
                 elif args.check_id == 'M001':
                     report = generator.generate_m001_mean_time_report(cluster, args.node_name, time_range_minutes=1440)
                 elif args.check_id == 'M002':

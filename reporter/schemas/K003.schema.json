@@ -9,7 +9,7 @@
     "build_ts": { "type": ["string", "null"] },
     "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "K003" },
-    "checkTitle": { "const": "Top queries by total_time" },
+    "checkTitle": { "const": "Top queries by total time (total_exec_time + total_plan_time)" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {

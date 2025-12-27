@@ -9,7 +9,7 @@
     "build_ts": { "type": ["string", "null"] },
     "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "K005" },
-    "checkTitle": { "const": "Check K005" },
+    "checkTitle": { "const": "Top queries by WAL generation" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {

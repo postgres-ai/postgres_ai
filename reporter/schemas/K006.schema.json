@@ -9,7 +9,7 @@
     "build_ts": { "type": ["string", "null"] },
     "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "K006" },
-    "checkTitle": { "const": "Check K006" },
+    "checkTitle": { "const": "Top queries by shared blocks read" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {

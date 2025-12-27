@@ -9,7 +9,7 @@
     "build_ts": { "type": ["string", "null"] },
     "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "K004" },
-    "checkTitle": { "const": "Check K004" },
+    "checkTitle": { "const": "Top queries by temp bytes written" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {
