@@ -192,7 +192,10 @@ export function parseVersionNum(versionNum: string): { major: string; minor: str
       major: Math.floor(num / 10000).toString(),
       minor: (num % 10000).toString(),
     };
-  } catch {
+  } catch (err) {
+    // parseInt shouldn't throw, but handle edge cases defensively
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[parseVersionNum] Warning: Failed to parse "${versionNum}": ${errorMsg}`);
     return { major: "", minor: "" };
   }
 }
@@ -718,6 +721,8 @@ function readTextFileSafe(p: string): string | null {
     const value = fs.readFileSync(p, "utf8").trim();
     return value || null;
   } catch {
+    // Intentionally silent: this is a "safe" read that returns null on any error
+    // (file not found, permission denied, etc.) - used for optional config files
     return null;
   }
 }
@@ -737,8 +742,12 @@ function resolveBuildTs(): string | null {
     const pkgRoot = path.resolve(__dirname, "..");
     const fromPkgFile = readTextFileSafe(path.join(pkgRoot, "BUILD_TS"));
     if (fromPkgFile) return fromPkgFile;
-  } catch {
-    // ignore
+  } catch (err) {
+    // Path resolution failed (rare) - fall through to next fallback
+    if (process.env.DEBUG) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.log(`[resolveBuildTs] Path resolution failed: ${errorMsg}`);
+    }
   }
 
   // Last resort: use package.json mtime as an approximation (non-null, stable-ish).
@@ -746,7 +755,12 @@ function resolveBuildTs(): string | null {
     const pkgJsonPath = path.resolve(__dirname, "..", "package.json");
     const st = fs.statSync(pkgJsonPath);
     return st.mtime.toISOString();
-  } catch {
+  } catch (err) {
+    // package.json not found or inaccessible - use current time
+    if (process.env.DEBUG) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.log(`[resolveBuildTs] Could not stat package.json: ${errorMsg}`);
+    }
     return new Date().toISOString();
   }
 }
