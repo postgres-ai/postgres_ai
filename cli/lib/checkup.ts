@@ -659,8 +659,10 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
           };
         });
       }
-    } catch {
-      // If JSON parsing fails, leave as empty array
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const indexName = String(transformed.index_name || "unknown");
+      console.log(`[H004] Warning: Failed to parse redundant_to_json for index "${indexName}": ${errorMsg}`);
     }
     
     return {
