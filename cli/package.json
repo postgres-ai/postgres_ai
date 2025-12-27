@@ -13,7 +13,6 @@
     "url": "https://gitlab.com/postgres-ai/postgres_ai/-/issues"
   },
   "bin": {
-    "postgres-ai": "./dist/bin/postgres-ai.js",
     "postgresai": "./dist/bin/postgres-ai.js",
     "pgai": "./dist/bin/postgres-ai.js"
   },

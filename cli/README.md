@@ -29,11 +29,10 @@ brew install postgresai
 
 ## Usage
 
-The `postgresai` package provides three command aliases (prefer `postgresai`):
+The `postgresai` package provides two command aliases:
 ```bash
-postgres-ai --help
-postgresai --help
-pgai --help
+postgresai --help   # Canonical, discoverable
+pgai --help         # Short and convenient
 ```
 
 You can also run it without installing via `npx`:
@@ -126,17 +125,17 @@ This will:
 
 Start monitoring with demo database:
 ```bash
-postgres-ai mon local-install --demo
+postgresai mon local-install --demo
 ```
 
 Start monitoring with your own database:
 ```bash
-postgres-ai mon local-install --db-url postgresql://user:pass@host:5432/db
+postgresai mon local-install --db-url postgresql://user:pass@host:5432/db
 ```
 
 Complete automated setup with API key and database:
 ```bash
-postgres-ai mon local-install --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
+postgresai mon local-install --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
 ```
 
 This will:
@@ -153,19 +152,19 @@ This will:
 #### Service lifecycle
 ```bash
 # Complete setup with various options
-postgres-ai mon local-install                                  # Interactive setup for production
-postgres-ai mon local-install --demo                           # Demo mode with sample database
-postgres-ai mon local-install --api-key <key>                  # Setup with API key
-postgres-ai mon local-install --db-url <url>                   # Setup with database URL
-postgres-ai mon local-install --api-key <key> --db-url <url>   # Complete automated setup
-postgres-ai mon local-install -y                               # Auto-accept all defaults
+postgresai mon local-install                                  # Interactive setup for production
+postgresai mon local-install --demo                           # Demo mode with sample database
+postgresai mon local-install --api-key <key>                  # Setup with API key
+postgresai mon local-install --db-url <url>                   # Setup with database URL
+postgresai mon local-install --api-key <key> --db-url <url>   # Complete automated setup
+postgresai mon local-install -y                               # Auto-accept all defaults
 
 # Service management
-postgres-ai mon start                  # Start monitoring services
-postgres-ai mon stop                   # Stop monitoring services
-postgres-ai mon restart [service]      # Restart all or specific monitoring service
-postgres-ai mon status                 # Show monitoring services status
-postgres-ai mon health [--wait <sec>]  # Check monitoring services health
+postgresai mon start                  # Start monitoring services
+postgresai mon stop                   # Stop monitoring services
+postgresai mon restart [service]      # Restart all or specific monitoring service
+postgresai mon status                 # Show monitoring services status
+postgresai mon health [--wait <sec>]  # Check monitoring services health
 ```
 
 ##### local-install options
@@ -176,21 +175,21 @@ postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 
 #### Monitoring target databases (`mon targets` subgroup)
 ```bash
-postgres-ai mon targets list                       # List databases to monitor
-postgres-ai mon targets add <conn-string> <name>   # Add database to monitor
-postgres-ai mon targets remove <name>              # Remove monitoring target
-postgres-ai mon targets test <name>                # Test target connectivity
+postgresai mon targets list                       # List databases to monitor
+postgresai mon targets add <conn-string> <name>   # Add database to monitor
+postgresai mon targets remove <name>              # Remove monitoring target
+postgresai mon targets test <name>                # Test target connectivity
 ```
 
 #### Configuration and maintenance
 ```bash
-postgres-ai mon config                         # Show monitoring configuration
-postgres-ai mon update-config                  # Apply configuration changes
-postgres-ai mon update                         # Update monitoring stack
-postgres-ai mon reset [service]                # Reset service data
-postgres-ai mon clean                          # Cleanup artifacts
-postgres-ai mon check                          # System readiness check
-postgres-ai mon shell <service>                # Open shell to monitoring service
+postgresai mon config                         # Show monitoring configuration
+postgresai mon update-config                  # Apply configuration changes
+postgresai mon update                         # Update monitoring stack
+postgresai mon reset [service]                # Reset service data
+postgresai mon clean                          # Cleanup artifacts
+postgresai mon check                          # System readiness check
+postgresai mon shell <service>                # Open shell to monitoring service
 ```
 
 ### MCP server (`mcp` group)
@@ -250,16 +249,16 @@ postgresai issues view <issueId> > issue.json
 
 #### Grafana management
 ```bash
-postgres-ai mon generate-grafana-password      # Generate new Grafana password
-postgres-ai mon show-grafana-credentials       # Show Grafana credentials
+postgresai mon generate-grafana-password      # Generate new Grafana password
+postgresai mon show-grafana-credentials       # Show Grafana credentials
 ```
 
 ### Authentication and API key management
 ```bash
-postgres-ai auth                    # Authenticate via browser (OAuth)
-postgres-ai auth --set-key <key>    # Store API key directly
-postgres-ai show-key                # Show stored key (masked)
-postgres-ai remove-key              # Remove stored key
+postgresai auth                    # Authenticate via browser (OAuth)
+postgresai auth --set-key <key>    # Store API key directly
+postgresai show-key                # Show stored key (masked)
+postgresai remove-key              # Remove stored key
 ```
 
 ## Configuration
