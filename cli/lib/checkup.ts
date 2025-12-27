@@ -601,8 +601,9 @@ export async function getStatsReset(client: Client, pgMajorVersion: number = 16)
         : null;
       postmasterStartupTime = pmResult.rows[0].postmaster_startup_time || null;
     }
-  } catch {
-    // Ignore errors
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[getClusterInfo] Error querying postmaster start time: ${errorMsg}`);
   }
   
   return {
@@ -955,6 +956,7 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
   let pgssAvailable = false;
   let pgssMetricsCount = 0;
   let pgssTotalCalls = 0;
+  let pgssError: string | null = null;
   const pgssSampleQueries: Array<{ queryid: string; user: string; database: string; calls: number }> = [];
 
   try {
@@ -992,8 +994,10 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
         });
       }
     }
-  } catch {
-    // Extension not available or accessible
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[D004] Error querying pg_stat_statements: ${errorMsg}`);
+    pgssError = errorMsg;
   }
 
   // Check pg_stat_kcache extension
@@ -1002,6 +1006,7 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
   let kcacheTotalExecTime = 0;
   let kcacheTotalUserTime = 0;
   let kcacheTotalSystemTime = 0;
+  let kcacheError: string | null = null;
   const kcacheSampleQueries: Array<{ queryid: string; user: string; exec_total_time: number }> = [];
 
   try {
@@ -1042,8 +1047,10 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
         });
       }
     }
-  } catch {
-    // Extension not available or accessible
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[D004] Error querying pg_stat_kcache: ${errorMsg}`);
+    kcacheError = errorMsg;
   }
 
   report.results[nodeName] = {
@@ -1054,6 +1061,7 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
         metrics_count: pgssMetricsCount,
         total_calls: pgssTotalCalls,
         sample_queries: pgssSampleQueries,
+        ...(pgssError && { error: pgssError }),
       },
       pg_stat_kcache_status: {
         extension_available: kcacheAvailable,
@@ -1062,6 +1070,7 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
         total_user_time: kcacheTotalUserTime,
         total_system_time: kcacheTotalSystemTime,
         sample_queries: kcacheSampleQueries,
+        ...(kcacheError && { error: kcacheError }),
       },
     },
     postgres_version: postgresVersion,
@@ -1148,6 +1157,7 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
   }
 
   let memoryUsage: MemoryUsage | Record<string, never> = {};
+  let memoryError: string | null = null;
 
   try {
     // Get actual byte values from PostgreSQL
@@ -1190,8 +1200,10 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
         effective_cache_size_pretty: formatBytes(effectiveCacheSizeBytes),
       };
     }
-  } catch {
-    // If we can't calculate, leave empty object (schema allows this)
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[G003] Error calculating memory usage: ${errorMsg}`);
+    memoryError = errorMsg;
   }
 
   report.results[nodeName] = {
@@ -1199,6 +1211,7 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
       settings: memorySettings,
       analysis: {
         estimated_total_memory_usage: memoryUsage,
+        ...(memoryError && { error: memoryError }),
       },
     },
     postgres_version: postgresVersion,
