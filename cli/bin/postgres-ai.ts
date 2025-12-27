@@ -995,7 +995,6 @@ program
         console.log(JSON.stringify(reports, null, 2));
       }
     } catch (error) {
-      spinner.stop();
       if (error instanceof RpcError) {
         for (const line of formatRpcErrorForDisplay(error)) {
           console.error(line);
@@ -1006,6 +1005,8 @@ program
       }
       process.exitCode = 1;
     } finally {
+      // Always stop spinner to prevent interval leak (idempotent - safe to call multiple times)
+      spinner.stop();
       if (client) {
         await client.end();
       }
