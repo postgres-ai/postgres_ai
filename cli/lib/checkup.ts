@@ -249,12 +249,17 @@ function formatSettingPrettyValue(
   }
   
   if (unitNormalized === "seconds") {
+    // Format time values with appropriate units based on magnitude:
+    // - Sub-second values (< 1s): show in milliseconds for precision
+    // - Small values (< 60s): show in seconds
+    // - Larger values (>= 60s): show in minutes for readability
+    const MS_PER_SECOND = 1000;
     if (settingNormalized < 1) {
-      return `${(settingNormalized * 1000).toFixed(0)} ms`;
-    } else if (settingNormalized < 60) {
+      return `${(settingNormalized * MS_PER_SECOND).toFixed(0)} ms`;
+    } else if (settingNormalized < SECONDS_PER_MINUTE) {
       return `${settingNormalized} s`;
     } else {
-      return `${(settingNormalized / 60).toFixed(1)} min`;
+      return `${(settingNormalized / SECONDS_PER_MINUTE).toFixed(1)} min`;
     }
   }
   
