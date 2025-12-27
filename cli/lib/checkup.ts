@@ -58,6 +58,15 @@ const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_MINUTE = 60;
 
 /**
+ * Convert various boolean representations to boolean.
+ * PostgreSQL returns booleans as true/false, 1/0, 't'/'f', or 'true'/'false'
+ * depending on context (query result, JDBC driver, etc.).
+ */
+function toBool(val: unknown): boolean {
+  return val === true || val === 1 || val === "t" || val === "true";
+}
+
+/**
  * PostgreSQL version information
  */
 export interface PostgresVersion {
