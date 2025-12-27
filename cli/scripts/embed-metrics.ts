@@ -21,7 +21,8 @@ const OUTPUT_PATH = path.resolve(CLI_DIR, "lib/metrics-embedded.ts");
 
 interface MetricDefinition {
   description?: string;
-  sqls: Record<string, string>;
+  // YAML parses numeric keys (e.g., 11:, 14:) as numbers, representing PG major versions
+  sqls: Record<number, string>;
   gauges?: string[];
   statement_timeout_seconds?: number;
   is_instance_level?: boolean;
@@ -121,10 +122,12 @@ function generateTypeScript(metrics: Record<string, MetricDefinition>): string {
       lines.push(`    description: ${JSON.stringify(desc)},`);
     }
 
-    // Convert sqls keys from string to number and format
+    // sqls keys are PG major versions (numbers in YAML, but Object.entries returns strings)
     lines.push("    sqls: {");
-    for (const [version, sql] of Object.entries(metric.sqls)) {
-      const versionNum = parseInt(version, 10);
+    for (const [versionKey, sql] of Object.entries(metric.sqls)) {
+      // YAML numeric keys may be parsed as numbers or strings depending on context;
+      // explicitly convert to ensure consistent numeric keys in output
+      const versionNum = typeof versionKey === "number" ? versionKey : parseInt(versionKey, 10);
       // Use template literal for SQL to preserve formatting
       const escapedSql = sql.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
       lines.push(`      ${versionNum}: \`${escapedSql}\`,`);
