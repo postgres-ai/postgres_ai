@@ -1043,6 +1043,110 @@ describe("checkup-api", () => {
     expect(text).toMatch(/Details:/);
     expect(text).toMatch(/Hint:/);
   });
+
+  test("withRetry succeeds on first attempt", async () => {
+    let attempts = 0;
+    const result = await api.withRetry(async () => {
+      attempts++;
+      return "success";
+    });
+    expect(result).toBe("success");
+    expect(attempts).toBe(1);
+  });
+
+  test("withRetry retries on retryable errors and succeeds", async () => {
+    let attempts = 0;
+    const result = await api.withRetry(
+      async () => {
+        attempts++;
+        if (attempts < 3) {
+          throw new Error("connection timeout");
+        }
+        return "success after retry";
+      },
+      { maxAttempts: 3, initialDelayMs: 10 }
+    );
+    expect(result).toBe("success after retry");
+    expect(attempts).toBe(3);
+  });
+
+  test("withRetry calls onRetry callback", async () => {
+    let attempts = 0;
+    const retryLogs: string[] = [];
+    await api.withRetry(
+      async () => {
+        attempts++;
+        if (attempts < 2) {
+          throw new Error("socket hang up");
+        }
+        return "ok";
+      },
+      { maxAttempts: 3, initialDelayMs: 10 },
+      (attempt, err, delayMs) => {
+        retryLogs.push(`attempt ${attempt}, delay ${delayMs}ms`);
+      }
+    );
+    expect(retryLogs.length).toBe(1);
+    expect(retryLogs[0]).toMatch(/attempt 1/);
+  });
+
+  test("withRetry does not retry on non-retryable errors", async () => {
+    let attempts = 0;
+    try {
+      await api.withRetry(
+        async () => {
+          attempts++;
+          throw new Error("invalid input");
+        },
+        { maxAttempts: 3, initialDelayMs: 10 }
+      );
+    } catch (err) {
+      expect((err as Error).message).toBe("invalid input");
+    }
+    expect(attempts).toBe(1);
+  });
+
+  test("withRetry does not retry on 4xx RpcError", async () => {
+    let attempts = 0;
+    try {
+      await api.withRetry(
+        async () => {
+          attempts++;
+          throw new api.RpcError({
+            rpcName: "test",
+            statusCode: 400,
+            payloadText: "bad request",
+            payloadJson: null,
+          });
+        },
+        { maxAttempts: 3, initialDelayMs: 10 }
+      );
+    } catch (err) {
+      expect(err).toBeInstanceOf(api.RpcError);
+    }
+    expect(attempts).toBe(1);
+  });
+
+  test("withRetry retries on 5xx RpcError", async () => {
+    let attempts = 0;
+    try {
+      await api.withRetry(
+        async () => {
+          attempts++;
+          throw new api.RpcError({
+            rpcName: "test",
+            statusCode: 503,
+            payloadText: "service unavailable",
+            payloadJson: null,
+          });
+        },
+        { maxAttempts: 2, initialDelayMs: 10 }
+      );
+    } catch (err) {
+      expect(err).toBeInstanceOf(api.RpcError);
+    }
+    expect(attempts).toBe(2);
+  });
 });
 
 

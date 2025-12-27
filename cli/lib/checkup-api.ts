@@ -2,6 +2,84 @@ import * as https from "https";
 import { URL } from "url";
 import { normalizeBaseUrl } from "./util";
 
+/**
+ * Retry configuration for network operations
+ */
+export interface RetryConfig {
+  maxAttempts: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+};
+
+/**
+ * Check if an error is retryable (network errors, timeouts, 5xx errors)
+ */
+function isRetryableError(err: unknown): boolean {
+  if (err instanceof RpcError) {
+    // Retry on server errors (5xx), not on client errors (4xx)
+    return err.statusCode >= 500 && err.statusCode < 600;
+  }
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    // Retry on network-related errors
+    return (
+      msg.includes("timeout") ||
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("enotfound") ||
+      msg.includes("socket hang up") ||
+      msg.includes("network")
+    );
+  }
+  return false;
+}
+
+/**
+ * Execute an async function with exponential backoff retry
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  config: Partial<RetryConfig> = {},
+  onRetry?: (attempt: number, error: unknown, delayMs: number) => void
+): Promise<T> {
+  const { maxAttempts, initialDelayMs, maxDelayMs, backoffMultiplier } = {
+    ...DEFAULT_RETRY_CONFIG,
+    ...config,
+  };
+
+  let lastError: unknown;
+  let delayMs = initialDelayMs;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+
+      if (attempt === maxAttempts || !isRetryableError(err)) {
+        throw err;
+      }
+
+      if (onRetry) {
+        onRetry(attempt, err, delayMs);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      delayMs = Math.min(delayMs * backoffMultiplier, maxDelayMs);
+    }
+  }
+
+  throw lastError;
+}
+
 export class RpcError extends Error {
   rpcName: string;
   statusCode: number;

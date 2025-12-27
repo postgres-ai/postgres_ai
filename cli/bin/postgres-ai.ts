@@ -19,7 +19,7 @@ import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
-import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay } from "../lib/checkup-api";
+import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -849,14 +849,6 @@ program
 
       // Optional: upload to PostgresAI API.
       if (uploadCfg) {
-        spinner.update("Creating remote checkup report");
-        const created = await createCheckupReport({
-          apiKey: uploadCfg.apiKey,
-          apiBaseUrl: uploadCfg.apiBaseUrl,
-          project: uploadCfg.project,
-        });
-
-        const reportId = created.reportId;
         // Keep upload progress out of stdout when JSON is printed to stdout.
         const logUpload = (msg: string): void => {
           if (shouldPrintJson) {
@@ -865,20 +857,43 @@ program
             console.log(msg);
           }
         };
+
+        spinner.update("Creating remote checkup report");
+        const created = await withRetry(
+          () => createCheckupReport({
+            apiKey: uploadCfg.apiKey,
+            apiBaseUrl: uploadCfg.apiBaseUrl,
+            project: uploadCfg.project,
+          }),
+          { maxAttempts: 3 },
+          (attempt, err, delayMs) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            logUpload(`[Retry ${attempt}/3] createCheckupReport failed: ${errMsg}, retrying in ${delayMs}ms...`);
+          }
+        );
+
+        const reportId = created.reportId;
         logUpload(`Created remote checkup report: ${reportId}`);
 
         const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
         for (const [checkId, report] of Object.entries(reports)) {
           spinner.update(`Uploading ${checkId}.json`);
           const jsonText = JSON.stringify(report, null, 2);
-          const r = await uploadCheckupReportJson({
-            apiKey: uploadCfg.apiKey,
-            apiBaseUrl: uploadCfg.apiBaseUrl,
-            reportId,
-            filename: `${checkId}.json`,
-            checkId,
-            jsonText,
-          });
+          const r = await withRetry(
+            () => uploadCheckupReportJson({
+              apiKey: uploadCfg.apiKey,
+              apiBaseUrl: uploadCfg.apiBaseUrl,
+              reportId,
+              filename: `${checkId}.json`,
+              checkId,
+              jsonText,
+            }),
+            { maxAttempts: 3 },
+            (attempt, err, delayMs) => {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              logUpload(`[Retry ${attempt}/3] Upload ${checkId}.json failed: ${errMsg}, retrying in ${delayMs}ms...`);
+            }
+          );
           uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
         }
         logUpload("Upload completed");
