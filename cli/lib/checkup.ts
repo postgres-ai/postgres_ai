@@ -167,6 +167,8 @@ export interface RedundantIndex {
   index_size_pretty: string;
   table_size_pretty: string;
   redundant_to: RedundantToIndex[];
+  /** Set when redundant_to_json parsing fails - indicates data quality issue */
+  redundant_to_parse_error?: string;
 }
 
 /**
@@ -685,6 +687,7 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
     
     // Parse redundant_to JSON array (indexes that make this one redundant)
     let redundantTo: RedundantToIndex[] = [];
+    let parseError: string | undefined;
     try {
       const jsonStr = String(transformed.redundant_to_json || "[]");
       const parsed = JSON.parse(jsonStr);
@@ -704,10 +707,11 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       const indexName = String(transformed.index_name || "unknown");
-      console.log(`[H004] Warning: Failed to parse redundant_to_json for index "${indexName}": ${errorMsg}`);
+      parseError = `Failed to parse redundant_to_json: ${errorMsg}`;
+      console.log(`[H004] Warning: ${parseError} for index "${indexName}"`);
     }
     
-    return {
+    const result: RedundantIndex = {
       schema_name: String(transformed.schema_name || ""),
       table_name: String(transformed.table_name || ""),
       index_name: String(transformed.index_name || ""),
@@ -723,6 +727,13 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
       table_size_pretty: formatBytes(tableSizeBytes),
       redundant_to: redundantTo,
     };
+    
+    // Only include parse error field if there was an error (keeps output clean)
+    if (parseError) {
+      result.redundant_to_parse_error = parseError;
+    }
+    
+    return result;
   });
 }
 

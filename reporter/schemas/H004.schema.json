@@ -83,7 +83,8 @@
         "index_definition": { "type": "string" },
         "index_size_pretty": { "type": "string" },
         "table_size_pretty": { "type": "string" },
-        "redundant_to": { "type": "array", "items": { "$ref": "#/$defs/redundantToIndex" } }
+        "redundant_to": { "type": "array", "items": { "$ref": "#/$defs/redundantToIndex" } },
+        "redundant_to_parse_error": { "type": "string" }
       }
     },
     "dbEntry": {
