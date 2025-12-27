@@ -142,7 +142,7 @@ function createTtySpinner(
   const render = (): void => {
     if (stopped) return;
     const elapsedSec = ((Date.now() - startTs) / 1000).toFixed(1);
-    const frame = frames[frameIdx % frames.length]!;
+    const frame = frames[frameIdx % frames.length] ?? frames[0] ?? "⠿";
     frameIdx += 1;
     process.stdout.write(`\r\x1b[2K${frame} ${text} (${elapsedSec}s)`);
   };
