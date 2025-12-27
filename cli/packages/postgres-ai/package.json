@@ -1,0 +1,27 @@
+{
+  "name": "postgres-ai",
+  "version": "0.0.0-dev.0",
+  "description": "PostgresAI CLI (wrapper package - prefer installing postgresai directly)",
+  "license": "Apache-2.0",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/postgres-ai/postgres_ai.git"
+  },
+  "homepage": "https://gitlab.com/postgres-ai/postgres_ai",
+  "bugs": {
+    "url": "https://gitlab.com/postgres-ai/postgres_ai/-/issues"
+  },
+  "bin": {
+    "postgres-ai": "./bin/postgres-ai.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "postgresai": ">=0.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

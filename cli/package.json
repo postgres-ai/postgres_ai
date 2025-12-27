@@ -16,6 +16,10 @@
     "postgresai": "./dist/bin/postgres-ai.js",
     "pgai": "./dist/bin/postgres-ai.js"
   },
+  "exports": {
+    ".": "./dist/bin/postgres-ai.js",
+    "./cli": "./dist/bin/postgres-ai.js"
+  },
   "type": "module",
   "engines": {
     "node": ">=18"
