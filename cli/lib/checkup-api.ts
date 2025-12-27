@@ -27,11 +27,21 @@ function isRetryableError(err: unknown): boolean {
     // Retry on server errors (5xx), not on client errors (4xx)
     return err.statusCode >= 500 && err.statusCode < 600;
   }
+  
+  // Check for Node.js error codes (works on Error and Error-like objects)
+  if (typeof err === "object" && err !== null && "code" in err) {
+    const code = String((err as { code: unknown }).code);
+    if (["ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT"].includes(code)) {
+      return true;
+    }
+  }
+  
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
-    // Retry on network-related errors
+    // Retry on network-related errors based on message content
     return (
       msg.includes("timeout") ||
+      msg.includes("timed out") ||
       msg.includes("econnreset") ||
       msg.includes("econnrefused") ||
       msg.includes("enotfound") ||
@@ -39,6 +49,7 @@ function isRetryableError(err: unknown): boolean {
       msg.includes("network")
     );
   }
+  
   return false;
 }
 
@@ -181,8 +192,10 @@ async function postRpc<T>(params: {
   const body = JSON.stringify(bodyObj);
 
   const headers: Record<string, string> = {
-    // The backend RPC functions accept access_token in body, but we also set the header
-    // for compatibility with other endpoints and deployments.
+    // API key is sent in BOTH header and body (see bodyObj.access_token):
+    // - Header: Used by the API gateway/proxy for HTTP authentication
+    // - Body: Passed to PostgreSQL RPC function for in-database authorization
+    // This is intentional for defense-in-depth; backend validates both.
     "access-token": apiKey,
     "Prefer": "return=representation",
     "Content-Type": "application/json",

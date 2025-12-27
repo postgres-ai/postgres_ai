@@ -160,6 +160,13 @@ const skipReason = !havePostgresBinaries()
   ? "Cannot run as root (PostgreSQL refuses)"
   : null;
 
+// In CI, warn if integration tests are being skipped (helps catch configuration issues)
+const isCI = process.env.CI === "true" || process.env.GITLAB_CI === "true";
+if (skipReason && isCI) {
+  console.warn(`[CI WARNING] Integration tests skipped: ${skipReason}`);
+  console.warn("This may indicate a CI configuration issue - PostgreSQL binaries should be available.");
+}
+
 describe.skipIf(!!skipReason)("checkup integration: express mode schema compatibility", () => {
   let pg: TempPostgres;
   let client: Client;

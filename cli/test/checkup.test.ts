@@ -848,6 +848,43 @@ describe("checkup-api", () => {
     }
     expect(attempts).toBe(2);
   });
+
+  test("withRetry retries on timeout errors", async () => {
+    // Tests that timeout-like error messages are considered retryable
+    let attempts = 0;
+    try {
+      await api.withRetry(
+        async () => {
+          attempts++;
+          throw new Error("RPC test timed out after 30000ms (no response)");
+        },
+        { maxAttempts: 3, initialDelayMs: 10 }
+      );
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain("timed out");
+    }
+    expect(attempts).toBe(3); // Should retry on timeout
+  });
+
+  test("withRetry retries on ECONNRESET errors", async () => {
+    // Tests that connection reset errors are considered retryable
+    let attempts = 0;
+    try {
+      await api.withRetry(
+        async () => {
+          attempts++;
+          const err = new Error("connection reset") as Error & { code: string };
+          err.code = "ECONNRESET";
+          throw err;
+        },
+        { maxAttempts: 2, initialDelayMs: 10 }
+      );
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+    }
+    expect(attempts).toBe(2); // Should retry on ECONNRESET
+  });
 });
 
 
