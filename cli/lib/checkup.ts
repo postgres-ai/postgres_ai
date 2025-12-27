@@ -642,6 +642,14 @@ export async function getCurrentDatabaseInfo(client: Client, pgMajorVersion: num
 }
 
 /**
+ * Type guard to validate redundant_to_json item structure.
+ * Returns true if item is a valid object (may have expected properties).
+ */
+function isValidRedundantToItem(item: unknown): item is Record<string, unknown> {
+  return typeof item === "object" && item !== null && !Array.isArray(item);
+}
+
+/**
  * Get redundant indexes (H004)
  * SQL loaded from config/pgwatch-prometheus/metrics.yml (redundant_indexes)
  */
@@ -659,15 +667,17 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
       const jsonStr = String(transformed.redundant_to_json || "[]");
       const parsed = JSON.parse(jsonStr);
       if (Array.isArray(parsed)) {
-        redundantTo = parsed.map((item: any) => {
-          const sizeBytes = parseInt(String(item.index_size_bytes || 0), 10);
-          return {
-            index_name: String(item.index_name || ""),
-            index_definition: String(item.index_definition || ""),
-            index_size_bytes: sizeBytes,
-            index_size_pretty: formatBytes(sizeBytes),
-          };
-        });
+        redundantTo = parsed
+          .filter(isValidRedundantToItem)
+          .map((item) => {
+            const sizeBytes = parseInt(String(item.index_size_bytes ?? 0), 10);
+            return {
+              index_name: String(item.index_name ?? ""),
+              index_definition: String(item.index_definition ?? ""),
+              index_size_bytes: sizeBytes,
+              index_size_pretty: formatBytes(sizeBytes),
+            };
+          });
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
