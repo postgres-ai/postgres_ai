@@ -217,7 +217,8 @@ cli:node:tests:
     - su - pgtest -c "curl -fsSL https://bun.sh/install | bash"
     - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun install"
   script:
-    - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun test"
+    # Use 'bun run test' (not 'bun test') to invoke the npm script which generates metrics-embedded.ts first
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun run test"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
