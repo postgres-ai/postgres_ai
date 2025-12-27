@@ -157,8 +157,11 @@ function createTtySpinner(
     },
     stop: (finalText?: string) => {
       if (stopped) return;
-      clearInterval(timer);  // Clear interval first to prevent pending callbacks
+      // Set flag first so any queued render() calls exit early.
+      // JavaScript is single-threaded, so this is safe: queued callbacks
+      // run after stop() returns and will see stopped=true immediately.
       stopped = true;
+      clearInterval(timer);
       process.stdout.write("\r\x1b[2K");
       if (finalText && finalText.trim()) {
         process.stdout.write(finalText);
