@@ -217,6 +217,13 @@ async function postRpc<T>(params: {
         signal: controller.signal,
       },
       (res) => {
+        // Response started (headers received) - clear the connection timeout.
+        // Once the server starts responding, we let it complete rather than
+        // timing out mid-response which would cause confusing errors.
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
@@ -246,11 +253,12 @@ async function postRpc<T>(params: {
       }
     );
 
-    // Set up timeout with both abort signal AND req.destroy() as backup
+    // Set up connection timeout - applies until response headers are received.
+    // Once response starts, timeout is cleared (see response callback above).
     timeoutId = setTimeout(() => {
       controller.abort();
       req.destroy();  // Backup: ensure request is terminated
-      settledReject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
+      settledReject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms (no response)`));
     }, timeoutMs);
     
     req.on("error", (err: Error) => {
