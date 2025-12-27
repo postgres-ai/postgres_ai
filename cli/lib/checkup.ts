@@ -1204,7 +1204,7 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[G003] Error calculating memory usage: ${errorMsg}`);
+    console.log(`[G001] Error calculating memory usage: ${errorMsg}`);
     memoryError = errorMsg;
   }
 
