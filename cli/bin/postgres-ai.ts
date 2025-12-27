@@ -168,6 +168,196 @@ function createTtySpinner(
   };
 }
 
+// ============================================================================
+// Checkup command helpers
+// ============================================================================
+
+interface CheckupOptions {
+  checkId: string;
+  nodeName: string;
+  output?: string;
+  upload?: boolean;
+  project?: string;
+  json?: boolean;
+}
+
+interface UploadConfig {
+  apiKey: string;
+  apiBaseUrl: string;
+  project: string;
+}
+
+interface UploadSummary {
+  project: string;
+  reportId: number;
+  uploaded: Array<{ checkId: string; filename: string; chunkId: number }>;
+}
+
+/**
+ * Prepare and validate output directory for checkup reports.
+ * @returns Output path if valid, null if should exit with error
+ */
+function prepareOutputDirectory(outputOpt: string | undefined): string | null | undefined {
+  if (!outputOpt) return undefined;
+
+  const outputDir = expandHomePath(outputOpt);
+  const outputPath = path.isAbsolute(outputDir) ? outputDir : path.resolve(process.cwd(), outputDir);
+
+  if (!fs.existsSync(outputPath)) {
+    try {
+      fs.mkdirSync(outputPath, { recursive: true });
+    } catch (e) {
+      const errAny = e as any;
+      const code = typeof errAny?.code === "string" ? errAny.code : "";
+      const msg = errAny instanceof Error ? errAny.message : String(errAny);
+      if (code === "EACCES" || code === "EPERM" || code === "ENOENT") {
+        console.error(`Error: Failed to create output directory: ${outputPath}`);
+        console.error(`Reason: ${msg}`);
+        console.error("Tip: choose a writable path, e.g. --output ./reports or --output ~/reports");
+        return null; // Signal to exit
+      }
+      throw e;
+    }
+  }
+  return outputPath;
+}
+
+/**
+ * Prepare upload configuration for checkup reports.
+ * @returns Upload config if valid, null if should exit, undefined if upload not needed
+ */
+function prepareUploadConfig(
+  opts: CheckupOptions,
+  rootOpts: CliOptions,
+  shouldUpload: boolean,
+  uploadExplicitlyRequested: boolean
+): { config: UploadConfig; projectWasGenerated: boolean } | null | undefined {
+  if (!shouldUpload) return undefined;
+
+  const { apiKey } = getConfig(rootOpts);
+  if (!apiKey) {
+    if (uploadExplicitlyRequested) {
+      console.error("Error: API key is required for upload");
+      console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
+      return null; // Signal to exit
+    }
+    return undefined; // Skip upload silently
+  }
+
+  const cfg = config.readConfig();
+  const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+  let project = ((opts.project || cfg.defaultProject) || "").trim();
+  let projectWasGenerated = false;
+
+  if (!project) {
+    project = `project_${crypto.randomBytes(6).toString("hex")}`;
+    projectWasGenerated = true;
+    try {
+      config.writeConfig({ defaultProject: project });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`Warning: Failed to save generated default project: ${message}`);
+    }
+  }
+
+  return {
+    config: { apiKey, apiBaseUrl, project },
+    projectWasGenerated,
+  };
+}
+
+/**
+ * Upload checkup reports to PostgresAI API.
+ */
+async function uploadCheckupReports(
+  uploadCfg: UploadConfig,
+  reports: Record<string, any>,
+  spinner: ReturnType<typeof createTtySpinner>,
+  logUpload: (msg: string) => void
+): Promise<UploadSummary> {
+  spinner.update("Creating remote checkup report");
+  const created = await withRetry(
+    () => createCheckupReport({
+      apiKey: uploadCfg.apiKey,
+      apiBaseUrl: uploadCfg.apiBaseUrl,
+      project: uploadCfg.project,
+    }),
+    { maxAttempts: 3 },
+    (attempt, err, delayMs) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logUpload(`[Retry ${attempt}/3] createCheckupReport failed: ${errMsg}, retrying in ${delayMs}ms...`);
+    }
+  );
+
+  const reportId = created.reportId;
+  logUpload(`Created remote checkup report: ${reportId}`);
+
+  const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
+  for (const [checkId, report] of Object.entries(reports)) {
+    spinner.update(`Uploading ${checkId}.json`);
+    const jsonText = JSON.stringify(report, null, 2);
+    const r = await withRetry(
+      () => uploadCheckupReportJson({
+        apiKey: uploadCfg.apiKey,
+        apiBaseUrl: uploadCfg.apiBaseUrl,
+        reportId,
+        filename: `${checkId}.json`,
+        checkId,
+        jsonText,
+      }),
+      { maxAttempts: 3 },
+      (attempt, err, delayMs) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logUpload(`[Retry ${attempt}/3] Upload ${checkId}.json failed: ${errMsg}, retrying in ${delayMs}ms...`);
+      }
+    );
+    uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
+  }
+  logUpload("Upload completed");
+
+  return { project: uploadCfg.project, reportId, uploaded };
+}
+
+/**
+ * Write checkup reports to files.
+ */
+function writeReportFiles(reports: Record<string, any>, outputPath: string): void {
+  for (const [checkId, report] of Object.entries(reports)) {
+    const filePath = path.join(outputPath, `${checkId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
+    console.log(`✓ ${checkId}: ${filePath}`);
+  }
+}
+
+/**
+ * Print upload summary to console.
+ */
+function printUploadSummary(
+  summary: UploadSummary,
+  projectWasGenerated: boolean,
+  useStderr: boolean
+): void {
+  const out = useStderr ? console.error : console.log;
+  out("\nCheckup report uploaded");
+  out("======================\n");
+  if (projectWasGenerated) {
+    out(`Project: ${summary.project} (generated and saved as default)`);
+  } else {
+    out(`Project: ${summary.project}`);
+  }
+  out(`Report ID: ${summary.reportId}`);
+  out("View in Console: console.postgres.ai → Support → checkup reports");
+  out("");
+  out("Files:");
+  for (const item of summary.uploaded) {
+    out(`- ${item.checkId}: ${item.filename}`);
+  }
+}
+
+// ============================================================================
+// CLI configuration
+// ============================================================================
+
 /**
  * CLI configuration options
  */
@@ -715,108 +905,43 @@ program
       "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
     ].join("\n")
   )
-  .action(async (conn: string | undefined, opts: {
-    checkId: string;
-    nodeName: string;
-    output?: string;
-    upload?: boolean;
-    project?: string;
-    json?: boolean;
-  }, cmd: Command) => {
+  .action(async (conn: string | undefined, opts: CheckupOptions, cmd: Command) => {
     if (!conn) {
-      // No args — show help like other commands do (instead of a bare error).
       cmd.outputHelp();
       process.exitCode = 1;
       return;
     }
 
     const shouldPrintJson = !!opts.json;
-    // `--json` implies "local output" mode — do not upload.
-    // `opts.upload` is: true (--upload), false (--no-upload), or undefined (default).
     const uploadExplicitlyRequested = opts.upload === true;
     const uploadExplicitlyDisabled = opts.upload === false || shouldPrintJson;
-    // Default behavior: upload if API key is available, skip silently otherwise.
     let shouldUpload = !uploadExplicitlyDisabled;
-    const generateDefaultProjectName = (): string => {
-      // Must start with a letter; use only letters/numbers/underscores.
-      return `project_${crypto.randomBytes(6).toString("hex")}`;
-    };
 
     // Preflight: validate/create output directory BEFORE connecting / running checks.
-    // This avoids waiting on network/DB work only to fail at the very end.
-    let outputPath: string | undefined;
-    if (opts.output) {
-      const outputDir = expandHomePath(opts.output);
-      outputPath = path.isAbsolute(outputDir) ? outputDir : path.resolve(process.cwd(), outputDir);
-      if (!fs.existsSync(outputPath)) {
-        try {
-          fs.mkdirSync(outputPath, { recursive: true });
-        } catch (e) {
-          const errAny = e as any;
-          const code = typeof errAny?.code === "string" ? errAny.code : "";
-          const msg = errAny instanceof Error ? errAny.message : String(errAny);
-          if (code === "EACCES" || code === "EPERM" || code === "ENOENT") {
-            console.error(`Error: Failed to create output directory: ${outputPath}`);
-            console.error(`Reason: ${msg}`);
-            console.error("Tip: choose a writable path, e.g. --output ./reports or --output ~/reports");
-            process.exitCode = 1;
-            return;
-          }
-          throw e;
-        }
-      }
+    const outputPath = prepareOutputDirectory(opts.output);
+    if (outputPath === null) {
+      process.exitCode = 1;
+      return;
     }
 
     // Preflight: validate upload flags/credentials BEFORE connecting / running checks.
-    // This allows "fast-fail" for missing API key / project name.
-    let uploadCfg:
-      | { apiKey: string; apiBaseUrl: string; project: string }
-      | undefined;
-    let projectWasGenerated = false;
-    if (shouldUpload) {
-      const rootOpts = program.opts() as CliOptions;
-      const { apiKey } = getConfig(rootOpts);
-      if (!apiKey) {
-        if (uploadExplicitlyRequested) {
-          // User explicitly requested upload but has no API key — fail.
-          console.error("Error: API key is required for upload");
-          console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
-          process.exitCode = 1;
-          return;
-        }
-        // No API key and upload wasn't explicitly requested — just skip upload silently.
-        shouldUpload = false;
-      }
-
-      const cfg = config.readConfig();
-      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
-      let project = ((opts.project || cfg.defaultProject) || "").trim();
-      if (!project) {
-        project = generateDefaultProjectName();
-        projectWasGenerated = true;
-        try {
-          config.writeConfig({ defaultProject: project });
-        } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          console.error(`Warning: Failed to save generated default project: ${message}`);
-        }
-      }
-      uploadCfg = {
-        apiKey,
-        apiBaseUrl,
-        project,
-      };
+    const rootOpts = program.opts() as CliOptions;
+    const uploadResult = prepareUploadConfig(opts, rootOpts, shouldUpload, uploadExplicitlyRequested);
+    if (uploadResult === null) {
+      process.exitCode = 1;
+      return;
     }
+    const uploadCfg = uploadResult?.config;
+    const projectWasGenerated = uploadResult?.projectWasGenerated ?? false;
+    shouldUpload = !!uploadCfg;
 
-    // Use the same SSL behavior as prepare-db:
-    // - Default: sslmode=prefer (try SSL first, fallback to non-SSL)
-    // - Respect PGSSLMODE env and ?sslmode=... in connection URI
+    // Connect and run checks
     const adminConn = resolveAdminConnection({
       conn,
       envPassword: process.env.PGPASSWORD,
     });
     let client: Client | undefined;
-    const spinnerEnabled = !!process.stdout.isTTY && !!shouldUpload;
+    const spinnerEnabled = !!process.stdout.isTTY && shouldUpload;
     const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {
@@ -824,11 +949,8 @@ program
       const connResult = await connectWithSslFallback(Client, adminConn);
       client = connResult.client as Client;
 
+      // Generate reports
       let reports: Record<string, any>;
-      let uploadSummary:
-        | { project: string; reportId: number; uploaded: Array<{ checkId: string; filename: string; chunkId: number }> }
-        | undefined;
-
       if (opts.checkId === "ALL") {
         reports = await generateAllReports(client, opts.nodeName, (p) => {
           spinner.update(`Running ${p.checkId}: ${p.checkTitle} (${p.index}/${p.total})`);
@@ -847,94 +969,29 @@ program
         reports = { [checkId]: await generator(client, opts.nodeName) };
       }
 
-      // Optional: upload to PostgresAI API.
+      // Upload to PostgresAI API (if configured)
+      let uploadSummary: UploadSummary | undefined;
       if (uploadCfg) {
-        // Keep upload progress out of stdout when JSON is printed to stdout.
         const logUpload = (msg: string): void => {
-          if (shouldPrintJson) {
-            console.error(msg);
-          } else {
-            console.log(msg);
-          }
+          (shouldPrintJson ? console.error : console.log)(msg);
         };
-
-        spinner.update("Creating remote checkup report");
-        const created = await withRetry(
-          () => createCheckupReport({
-            apiKey: uploadCfg.apiKey,
-            apiBaseUrl: uploadCfg.apiBaseUrl,
-            project: uploadCfg.project,
-          }),
-          { maxAttempts: 3 },
-          (attempt, err, delayMs) => {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            logUpload(`[Retry ${attempt}/3] createCheckupReport failed: ${errMsg}, retrying in ${delayMs}ms...`);
-          }
-        );
-
-        const reportId = created.reportId;
-        logUpload(`Created remote checkup report: ${reportId}`);
-
-        const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
-        for (const [checkId, report] of Object.entries(reports)) {
-          spinner.update(`Uploading ${checkId}.json`);
-          const jsonText = JSON.stringify(report, null, 2);
-          const r = await withRetry(
-            () => uploadCheckupReportJson({
-              apiKey: uploadCfg.apiKey,
-              apiBaseUrl: uploadCfg.apiBaseUrl,
-              reportId,
-              filename: `${checkId}.json`,
-              checkId,
-              jsonText,
-            }),
-            { maxAttempts: 3 },
-            (attempt, err, delayMs) => {
-              const errMsg = err instanceof Error ? err.message : String(err);
-              logUpload(`[Retry ${attempt}/3] Upload ${checkId}.json failed: ${errMsg}, retrying in ${delayMs}ms...`);
-            }
-          );
-          uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
-        }
-        logUpload("Upload completed");
-        uploadSummary = { project: uploadCfg.project, reportId, uploaded };
+        uploadSummary = await uploadCheckupReports(uploadCfg, reports, spinner, logUpload);
       }
 
       spinner.stop();
-      // Output results
-      if (opts.output) {
-        // Write to files
-        // outputPath is preflight-validated above
-        const outDir = outputPath || path.resolve(process.cwd(), expandHomePath(opts.output));
-        for (const [checkId, report] of Object.entries(reports)) {
-          const filePath = path.join(outDir, `${checkId}.json`);
-          fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
-          console.log(`✓ ${checkId}: ${filePath}`);
-        }
+
+      // Write to files (if output path specified)
+      if (outputPath) {
+        writeReportFiles(reports, outputPath);
       }
 
+      // Print upload summary
       if (uploadSummary) {
-        const out = shouldPrintJson ? console.error : console.log;
-        out("\nCheckup report uploaded");
-        out("======================\n");
-        if (projectWasGenerated) {
-          out(`Project: ${uploadSummary.project} (generated and saved as default)`);
-        } else {
-          out(`Project: ${uploadSummary.project}`);
-        }
-        out(`Report ID: ${uploadSummary.reportId}`);
-        out("View in Console: console.postgres.ai → Support → checkup reports");
-        out("");
-        out("Files:");
-        for (const item of uploadSummary.uploaded) {
-          out(`- ${item.checkId}: ${item.filename}`);
-        }
+        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson);
       }
 
-      if (shouldPrintJson) {
-        console.log(JSON.stringify(reports, null, 2));
-      } else if (!shouldUpload && !opts.output) {
-        // Offline mode keeps historical behavior: print JSON when not uploading and no --output.
+      // Output JSON to stdout
+      if (shouldPrintJson || (!shouldUpload && !opts.output)) {
         console.log(JSON.stringify(reports, null, 2));
       }
     } catch (error) {

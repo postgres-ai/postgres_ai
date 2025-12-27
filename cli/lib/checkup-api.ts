@@ -43,7 +43,24 @@ function isRetryableError(err: unknown): boolean {
 }
 
 /**
- * Execute an async function with exponential backoff retry
+ * Execute an async function with exponential backoff retry.
+ * Retries on network errors, timeouts, and 5xx server errors.
+ * Does not retry on 4xx client errors.
+ *
+ * @param fn - Async function to execute
+ * @param config - Optional retry configuration (uses defaults if not provided)
+ * @param onRetry - Optional callback invoked before each retry attempt
+ * @returns Promise resolving to the function result
+ * @throws The last error if all retry attempts fail or error is non-retryable
+ *
+ * @example
+ * ```typescript
+ * const result = await withRetry(
+ *   () => fetchData(),
+ *   { maxAttempts: 3 },
+ *   (attempt, err, delay) => console.log(`Retry ${attempt}, waiting ${delay}ms`)
+ * );
+ * ```
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -80,10 +97,18 @@ export async function withRetry<T>(
   throw lastError;
 }
 
+/**
+ * Error thrown when an RPC call to the PostgresAI API fails.
+ * Contains detailed information about the failure for debugging and display.
+ */
 export class RpcError extends Error {
+  /** Name of the RPC endpoint that failed */
   rpcName: string;
+  /** HTTP status code returned by the server */
   statusCode: number;
+  /** Raw response body text */
   payloadText: string;
+  /** Parsed JSON response body, or null if parsing failed */
   payloadJson: any | null;
 
   constructor(params: { rpcName: string; statusCode: number; payloadText: string; payloadJson: any | null }) {
@@ -97,6 +122,13 @@ export class RpcError extends Error {
   }
 }
 
+/**
+ * Format an RpcError for human-readable console display.
+ * Extracts message, details, and hint from the error payload if available.
+ *
+ * @param err - The RpcError to format
+ * @returns Array of lines suitable for console output
+ */
 export function formatRpcErrorForDisplay(err: RpcError): string[] {
   const lines: string[] = [];
   lines.push(`Error: RPC ${err.rpcName} failed: HTTP ${err.statusCode}`);
@@ -244,6 +276,20 @@ async function postRpc<T>(params: {
   });
 }
 
+/**
+ * Create a new checkup report in the PostgresAI backend.
+ * This creates the parent report container; individual check results
+ * are uploaded separately via uploadCheckupReportJson().
+ *
+ * @param params - Configuration for report creation
+ * @param params.apiKey - PostgresAI API access token
+ * @param params.apiBaseUrl - Base URL of the PostgresAI API
+ * @param params.project - Project name or ID to associate the report with
+ * @param params.status - Optional initial status for the report
+ * @returns Promise resolving to the created report ID
+ * @throws {RpcError} On API failures (4xx/5xx responses)
+ * @throws {Error} On network errors or unexpected response format
+ */
 export async function createCheckupReport(params: {
   apiKey: string;
   apiBaseUrl: string;
@@ -270,6 +316,21 @@ export async function createCheckupReport(params: {
   return { reportId };
 }
 
+/**
+ * Upload a JSON check result to an existing checkup report.
+ * Each check (e.g., H001, A003) is uploaded as a separate JSON file.
+ *
+ * @param params - Configuration for the upload
+ * @param params.apiKey - PostgresAI API access token
+ * @param params.apiBaseUrl - Base URL of the PostgresAI API
+ * @param params.reportId - ID of the parent report (from createCheckupReport)
+ * @param params.filename - Filename for the uploaded JSON (e.g., "H001.json")
+ * @param params.checkId - Check identifier (e.g., "H001", "A003")
+ * @param params.jsonText - JSON content as a string
+ * @returns Promise resolving to the created report chunk ID
+ * @throws {RpcError} On API failures (4xx/5xx responses)
+ * @throws {Error} On network errors or unexpected response format
+ */
 export async function uploadCheckupReportJson(params: {
   apiKey: string;
   apiBaseUrl: string;
