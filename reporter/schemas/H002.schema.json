@@ -82,7 +82,8 @@
         "stats_reset_time": { "type": ["string", "null"] },
         "days_since_reset": { "type": ["integer", "null"] },
         "postmaster_startup_epoch": { "type": ["number", "null"] },
-        "postmaster_startup_time": { "type": ["string", "null"] }
+        "postmaster_startup_time": { "type": ["string", "null"] },
+        "postmaster_startup_error": { "type": "string" }
       }
     },
     "dbEntry": {

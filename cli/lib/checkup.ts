@@ -136,6 +136,8 @@ export interface StatsReset {
   days_since_reset: number | null;
   postmaster_startup_epoch: number | null;
   postmaster_startup_time: string | null;
+  /** Set when postmaster startup time query fails - indicates data availability issue */
+  postmaster_startup_error?: string;
 }
 
 /**
@@ -621,8 +623,10 @@ export async function getStatsReset(client: Client, pgMajorVersion: number = 16)
     : null;
   
   // Get postmaster startup time separately (simple inline SQL)
+  // This is supplementary data - errors are captured in output, not propagated
   let postmasterStartupEpoch: number | null = null;
   let postmasterStartupTime: string | null = null;
+  let postmasterStartupError: string | undefined;
   try {
     const pmResult = await client.query(`
       select
@@ -637,16 +641,24 @@ export async function getStatsReset(client: Client, pgMajorVersion: number = 16)
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[getClusterInfo] Error querying postmaster start time: ${errorMsg}`);
+    postmasterStartupError = `Failed to query postmaster start time: ${errorMsg}`;
+    console.log(`[getStatsReset] Warning: ${postmasterStartupError}`);
   }
   
-  return {
+  const statsResult: StatsReset = {
     stats_reset_epoch: statsResetEpoch,
     stats_reset_time: statsResetTime,
     days_since_reset: daysSinceReset,
     postmaster_startup_epoch: postmasterStartupEpoch,
     postmaster_startup_time: postmasterStartupTime,
   };
+  
+  // Only include error field if there was an error (keeps output clean)
+  if (postmasterStartupError) {
+    statsResult.postmaster_startup_error = postmasterStartupError;
+  }
+  
+  return statsResult;
 }
 
 /**
