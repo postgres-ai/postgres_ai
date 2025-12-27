@@ -755,11 +755,9 @@ function resolveBuildTs(): string | null {
     const fromPkgFile = readTextFileSafe(path.join(pkgRoot, "BUILD_TS"));
     if (fromPkgFile) return fromPkgFile;
   } catch (err) {
-    // Path resolution failed (rare) - fall through to next fallback
-    if (process.env.DEBUG) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.log(`[resolveBuildTs] Path resolution failed: ${errorMsg}`);
-    }
+    // Path resolution failing is unexpected - warn about it
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[resolveBuildTs] Warning: path resolution failed: ${errorMsg}`);
   }
 
   // Last resort: use package.json mtime as an approximation (non-null, stable-ish).
@@ -768,10 +766,10 @@ function resolveBuildTs(): string | null {
     const st = fs.statSync(pkgJsonPath);
     return st.mtime.toISOString();
   } catch (err) {
-    // package.json not found or inaccessible - use current time
+    // package.json not found is expected in some environments (e.g., bundled) - debug only
     if (process.env.DEBUG) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      console.log(`[resolveBuildTs] Could not stat package.json: ${errorMsg}`);
+      console.log(`[resolveBuildTs] Could not stat package.json, using current time: ${errorMsg}`);
     }
     return new Date().toISOString();
   }
