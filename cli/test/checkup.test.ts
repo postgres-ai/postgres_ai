@@ -188,118 +188,31 @@ describe("createBaseReport", () => {
 });
 
 // Tests for CHECK_INFO
-describe("CHECK_INFO", () => {
-  test("contains A002", () => {
-    expect("A002" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.A002).toBe("Postgres major version");
+describe("CHECK_INFO and REPORT_GENERATORS", () => {
+  const expectedChecks: Record<string, string> = {
+    A002: "Postgres major version",
+    A003: "Postgres settings",
+    A004: "Cluster information",
+    A007: "Altered settings",
+    A013: "Postgres minor version",
+    D004: "pg_stat_statements and pg_stat_kcache settings",
+    F001: "Autovacuum: current settings",
+    G001: "Memory-related settings",
+    H001: "Invalid indexes",
+    H002: "Unused indexes",
+    H004: "Redundant indexes",
+  };
+
+  test("CHECK_INFO contains all expected checks with correct descriptions", () => {
+    for (const [checkId, description] of Object.entries(expectedChecks)) {
+      expect(checkup.CHECK_INFO[checkId]).toBe(description);
+    }
   });
 
-  test("contains A003", () => {
-    expect("A003" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.A003).toBe("Postgres settings");
-  });
-
-  test("contains A013", () => {
-    expect("A013" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.A013).toBe("Postgres minor version");
-  });
-
-  test("contains A004", () => {
-    expect("A004" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.A004).toBe("Cluster information");
-  });
-
-  test("contains A007", () => {
-    expect("A007" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.A007).toBe("Altered settings");
-  });
-
-  test("contains H001", () => {
-    expect("H001" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.H001).toBe("Invalid indexes");
-  });
-
-  test("contains H002", () => {
-    expect("H002" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.H002).toBe("Unused indexes");
-  });
-
-  test("contains H004", () => {
-    expect("H004" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.H004).toBe("Redundant indexes");
-  });
-
-  test("contains D004", () => {
-    expect("D004" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.D004).toBe("pg_stat_statements and pg_stat_kcache settings");
-  });
-
-  test("contains F001", () => {
-    expect("F001" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.F001).toBe("Autovacuum: current settings");
-  });
-
-  test("contains G001", () => {
-    expect("G001" in checkup.CHECK_INFO).toBe(true);
-    expect(checkup.CHECK_INFO.G001).toBe("Memory-related settings");
-  });
-});
-
-// Tests for REPORT_GENERATORS
-describe("REPORT_GENERATORS", () => {
-  test("has generator for A002", () => {
-    expect("A002" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.A002).toBe("function");
-  });
-
-  test("has generator for A003", () => {
-    expect("A003" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.A003).toBe("function");
-  });
-
-  test("has generator for A013", () => {
-    expect("A013" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.A013).toBe("function");
-  });
-
-  test("has generator for A004", () => {
-    expect("A004" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.A004).toBe("function");
-  });
-
-  test("has generator for A007", () => {
-    expect("A007" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.A007).toBe("function");
-  });
-
-  test("has generator for H001", () => {
-    expect("H001" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.H001).toBe("function");
-  });
-
-  test("has generator for H002", () => {
-    expect("H002" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.H002).toBe("function");
-  });
-
-  test("has generator for H004", () => {
-    expect("H004" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.H004).toBe("function");
-  });
-
-  test("has generator for D004", () => {
-    expect("D004" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.D004).toBe("function");
-  });
-
-  test("has generator for F001", () => {
-    expect("F001" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.F001).toBe("function");
-  });
-
-  test("has generator for G001", () => {
-    expect("G001" in checkup.REPORT_GENERATORS).toBe(true);
-    expect(typeof checkup.REPORT_GENERATORS.G001).toBe("function");
+  test("REPORT_GENERATORS has function for each check", () => {
+    for (const checkId of Object.keys(expectedChecks)) {
+      expect(typeof checkup.REPORT_GENERATORS[checkId]).toBe("function");
+    }
   });
 
   test("REPORT_GENERATORS and CHECK_INFO have same keys", () => {
@@ -720,35 +633,7 @@ describe("H001 - Invalid indexes", () => {
     expect(dbData.database_size_pretty).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
-
-  test("generateH001 has correct top-level structure", async () => {
-    const mockClient = createMockClient(
-      [
-        { name: "server_version", setting: "16.3" },
-        { name: "server_version_num", setting: "160003" },
-      ],
-      [],
-      {
-        invalidIndexesRows: [
-          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", supports_fk: false },
-        ],
-      }
-    );
-
-    const report = await checkup.generateH001(mockClient as any, "test-node");
-    
-    // Verify top-level structure matches schema expectations
-    expect(report.checkId).toBe("H001");
-    expect(report.checkTitle).toBe("Invalid indexes");
-    expect(typeof report.timestamptz).toBe("string");
-    expect(report.nodes.primary).toBe("test-node");
-    expect(Array.isArray(report.nodes.standbys)).toBe(true);
-    expect("test-node" in report.results).toBe(true);
-    expect(report.results["test-node"].postgres_version).toBeTruthy();
-    // Data is now keyed by database name
-    expect("testdb" in report.results["test-node"].data).toBe(true);
-    expect((report.results["test-node"].data as any)["testdb"].invalid_indexes).toBeTruthy();
-  });
+  // Top-level structure tests removed - covered by schema-validation.test.ts
 });
 
 // Tests for H002 (Unused indexes)
@@ -821,45 +706,7 @@ describe("H002 - Unused indexes", () => {
     expect(dbData.stats_reset).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
-
-  test("generateH002 has correct top-level structure", async () => {
-    const mockClient = createMockClient(
-      [
-        { name: "server_version", setting: "16.3" },
-        { name: "server_version_num", setting: "160003" },
-      ],
-      [],
-      {
-        unusedIndexesRows: [
-          {
-            schema_name: "public",
-            table_name: "logs",
-            index_name: "logs_created_idx",
-            index_definition: "CREATE INDEX logs_created_idx ON public.logs USING btree (created_at)",
-            reason: "Never Used Indexes",
-            index_size_bytes: "8388608",
-            idx_scan: "0",
-            idx_is_btree: true,
-            supports_fk: false,
-          },
-        ],
-      }
-    );
-
-    const report = await checkup.generateH002(mockClient as any, "test-node");
-    
-    // Verify top-level structure matches schema expectations
-    expect(report.checkId).toBe("H002");
-    expect(report.checkTitle).toBe("Unused indexes");
-    expect(typeof report.timestamptz).toBe("string");
-    expect(report.nodes.primary).toBe("test-node");
-    expect(Array.isArray(report.nodes.standbys)).toBe(true);
-    expect("test-node" in report.results).toBe(true);
-    expect(report.results["test-node"].postgres_version).toBeTruthy();
-    // Data is now keyed by database name
-    expect("testdb" in report.results["test-node"].data).toBe(true);
-    expect((report.results["test-node"].data as any)["testdb"].unused_indexes).toBeTruthy();
-  });
+  // Top-level structure tests removed - covered by schema-validation.test.ts
 });
 
 // Tests for H004 (Redundant indexes)
@@ -949,50 +796,7 @@ describe("H004 - Redundant indexes", () => {
     expect(dbData.database_size_bytes).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
-
-  test("generateH004 has correct top-level structure", async () => {
-    const mockClient = createMockClient(
-      [
-        { name: "server_version", setting: "16.3" },
-        { name: "server_version_num", setting: "160003" },
-      ],
-      [],
-      {
-        redundantIndexesRows: [
-          {
-            schema_name: "public",
-            table_name: "products",
-            index_name: "products_category_idx",
-            relation_name: "products",
-            access_method: "btree",
-            reason: "public.products_category_name_idx",
-            index_size_bytes: "4194304",
-            table_size_bytes: "33554432",
-            index_usage: "5",
-            supports_fk: false,
-            index_definition: "CREATE INDEX products_category_idx ON public.products USING btree (category)",
-            redundant_to_json: JSON.stringify([
-              { index_name: "public.products_category_name_idx", index_definition: "CREATE INDEX products_category_name_idx ON public.products USING btree (category, name)", index_size_bytes: 2097152 }
-            ]),
-          },
-        ],
-      }
-    );
-
-    const report = await checkup.generateH004(mockClient as any, "test-node");
-    
-    // Verify top-level structure matches schema expectations
-    expect(report.checkId).toBe("H004");
-    expect(report.checkTitle).toBe("Redundant indexes");
-    expect(typeof report.timestamptz).toBe("string");
-    expect(report.nodes.primary).toBe("test-node");
-    expect(Array.isArray(report.nodes.standbys)).toBe(true);
-    expect("test-node" in report.results).toBe(true);
-    expect(report.results["test-node"].postgres_version).toBeTruthy();
-    // Data is now keyed by database name
-    expect("testdb" in report.results["test-node"].data).toBe(true);
-    expect((report.results["test-node"].data as any)["testdb"].redundant_indexes).toBeTruthy();
-  });
+  // Top-level structure tests removed - covered by schema-validation.test.ts
 });
 
 // CLI tests
