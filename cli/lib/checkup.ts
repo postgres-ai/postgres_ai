@@ -37,6 +37,11 @@ import * as path from "path";
 import * as pkg from "../package.json";
 import { getMetricSql, transformMetricRow, METRIC_NAMES } from "./metrics-loader";
 
+// Time constants
+const SECONDS_PER_DAY = 86400;
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_MINUTE = 60;
+
 /**
  * PostgreSQL version information
  */
@@ -459,11 +464,11 @@ export async function getClusterInfo(client: Client, pgMajorVersion: number = 16
     // Uptime from db_stats
     if (stats.postmaster_uptime_s) {
       const uptimeSeconds = parseInt(stats.postmaster_uptime_s, 10);
-      const days = Math.floor(uptimeSeconds / 86400);
-      const hours = Math.floor((uptimeSeconds % 86400) / 3600);
-      const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+      const days = Math.floor(uptimeSeconds / SECONDS_PER_DAY);
+      const hours = Math.floor((uptimeSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
+      const minutes = Math.floor((uptimeSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
       info.uptime = {
-        value: `${days} days ${hours}:${String(minutes).padStart(2, "0")}:${String(uptimeSeconds % 60).padStart(2, "0")}`,
+        value: `${days} days ${hours}:${String(minutes).padStart(2, "0")}:${String(uptimeSeconds % SECONDS_PER_MINUTE).padStart(2, "0")}`,
         unit: "interval",
         description: "Server uptime",
       };
@@ -583,7 +588,7 @@ export async function getStatsReset(client: Client, pgMajorVersion: number = 16)
   
   // Calculate days since reset
   const daysSinceReset = secondsSinceReset !== null
-    ? Math.floor(secondsSinceReset / 86400)
+    ? Math.floor(secondsSinceReset / SECONDS_PER_DAY)
     : null;
   
   // Get postmaster startup time separately (simple inline SQL)
