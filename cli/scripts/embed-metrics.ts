@@ -128,9 +128,8 @@ function generateTypeScript(metrics: Record<string, MetricDefinition>): string {
       // YAML numeric keys may be parsed as numbers or strings depending on context;
       // explicitly convert to ensure consistent numeric keys in output
       const versionNum = typeof versionKey === "number" ? versionKey : parseInt(versionKey, 10);
-      // Use template literal for SQL to preserve formatting
-      const escapedSql = sql.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
-      lines.push(`      ${versionNum}: \`${escapedSql}\`,`);
+      // Use JSON.stringify for robust escaping of all special characters
+      lines.push(`      ${versionNum}: ${JSON.stringify(sql)},`);
     }
     lines.push("    },");
 
