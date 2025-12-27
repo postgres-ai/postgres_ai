@@ -275,11 +275,10 @@ export async function uploadCheckupReportJson(params: {
     rpcName: "checkup_report_file_post",
     bodyObj,
   });
+  // Backend has a typo: "report_chunck_id" (with 'ck') - handle both spellings for compatibility
   const chunkId = Number(resp?.report_chunck_id ?? resp?.report_chunk_id);
   if (!Number.isFinite(chunkId) || chunkId <= 0) {
     throw new Error(`Unexpected checkup_report_file_post response: ${JSON.stringify(resp)}`);
   }
   return { reportChunkId: chunkId };
 }
-
-

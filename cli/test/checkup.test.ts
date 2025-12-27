@@ -331,6 +331,16 @@ describe("formatBytes", () => {
   test("formats gibibytes", () => {
     expect(checkup.formatBytes(1073741824)).toBe("1.00 GiB");
   });
+
+  test("handles negative bytes", () => {
+    expect(checkup.formatBytes(-1024)).toBe("-1.00 KiB");
+    expect(checkup.formatBytes(-1048576)).toBe("-1.00 MiB");
+  });
+
+  test("handles edge cases", () => {
+    expect(checkup.formatBytes(NaN)).toBe("NaN B");
+    expect(checkup.formatBytes(Infinity)).toBe("Infinity B");
+  });
 });
 
 // Mock client tests for report generators
