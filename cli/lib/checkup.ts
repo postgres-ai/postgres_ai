@@ -561,8 +561,12 @@ export async function getClusterInfo(client: Client, pgMajorVersion: number = 16
 }
 
 /**
- * Get invalid indexes (H001)
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (pg_invalid_indexes)
+ * Get invalid indexes from the database (H001).
+ * Invalid indexes are indexes that failed to build (e.g., due to CONCURRENTLY failure).
+ *
+ * @param client - Connected PostgreSQL client
+ * @param pgMajorVersion - PostgreSQL major version (default: 16)
+ * @returns Array of invalid index entries with size and FK support info
  */
 export async function getInvalidIndexes(client: Client, pgMajorVersion: number = 16): Promise<InvalidIndex[]> {
   const sql = getMetricSql(METRIC_NAMES.H001, pgMajorVersion);
@@ -583,8 +587,12 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
 }
 
 /**
- * Get unused indexes (H002)
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (unused_indexes)
+ * Get unused indexes from the database (H002).
+ * Unused indexes have zero scans since stats were last reset.
+ *
+ * @param client - Connected PostgreSQL client
+ * @param pgMajorVersion - PostgreSQL major version (default: 16)
+ * @returns Array of unused index entries with scan counts and FK support info
  */
 export async function getUnusedIndexes(client: Client, pgMajorVersion: number = 16): Promise<UnusedIndex[]> {
   const sql = getMetricSql(METRIC_NAMES.H002, pgMajorVersion);
@@ -695,8 +703,12 @@ function isValidRedundantToItem(item: unknown): item is Record<string, unknown> 
 }
 
 /**
- * Get redundant indexes (H004)
- * SQL loaded from config/pgwatch-prometheus/metrics.yml (redundant_indexes)
+ * Get redundant indexes from the database (H004).
+ * Redundant indexes are covered by other indexes (same leading columns).
+ *
+ * @param client - Connected PostgreSQL client
+ * @param pgMajorVersion - PostgreSQL major version (default: 16)
+ * @returns Array of redundant index entries with covering index info
  */
 export async function getRedundantIndexes(client: Client, pgMajorVersion: number = 16): Promise<RedundantIndex[]> {
   const sql = getMetricSql(METRIC_NAMES.H004, pgMajorVersion);
@@ -1344,7 +1356,14 @@ export const CHECK_INFO: Record<string, string> = {
 };
 
 /**
- * Generate all available reports
+ * Generate all available health check reports.
+ * This is the main entry point for express mode checkup generation.
+ *
+ * @param client - Connected PostgreSQL client
+ * @param nodeName - Node identifier for the report (default: "node-01")
+ * @param onProgress - Optional callback for progress updates during generation
+ * @returns Object mapping check IDs (e.g., "H001", "A002") to their reports
+ * @throws {Error} If any critical report generation fails
  */
 export async function generateAllReports(
   client: Client,
