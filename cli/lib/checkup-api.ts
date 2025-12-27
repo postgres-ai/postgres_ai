@@ -159,9 +159,24 @@ async function postRpc<T>(params: {
 
   // Use AbortController for clean timeout handling
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let settled = false;
 
   return new Promise((resolve, reject) => {
+    const settledReject = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      reject(err);
+    };
+
+    const settledResolve = (value: T) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      resolve(value);
+    };
+
     const req = https.request(
       url,
       {
@@ -173,13 +188,12 @@ async function postRpc<T>(params: {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
-          clearTimeout(timeoutId);
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsed = JSON.parse(data);
-              resolve(unwrapRpcResponse(parsed) as T);
+              settledResolve(unwrapRpcResponse(parsed) as T);
             } catch {
-              reject(new Error(`Failed to parse RPC response: ${data}`));
+              settledReject(new Error(`Failed to parse RPC response: ${data}`));
             }
           } else {
             const statusCode = res.statusCode || 0;
@@ -191,31 +205,37 @@ async function postRpc<T>(params: {
                 payloadJson = null;
               }
             }
-            reject(new RpcError({ rpcName, statusCode, payloadText: data, payloadJson }));
+            settledReject(new RpcError({ rpcName, statusCode, payloadText: data, payloadJson }));
           }
         });
-        res.on("error", () => {
-          clearTimeout(timeoutId);
+        res.on("error", (err) => {
+          settledReject(err);
         });
       }
     );
+
+    // Set up timeout with both abort signal AND req.destroy() as backup
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      req.destroy();  // Backup: ensure request is terminated
+      settledReject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
     
     req.on("error", (err: Error) => {
-      clearTimeout(timeoutId);
-      // Handle abort as timeout
+      // Handle abort as timeout (may already be rejected by timeout handler)
       if (err.name === "AbortError" || (err as any).code === "ABORT_ERR") {
-        reject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
+        settledReject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
         return;
       }
       // Provide clearer error for common network issues
       if ((err as any).code === "ECONNREFUSED") {
-        reject(new Error(`RPC ${rpcName} failed: connection refused to ${url.host}`));
+        settledReject(new Error(`RPC ${rpcName} failed: connection refused to ${url.host}`));
       } else if ((err as any).code === "ENOTFOUND") {
-        reject(new Error(`RPC ${rpcName} failed: DNS lookup failed for ${url.host}`));
+        settledReject(new Error(`RPC ${rpcName} failed: DNS lookup failed for ${url.host}`));
       } else if ((err as any).code === "ECONNRESET") {
-        reject(new Error(`RPC ${rpcName} failed: connection reset by server`));
+        settledReject(new Error(`RPC ${rpcName} failed: connection reset by server`));
       } else {
-        reject(err);
+        settledReject(err);
       }
     });
     
