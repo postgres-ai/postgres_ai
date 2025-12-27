@@ -22,6 +22,21 @@
  *    Before adding or modifying a report, verify the corresponding schema exists
  *    and ensure the output matches. Run schema validation tests to confirm.
  * 
+ * 3. ERROR HANDLING STRATEGY
+ *    Functions follow two patterns based on criticality:
+ * 
+ *    PROPAGATING (throws on error):
+ *    - Core data functions: getPostgresVersion, getSettings, getAlteredSettings,
+ *      getDatabaseSizes, getInvalidIndexes, getUnusedIndexes, getRedundantIndexes
+ *    - If these fail, the entire report should fail (data is required)
+ *    - Callers should handle errors at the report generation level
+ * 
+ *    GRACEFUL DEGRADATION (catches errors, includes error in output):
+ *    - Optional/supplementary queries: pg_stat_statements, pg_stat_kcache checks,
+ *      memory calculations, postmaster startup time
+ *    - These are nice-to-have; missing data shouldn't fail the whole report
+ *    - Errors are logged and included in report output for visibility
+ * 
  * ADDING NEW REPORTS
  * ------------------
  * 1. Add/verify the metric exists in config/pgwatch-prometheus/metrics.yml
@@ -247,8 +262,10 @@ function formatSettingPrettyValue(
 }
 
 /**
- * Get PostgreSQL version information
- * Uses simple inline SQL (trivial query, CLI-specific)
+ * Get PostgreSQL version information.
+ * Uses simple inline SQL (trivial query, CLI-specific).
+ * 
+ * @throws {Error} If database query fails (propagating - critical data)
  */
 export async function getPostgresVersion(client: Client): Promise<PostgresVersion> {
   const result = await client.query(`
@@ -967,7 +984,11 @@ export async function generateH004(client: Client, nodeName: string = "node-01")
 }
 
 /**
- * Generate D004 report - pg_stat_statements and pg_stat_kcache settings
+ * Generate D004 report - pg_stat_statements and pg_stat_kcache settings.
+ * 
+ * Uses graceful degradation: extension queries are wrapped in try-catch
+ * because extensions may not be installed. Errors are included in the
+ * report output rather than failing the entire report.
  */
 async function generateD004(client: Client, nodeName: string): Promise<Report> {
   const report = createBaseReport("D004", "pg_stat_statements and pg_stat_kcache settings", nodeName);
