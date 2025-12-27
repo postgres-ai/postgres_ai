@@ -157,18 +157,23 @@ async function postRpc<T>(params: {
     "Content-Length": Buffer.byteLength(body).toString(),
   };
 
+  // Use AbortController for clean timeout handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   return new Promise((resolve, reject) => {
     const req = https.request(
       url,
       {
         method: "POST",
         headers,
-        timeout: timeoutMs,
+        signal: controller.signal,
       },
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
+          clearTimeout(timeoutId);
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsed = JSON.parse(data);
@@ -189,16 +194,19 @@ async function postRpc<T>(params: {
             reject(new RpcError({ rpcName, statusCode, payloadText: data, payloadJson }));
           }
         });
+        res.on("error", () => {
+          clearTimeout(timeoutId);
+        });
       }
     );
     
-    // Handle timeout event
-    req.on("timeout", () => {
-      req.destroy();
-      reject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
-    });
-    
     req.on("error", (err: Error) => {
+      clearTimeout(timeoutId);
+      // Handle abort as timeout
+      if (err.name === "AbortError" || (err as any).code === "ABORT_ERR") {
+        reject(new Error(`RPC ${rpcName} timed out after ${timeoutMs}ms`));
+        return;
+      }
       // Provide clearer error for common network issues
       if ((err as any).code === "ECONNREFUSED") {
         reject(new Error(`RPC ${rpcName} failed: connection refused to ${url.host}`));
