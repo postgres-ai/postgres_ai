@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "A007 report schema",
+  "title": "A013 report schema",
   "type": "object",
   "additionalProperties": false,
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
@@ -8,8 +8,8 @@
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
     "generation_mode": { "type": ["string", "null"] },
-    "checkId": { "const": "A007" },
-    "checkTitle": { "const": "Altered settings" },
+    "checkId": { "const": "A013" },
+    "checkTitle": { "const": "Postgres minor version" },
     "timestamptz": { "type": "string" },
     "nodes": { "$ref": "#/$defs/nodes" },
     "results": {
@@ -39,31 +39,21 @@
         "server_minor_ver": { "type": "string" }
       }
     },
-    "alteredSetting": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["value", "unit", "category", "pretty_value"],
-      "properties": {
-        "value": { "type": "string" },
-        "unit": { "type": "string" },
-        "category": { "type": "string" },
-        "pretty_value": { "type": "string" }
-      }
-    },
     "data": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/alteredSetting" }
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": { "$ref": "#/$defs/postgresVersion" }
+      }
     },
     "nodeResult": {
       "type": "object",
       "additionalProperties": false,
       "required": ["data"],
       "properties": {
-        "data": { "$ref": "#/$defs/data" },
-        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+        "data": { "$ref": "#/$defs/data" }
       }
     }
   }
 }
-
-

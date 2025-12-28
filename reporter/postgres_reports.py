@@ -2,8 +2,23 @@
 """
 PostgreSQL Reports Generator using PromQL
 
-This script generates reports for specific PostgreSQL check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004, K001, K003, K004, K005, K006, K007, K008, M001, M002, M003, N001)
-by querying Prometheus metrics using PromQL queries.
+This script generates JSON reports containing Observations for specific PostgreSQL
+check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004,
+K001, K003, K004, K005, K006, K007, K008, M001, M002, M003, N001) by querying
+Prometheus metrics using PromQL.
+
+IMPORTANT: Scope of this module
+-------------------------------
+This module ONLY generates JSON reports with raw Observations (data collected
+from Prometheus/PostgreSQL). The following are explicitly OUT OF SCOPE:
+
+  - Converting JSON reports to other formats (Markdown, HTML, PDF, etc.)
+  - Generating Conclusions based on Observations
+  - Generating Recommendations based on Conclusions
+  - Any report rendering or presentation logic
+
+These responsibilities are handled by separate components in the system.
+The JSON output from this module serves as input for downstream processing.
 """
 
 __version__ = "1.0.2"
@@ -32,7 +47,73 @@ from reporter.logger import logger
 class PostgresReportGenerator:
     # Default databases to always exclude
     DEFAULT_EXCLUDED_DATABASES = {'template0', 'template1', 'rdsadmin', 'azure_maintenance', 'cloudsqladmin'}
-    
+
+    # Settings filter lists for reports based on A003
+    D004_SETTINGS = [
+        'pg_stat_statements.max',
+        'pg_stat_statements.track',
+        'pg_stat_statements.track_utility',
+        'pg_stat_statements.save',
+        'pg_stat_statements.track_planning',
+        'shared_preload_libraries',
+        'track_activities',
+        'track_counts',
+        'track_functions',
+        'track_io_timing',
+        'track_wal_io_timing'
+    ]
+
+    F001_SETTINGS = [
+        'autovacuum',
+        'autovacuum_analyze_scale_factor',
+        'autovacuum_analyze_threshold',
+        'autovacuum_freeze_max_age',
+        'autovacuum_max_workers',
+        'autovacuum_multixact_freeze_max_age',
+        'autovacuum_naptime',
+        'autovacuum_vacuum_cost_delay',
+        'autovacuum_vacuum_cost_limit',
+        'autovacuum_vacuum_insert_scale_factor',
+        'autovacuum_vacuum_scale_factor',
+        'autovacuum_vacuum_threshold',
+        'autovacuum_work_mem',
+        'vacuum_cost_delay',
+        'vacuum_cost_limit',
+        'vacuum_cost_page_dirty',
+        'vacuum_cost_page_hit',
+        'vacuum_cost_page_miss',
+        'vacuum_freeze_min_age',
+        'vacuum_freeze_table_age',
+        'vacuum_multixact_freeze_min_age',
+        'vacuum_multixact_freeze_table_age'
+    ]
+
+    G001_SETTINGS = [
+        'shared_buffers',
+        'work_mem',
+        'maintenance_work_mem',
+        'effective_cache_size',
+        'autovacuum_work_mem',
+        'max_wal_size',
+        'min_wal_size',
+        'wal_buffers',
+        'checkpoint_completion_target',
+        'max_connections',
+        'max_prepared_transactions',
+        'max_locks_per_transaction',
+        'max_pred_locks_per_transaction',
+        'max_pred_locks_per_relation',
+        'max_pred_locks_per_page',
+        'logical_decoding_work_mem',
+        'hash_mem_multiplier',
+        'temp_buffers',
+        'shared_preload_libraries',
+        'dynamic_shared_memory_type',
+        'huge_pages',
+        'max_files_per_process',
+        'max_stack_depth'
+    ]
+
     def __init__(self, prometheus_url: str = "http://sink-prometheus:9090", 
                  postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements",
                  excluded_databases: Optional[List[str]] = None):
@@ -795,6 +876,20 @@ class PostgresReportGenerator:
                                                                                                             {}).get(
                         'result') else False
 
+                    # Build redundant_to array from the reason field
+                    # The reason field contains comma-separated index names
+                    # (the indexes that make this index redundant)
+                    # Note: In full mode, index sizes for redundant_to are not available
+                    # (would require additional Prometheus queries). Use express mode for sizes.
+                    redundant_to = []
+                    for idx_name in [r.strip() for r in reason.split(',') if r.strip()]:
+                        redundant_to.append({
+                            "index_name": idx_name,
+                            "index_definition": index_definitions.get(idx_name, 'Definition not available'),
+                            "index_size_bytes": 0,
+                            "index_size_pretty": "N/A"
+                        })
+
                     redundant_index = {
                         "schema_name": schema_name,
                         "table_name": table_name,
@@ -808,7 +903,8 @@ class PostgresReportGenerator:
                         "supports_fk": supports_fk,
                         "index_definition": index_definitions.get(index_name, 'Definition not available'),
                         "index_size_pretty": self.format_bytes(index_size_bytes),
-                        "table_size_pretty": self.format_bytes(table_size_bytes)
+                        "table_size_pretty": self.format_bytes(table_size_bytes),
+                        "redundant_to": redundant_to
                     }
 
                     redundant_indexes.append(redundant_index)
@@ -3395,6 +3491,7 @@ class PostgresReportGenerator:
         template_data = {
             "version": self._build_metadata.get("version"),
             "build_ts": self._build_metadata.get("build_ts"),
+            "generation_mode": "full",
             "checkId": check_id,
             "checkTitle": self.get_check_title(check_id),
             "timestamptz": now.isoformat(),
@@ -3404,13 +3501,183 @@ class PostgresReportGenerator:
 
         return template_data
 
+    def filter_a003_settings(self, a003_report: Dict[str, Any], setting_names: List[str]) -> Dict[str, Any]:
+        """
+        Filter A003 settings data to include only specified settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            setting_names: List of setting names to include
+
+        Returns:
+            Filtered settings dictionary
+        """
+        filtered = {}
+        # Handle both single-node and multi-node A003 report structures
+        results = a003_report.get('results', {})
+        for node_name, node_data in results.items():
+            data = node_data.get('data', {})
+            for setting_name, setting_info in data.items():
+                if setting_name in setting_names:
+                    filtered[setting_name] = setting_info
+        return filtered
+
+    def extract_postgres_version_from_a003(self, a003_report: Dict[str, Any], node_name: str = None) -> Dict[str, str]:
+        """
+        Extract PostgreSQL version info from A003 report settings data.
+
+        Derives version from server_version and server_version_num settings
+        which are part of the A003 settings data.
+
+        Args:
+            a003_report: Full A003 report
+            node_name: Optional specific node name. If None, uses first available node.
+
+        Returns:
+            Dictionary with postgres version info (version, server_version_num, server_major_ver, server_minor_ver)
+        """
+        results = a003_report.get('results', {})
+        if not results:
+            return {}
+
+        # Get the node data
+        if node_name and node_name in results:
+            node_data = results[node_name]
+        else:
+            node_data = next(iter(results.values()), {})
+
+        # First check if postgres_version is already in the node result
+        if node_data.get('postgres_version'):
+            return node_data['postgres_version']
+
+        # Otherwise, extract from settings data (server_version, server_version_num)
+        data = node_data.get('data', {})
+        version_str = None
+        version_num = None
+
+        # Look for server_version and server_version_num in settings
+        if 'server_version' in data:
+            version_str = data['server_version'].get('setting', '')
+        if 'server_version_num' in data:
+            version_num = data['server_version_num'].get('setting', '')
+
+        if not version_str and not version_num:
+            return {}
+
+        # Parse version numbers
+        major_ver = ""
+        minor_ver = ""
+        if version_num and len(version_num) >= 6:
+            try:
+                num = int(version_num)
+                major_ver = str(num // 10000)
+                minor_ver = str(num % 10000)
+            except ValueError:
+                pass
+
+        return {
+            "version": version_str or "",
+            "server_version_num": version_num or "",
+            "server_major_ver": major_ver,
+            "server_minor_ver": minor_ver
+        }
+
+    def generate_d004_from_a003(self, a003_report: Dict[str, Any], cluster: str = "local",
+                                 node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate D004 report by filtering A003 data for pg_stat_statements settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            cluster: Cluster name (for status checks)
+            node_name: Node name
+
+        Returns:
+            D004 report dictionary
+        """
+        print("Generating D004 from A003 data...")
+
+        # Filter A003 settings for D004-relevant settings
+        pgstat_data = self.filter_a003_settings(a003_report, self.D004_SETTINGS)
+
+        # Check extension status (still needs direct queries)
+        kcache_status = self._check_pg_stat_kcache_status(cluster, node_name)
+        pgss_status = self._check_pg_stat_statements_status(cluster, node_name)
+
+        # Extract postgres version from A003
+        postgres_version = self.extract_postgres_version_from_a003(a003_report, node_name)
+
+        return self.format_report_data(
+            "D004",
+            {
+                "settings": pgstat_data,
+                "pg_stat_statements_status": pgss_status,
+                "pg_stat_kcache_status": kcache_status,
+            },
+            node_name,
+            postgres_version=postgres_version,
+        )
+
+    def generate_f001_from_a003(self, a003_report: Dict[str, Any], node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate F001 report by filtering A003 data for autovacuum settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            node_name: Node name
+
+        Returns:
+            F001 report dictionary
+        """
+        print("Generating F001 from A003 data...")
+
+        # Filter A003 settings for F001-relevant settings
+        autovacuum_data = self.filter_a003_settings(a003_report, self.F001_SETTINGS)
+
+        # Extract postgres version from A003
+        postgres_version = self.extract_postgres_version_from_a003(a003_report, node_name)
+
+        return self.format_report_data("F001", autovacuum_data, node_name, postgres_version=postgres_version)
+
+    def generate_g001_from_a003(self, a003_report: Dict[str, Any], node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate G001 report by filtering A003 data for memory settings.
+
+        Args:
+            a003_report: Full A003 report containing all settings
+            node_name: Node name
+
+        Returns:
+            G001 report dictionary with memory analysis
+        """
+        print("Generating G001 from A003 data...")
+
+        # Filter A003 settings for G001-relevant settings
+        memory_data = self.filter_a003_settings(a003_report, self.G001_SETTINGS)
+
+        # Calculate memory analysis
+        memory_analysis = self._analyze_memory_settings(memory_data)
+
+        # Extract postgres version from A003
+        postgres_version = self.extract_postgres_version_from_a003(a003_report, node_name)
+
+        return self.format_report_data(
+            "G001",
+            {
+                "settings": memory_data,
+                "analysis": memory_analysis,
+            },
+            node_name,
+            postgres_version=postgres_version,
+        )
+
     def get_check_title(self, check_id: str) -> str:
         """
         Get the human-readable title for a check ID.
-        
+
         Args:
             check_id: The check identifier (e.g., "H004")
-            
+
         Returns:
             Human-readable title for the check
         """
@@ -3688,17 +3955,14 @@ class PostgresReportGenerator:
             nodes_to_process = [node_name]
             all_nodes = {"primary": node_name, "standbys": []}
 
-        # Generate each report type
-        report_types = [
+        # Reports that don't depend on A003 (generate first)
+        independent_report_types = [
             ('A002', self.generate_a002_version_report),
             ('A003', self.generate_a003_settings_report),
             ('A004', self.generate_a004_cluster_report),
             ('A007', self.generate_a007_altered_settings_report),
-            ('D004', self.generate_d004_pgstat_settings_report),
-            ('F001', self.generate_f001_autovacuum_settings_report),
             ('F004', self.generate_f004_heap_bloat_report),
             ('F005', self.generate_f005_btree_bloat_report),
-            ('G001', self.generate_g001_memory_settings_report),
             ('H001', self.generate_h001_invalid_indexes_report),
             ('H002', self.generate_h002_unused_indexes_report),
             ('H004', self.generate_h004_redundant_indexes_report),
@@ -3715,7 +3979,7 @@ class PostgresReportGenerator:
             ('N001', self.generate_n001_wait_events_report),
         ]
 
-        for check_id, report_func in report_types:
+        for check_id, report_func in independent_report_types:
             # Determine if this report needs hourly parameters
             pgss_hourly_reports = ['K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008', 'M001', 'M002', 'M003']
             wait_events_reports = ['N001']
@@ -3743,8 +4007,8 @@ class PostgresReportGenerator:
                 
                 # Create combined report with all nodes
                 reports[check_id] = self.format_report_data(
-                    check_id, 
-                    combined_results, 
+                    check_id,
+                    combined_results,
                     all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
                     all_nodes
                 )
@@ -3755,6 +4019,61 @@ class PostgresReportGenerator:
             # Periodic garbage collection during report generation
             if len(reports) % 5 == 0:
                 gc.collect()
+
+        # Generate D004, F001, G001 from A003 data (if A003 was generated successfully)
+        a003_report = reports.get('A003')
+        if a003_report:
+            # Reports derived from A003
+            a003_derived_reports = [
+                ('D004', lambda c, n: self.generate_d004_from_a003(a003_report, c, n)),
+                ('F001', lambda c, n: self.generate_f001_from_a003(a003_report, n)),
+                ('G001', lambda c, n: self.generate_g001_from_a003(a003_report, n)),
+            ]
+
+            for check_id, report_func in a003_derived_reports:
+                if len(nodes_to_process) == 1:
+                    reports[check_id] = report_func(cluster, nodes_to_process[0])
+                else:
+                    # For multi-node, use the first node as reference
+                    # (A003 data already contains all nodes)
+                    combined_results = {}
+                    for node in nodes_to_process:
+                        print(f"Generating {check_id} report for node {node} from A003...")
+                        node_report = report_func(cluster, node)
+                        if 'results' in node_report and node in node_report['results']:
+                            combined_results[node] = node_report['results'][node]
+
+                    reports[check_id] = self.format_report_data(
+                        check_id,
+                        combined_results,
+                        all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
+                        all_nodes
+                    )
+        else:
+            # Fallback to direct generation if A003 failed
+            print("Warning: A003 report not available, generating D004/F001/G001 directly")
+            fallback_report_types = [
+                ('D004', self.generate_d004_pgstat_settings_report),
+                ('F001', self.generate_f001_autovacuum_settings_report),
+                ('G001', self.generate_g001_memory_settings_report),
+            ]
+            for check_id, report_func in fallback_report_types:
+                if len(nodes_to_process) == 1:
+                    reports[check_id] = report_func(cluster, nodes_to_process[0])
+                else:
+                    combined_results = {}
+                    for node in nodes_to_process:
+                        print(f"Generating {check_id} report for node {node}...")
+                        node_report = report_func(cluster, node)
+                        if 'results' in node_report and node in node_report['results']:
+                            combined_results[node] = node_report['results'][node]
+
+                    reports[check_id] = self.format_report_data(
+                        check_id,
+                        combined_results,
+                        all_nodes["primary"] if all_nodes["primary"] else nodes_to_process[0],
+                        all_nodes
+                    )
 
         return reports
 
@@ -4601,7 +4920,13 @@ def main():
                 # Generate specific report - use node_name or default
                 if args.node_name is None:
                     args.node_name = "node-01"
-                    
+
+                # For D004, F001, G001 - generate A003 first and derive from it
+                a003_report = None
+                if args.check_id in ('D004', 'F001', 'G001'):
+                    print(f"Generating A003 first for {args.check_id}...")
+                    a003_report = generator.generate_a003_settings_report(cluster, args.node_name)
+
                 if args.check_id == 'A002':
                     report = generator.generate_a002_version_report(cluster, args.node_name)
                 elif args.check_id == 'A003':
@@ -4611,15 +4936,24 @@ def main():
                 elif args.check_id == 'A007':
                     report = generator.generate_a007_altered_settings_report(cluster, args.node_name)
                 elif args.check_id == 'D004':
-                    report = generator.generate_d004_pgstat_settings_report(cluster, args.node_name)
+                    if a003_report:
+                        report = generator.generate_d004_from_a003(a003_report, cluster, args.node_name)
+                    else:
+                        report = generator.generate_d004_pgstat_settings_report(cluster, args.node_name)
                 elif args.check_id == 'F001':
-                    report = generator.generate_f001_autovacuum_settings_report(cluster, args.node_name)
+                    if a003_report:
+                        report = generator.generate_f001_from_a003(a003_report, args.node_name)
+                    else:
+                        report = generator.generate_f001_autovacuum_settings_report(cluster, args.node_name)
                 elif args.check_id == 'F004':
                     report = generator.generate_f004_heap_bloat_report(cluster, args.node_name)
                 elif args.check_id == 'F005':
                     report = generator.generate_f005_btree_bloat_report(cluster, args.node_name)
                 elif args.check_id == 'G001':
-                    report = generator.generate_g001_memory_settings_report(cluster, args.node_name)
+                    if a003_report:
+                        report = generator.generate_g001_from_a003(a003_report, args.node_name)
+                    else:
+                        report = generator.generate_g001_memory_settings_report(cluster, args.node_name)
                 elif args.check_id == 'H001':
                     report = generator.generate_h001_invalid_indexes_report(cluster, args.node_name)
                 elif args.check_id == 'H002':
@@ -4649,8 +4983,11 @@ def main():
                 elif args.check_id == 'N001':
                     report = generator.generate_n001_wait_events_report(cluster, args.node_name, hours=24)
 
-                output_filename = f"{cluster}_{args.check_id}.json" if len(clusters_to_process) > 1 else args.output
-                
+                # Determine output filename
+                base_name = f"{cluster}_{args.check_id}" if len(clusters_to_process) > 1 else args.check_id
+                output_filename = f"{base_name}.json" if args.output == '-' else args.output
+
+                # Output JSON report
                 if args.output == '-' and len(clusters_to_process) == 1:
                     # Report payload to stdout must remain raw JSON (not prefixed with log metadata).
                     sys.stdout.write(json.dumps(report, indent=2) + "\n")

@@ -7,6 +7,7 @@
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "K003" },
     "checkTitle": { "const": "Top queries by total time (total_exec_time + total_plan_time)" },
     "timestamptz": { "type": "string" },

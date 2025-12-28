@@ -9,6 +9,7 @@ export interface Config {
   apiKey: string | null;
   baseUrl: string | null;
   orgId: number | null;
+  defaultProject: string | null;
 }
 
 /**
@@ -46,6 +47,7 @@ export function readConfig(): Config {
     apiKey: null,
     baseUrl: null,
     orgId: null,
+    defaultProject: null,
   };
 
   // Try user-level config first
@@ -57,6 +59,7 @@ export function readConfig(): Config {
       config.apiKey = parsed.apiKey || null;
       config.baseUrl = parsed.baseUrl || null;
       config.orgId = parsed.orgId || null;
+      config.defaultProject = parsed.defaultProject || null;
       return config;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

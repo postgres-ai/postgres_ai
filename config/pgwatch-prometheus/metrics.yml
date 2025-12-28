@@ -366,21 +366,67 @@ metrics:
       pgwatch overrides these during metric collection, which would mask the actual configured values.
     sqls:
       11: |-
-        select /* pgwatch_generated */
+        with base as ( /* pgwatch_generated */
+          select
+            name,
+            -- Use reset_val for lock_timeout/statement_timeout because pgwatch overrides them
+            -- during collection (lock_timeout=100ms, statement_timeout per-metric).
+            case
+              when name in ('lock_timeout', 'statement_timeout') then reset_val
+              else setting
+            end as effective_setting,
+            unit,
+            category,
+            vartype,
+            -- For lock_timeout/statement_timeout, compare reset_val with boot_val
+            -- since source becomes 'session' during collection.
+            case
+              when name in ('lock_timeout', 'statement_timeout') then (reset_val = boot_val)
+              else (source = 'default')
+            end as is_default_bool
+          from pg_settings
+        ), with_numeric as (
+          select
+            *,
+            case
+              when effective_setting ~ '^-?[0-9]+$' then effective_setting::bigint
+              else null
+            end as numeric_value
+          from base
+        )
+        select
           (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
           current_database() as tag_datname,
           name as tag_setting_name,
-          -- Use reset_val for lock_timeout/statement_timeout because pgwatch overrides them during
-          -- collection (lock_timeout=100ms, statement_timeout per-metric), masking actual config.
-          case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end as tag_setting_value,
+          effective_setting as tag_setting_value,
           unit as tag_unit,
           category as tag_category,
           vartype as tag_vartype,
-          case when (case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end) ~ '^-?[0-9]+$' then (case when name in ('lock_timeout', 'statement_timeout') then reset_val else setting end)::bigint else null end as numeric_value,
-          -- For these settings, compare reset_val with boot_val since source becomes 'session' during collection
-          case when name in ('lock_timeout', 'statement_timeout') then (case when reset_val = boot_val then 1 else 0 end) else (case when source <> 'default' then 0 else 1 end) end as is_default,
+          numeric_value,
+          case
+            when numeric_value is null then null
+            when unit = '8kB' then numeric_value * 8192
+            when unit = 'kB' then numeric_value * 1024
+            when unit = 'MB' then numeric_value * 1024 * 1024
+            when unit = 'B' then numeric_value
+            when unit = 'ms' then numeric_value::numeric / 1000
+            when unit = 's' then numeric_value::numeric
+            when unit = 'min' then numeric_value::numeric * 60
+            else null
+          end as setting_normalized,
+          case unit
+            when '8kB' then 'bytes'
+            when 'kB' then 'bytes'
+            when 'MB' then 'bytes'
+            when 'B' then 'bytes'
+            when 'ms' then 'seconds'
+            when 's' then 'seconds'
+            when 'min' then 'seconds'
+            else null
+          end as unit_normalized,
+          case when is_default_bool then 1 else 0 end as is_default,
           1 as configured
-        from pg_settings
+        from with_numeric
     gauges:
       - '*'
     is_instance_level: true
@@ -1637,7 +1683,7 @@ metrics:
             (i1.indexrelid::regclass)::text as reason,
             i1.indexrelid as reason_index_id,
             pg_get_indexdef(i1.indexrelid) main_index_def,
-            pg_size_pretty(pg_relation_size(i1.indexrelid)) main_index_size,
+            pg_relation_size(i1.indexrelid) main_index_size_bytes,
             pg_get_indexdef(i2.indexrelid) index_def,
             pg_relation_size(i2.indexrelid) index_size_bytes,
             s.idx_scan as index_usage,
@@ -1717,11 +1763,19 @@ metrics:
             string_agg(distinct reason, ', ') as tag_reason,
             index_size_bytes,
             index_usage,
+            index_def as index_definition,
             formated_index_name as tag_index_name,
             formated_schema_name as tag_schema_name,
             formated_table_name as tag_table_name,
             formated_relation_name as tag_relation_name,
-            supports_fk::int as supports_fk
+            supports_fk::int as supports_fk,
+            json_agg(
+              distinct jsonb_build_object(
+                'index_name', reason,
+                'index_definition', main_index_def,
+                'index_size_bytes', main_index_size_bytes
+              )
+            )::text as redundant_to_json
           from redundant_indexes_cut_grouped
           group by
             index_id,
@@ -1836,6 +1890,7 @@ metrics:
           schema_name as tag_schema_name,
           table_name as tag_table_name,
           index_name as tag_index_name,
+          pg_get_indexdef(index_id) as index_definition,
           idx_scan,
           all_scans,
           index_scan_pct,
@@ -2021,6 +2076,7 @@ metrics:
       - 'stats_reset_epoch'
       - 'seconds_since_reset'
     statement_timeout_seconds: 15
+
   archive_lag:
     description: >
       This metric measures the lag in WAL archive processing.

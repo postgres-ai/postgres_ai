@@ -7,6 +7,7 @@
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "K004" },
     "checkTitle": { "const": "Top queries by temp bytes written" },
     "timestamptz": { "type": "string" },
