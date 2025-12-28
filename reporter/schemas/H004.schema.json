@@ -7,6 +7,7 @@
   "properties": {
     "version": { "type": ["string", "null"] },
     "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
     "checkId": { "const": "H004" },
     "checkTitle": { "const": "Redundant indexes" },
     "timestamptz": { "type": "string" },
@@ -38,6 +39,17 @@
         "server_minor_ver": { "type": "string" }
       }
     },
+    "redundantToIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index_name", "index_definition", "index_size_bytes", "index_size_pretty"],
+      "properties": {
+        "index_name": { "type": "string" },
+        "index_definition": { "type": "string" },
+        "index_size_bytes": { "type": "number" },
+        "index_size_pretty": { "type": "string" }
+      }
+    },
     "redundantIndex": {
       "type": "object",
       "additionalProperties": false,
@@ -54,7 +66,8 @@
         "supports_fk",
         "index_definition",
         "index_size_pretty",
-        "table_size_pretty"
+        "table_size_pretty",
+        "redundant_to"
       ],
       "properties": {
         "schema_name": { "type": "string" },
@@ -69,7 +82,9 @@
         "supports_fk": { "type": "boolean" },
         "index_definition": { "type": "string" },
         "index_size_pretty": { "type": "string" },
-        "table_size_pretty": { "type": "string" }
+        "table_size_pretty": { "type": "string" },
+        "redundant_to": { "type": "array", "items": { "$ref": "#/$defs/redundantToIndex" } },
+        "redundant_to_parse_error": { "type": "string" }
       }
     },
     "dbEntry": {

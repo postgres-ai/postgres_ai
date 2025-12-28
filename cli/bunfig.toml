@@ -1,0 +1,11 @@
+# Bun configuration for postgres_ai CLI
+# https://bun.sh/docs/runtime/bunfig
+
+[test]
+# Default timeout for all tests (30 seconds)
+# Integration tests that connect to databases need longer timeouts
+timeout = 30000
+
+# Coverage settings (if needed in future)
+# coverage = true
+# coverageDir = "coverage"

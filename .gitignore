@@ -58,6 +58,10 @@ cli/**/*.js.map
 cli/**/*.d.ts
 cli/**/*.d.ts.map
 !cli/jest.config.js
+!cli/packages/postgres-ai/bin/postgres-ai.js
+
+# Generated at build time from metrics.yml
+cli/lib/metrics-embedded.ts
 
 # Generated config files (these are created by the sources-generator)
 config/pgwatch-postgres/sources.yml

@@ -362,8 +362,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
       } finally {
         await pg.cleanup();
       }
-    },
-    { timeout: 15000 }
+    }
   );
 
   test("--reset-password updates the monitoring role login password", async () => {
