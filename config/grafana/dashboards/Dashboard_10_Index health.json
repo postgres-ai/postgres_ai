@@ -501,39 +501,6 @@
       "title": "Top $top_n indexes by tuples read",
       "type": "timeseries"
     },
-      "options": {
-        "legend": {
-          "calcs": [
-            "min",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "sortBy": "Max",
-          "sortDesc": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_all_indexes_idx_tup_read{cluster='$cluster_name', node_name='$node_name', datname=\"$db_name\"}[$__rate_interval]))",
-          "interval": "20",
-          "legendFormat": "{{schemaname}}.{{relname}}.{{indexrelname}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Top $top_n indexes by tuples read",
-      "type": "timeseries"
-    },
     {
       "datasource": {
         "type": "prometheus",
@@ -705,7 +672,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -746,7 +713,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n indexes by reads (bytes)",
+      "title": "Top $top_n indexes by block reads",
       "type": "timeseries"
     },
     {
@@ -806,7 +773,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -847,7 +814,7 @@
           "refId": "A"
         }
       ],
-      "title": "Top $top_n indexes by hits (bytes)",
+      "title": "Top $top_n indexes by block hits",
       "type": "timeseries"
     },
     {

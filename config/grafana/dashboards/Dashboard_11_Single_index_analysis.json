@@ -423,7 +423,7 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "binBps"
         },
         "overrides": []
       },
@@ -470,7 +470,7 @@
           "refId": "B"
         }
       ],
-      "title": "Index reads and hits (bytes)",
+      "title": "Shared block reads and hits",
       "type": "timeseries"
     },
     {
@@ -693,7 +693,7 @@
           "refId": "C"
         }
       ],
-      "title": "",
+      "title": "Boguk ratio (index size / reltuples)",
       "transformations": [
         {
           "id": "calculateField",
