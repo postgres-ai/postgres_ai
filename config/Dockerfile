@@ -25,7 +25,7 @@ COPY pgwatch-postgres/metrics.yml /postgres_ai_configs/pgwatch/metrics.yml
 COPY pgwatch-prometheus/metrics.yml /postgres_ai_configs/pgwatch-prometheus/metrics.yml
 COPY prometheus/ /postgres_ai_configs/prometheus/
 COPY sink-postgres/ /postgres_ai_configs/sink-postgres/
-# Demo DB – used only for `quickstart --demo`
+# Demo DB – used only for `mon local-install --demo`
 COPY target-db/ /postgres_ai_configs/target-db/
 
 # Copy infrastructure scripts (entrypoints, generators, etc.)

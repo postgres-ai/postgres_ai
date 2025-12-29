@@ -179,7 +179,8 @@ Method 2: Manual configuration (avoids credentials in state):
 ssh ubuntu@your-ip
 cd /home/postgres_ai/postgres_ai
 sudo -u postgres_ai vim instances.yml
-sudo -u postgres_ai ./postgres_ai update-config
+sudo -u postgres_ai docker-compose run --rm sources-generator
+sudo -u postgres_ai docker-compose restart pgwatch-postgres pgwatch-prometheus
 ```
 
 ### Backup
