@@ -283,8 +283,8 @@ cli:npm:publish:
   echo "Logging into container registry..."
   echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
 
-  echo "Enabling binfmt (QEMU) for multi-arch builds..."
-  docker run --privileged --rm tonistiigi/binfmt --install all
+  echo "Enabling binfmt (QEMU) for arm64 builds..."
+  docker run --privileged --rm tonistiigi/binfmt --install arm64
 
   echo "Creating/using buildx builder..."
   docker buildx create --name postgres-ai-builder --use 2>/dev/null || docker buildx use postgres-ai-builder
@@ -351,7 +351,7 @@ docker:publish:images:
 
       VERSION="$RAW_TAG"
       BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-      PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
+      PLATFORMS="linux/amd64,linux/arm64"
     - *docker-build-script
   rules:
     - if: '$CI_COMMIT_TAG'
