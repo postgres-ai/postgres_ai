@@ -422,7 +422,7 @@
           "useBackend": false
         }
       ],
-      "title": "Table logical size distribution changes (absolute)",
+      "title": "Size growth /s",
       "transformations": [
         {
           "id": "calculateField",
@@ -663,7 +663,7 @@
       },
       "id": 30,
       "panels": [],
-      "title": "Tuple stats",
+      "title": "Activity stats",
       "type": "row"
     },
     {
@@ -884,7 +884,7 @@
           "useBackend": false
         }
       ],
-      "title": "Tuple operations",
+      "title": "Tuple operations /s",
       "transformations": [
         {
           "id": "calculateField",
@@ -1145,7 +1145,7 @@
           "useBackend": false
         }
       ],
-      "title": "Tuple operations (%)",
+      "title": "Tuple operations distribution (%)",
       "transformations": [
         {
           "id": "calculateField",
@@ -1426,7 +1426,7 @@
           "useBackend": false
         }
       ],
-      "title": "Live tuples fetch distribution",
+      "title": "Tuple fetch methods /s",
       "type": "timeseries"
     },
     {
@@ -1610,7 +1610,7 @@
           "refId": "E"
         }
       ],
-      "title": "Shared block hits",
+      "title": "Shared block hits /s",
       "transformations": [
         {
           "id": "calculateField",
@@ -1787,7 +1787,7 @@
           "refId": "E"
         }
       ],
-      "title": "Shared block reads",
+      "title": "Shared block reads /s",
       "transformations": [
         {
           "id": "calculateField",

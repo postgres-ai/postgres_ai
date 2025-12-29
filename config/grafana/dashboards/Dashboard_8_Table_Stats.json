@@ -659,7 +659,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by size change rate (absolute)",
+      "title": "Top $top_n tables by size growth /s",
       "type": "timeseries"
     },
     {
@@ -761,7 +761,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (w/o TOAST) size",
+      "title": "Top $top_n tables by heap size (excl. TOAST)",
       "type": "timeseries"
     },
     {
@@ -863,7 +863,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (w/o TOAST) size change rate (absolute)",
+      "title": "Top $top_n tables by heap size growth /s",
       "type": "timeseries"
     },
     {
@@ -1067,7 +1067,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by TOAST size change rate (absolute)",
+      "title": "Top $top_n tables by TOAST size growth /s",
       "type": "timeseries"
     },
     {
@@ -1169,7 +1169,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by index size",
+      "title": "Top $top_n tables by indexes size",
       "type": "timeseries"
     },
     {
@@ -1271,7 +1271,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by index size change rate (absolute)",
+      "title": "Top $top_n tables by indexes size growth /s",
       "type": "timeseries"
     },
     {
@@ -1284,7 +1284,7 @@
       },
       "id": 11,
       "panels": [],
-      "title": "Tuple stats",
+      "title": "Activity stats",
       "type": "row"
     },
     {
@@ -2474,7 +2474,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (without TOAST) shared block hits",
+      "title": "Top $top_n tables by heap shared block hits",
       "type": "timeseries"
     },
     {
@@ -2577,7 +2577,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (without TOAST) shared block reads",
+      "title": "Top $top_n tables by heap shared block reads",
       "type": "timeseries"
     },
     {
