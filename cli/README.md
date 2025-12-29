@@ -330,6 +330,27 @@ postgresai auth --debug \
 Notes:
 - If `PGAI_UI_BASE_URL` is not set, the default is `https://console.postgres.ai`.
 
+## Development
+
+### Testing
+
+The CLI uses [Bun](https://bun.sh/) as the test runner with built-in coverage reporting.
+
+```bash
+# Run tests with coverage (default)
+bun run test
+
+# Run tests without coverage (faster iteration during development)
+bun run test:fast
+
+# Run tests with coverage and show report location
+bun run test:coverage
+```
+
+Coverage configuration is in `bunfig.toml`. Reports are generated in `coverage/` directory:
+- `coverage/lcov-report/index.html` - HTML coverage report
+- `coverage/lcov.info` - LCOV format for CI integration
+
 ## Requirements
 
 - Node.js 18 or higher

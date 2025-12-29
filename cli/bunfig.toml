@@ -6,6 +6,14 @@
 # Integration tests that connect to databases need longer timeouts
 timeout = 30000
 
-# Coverage settings (if needed in future)
-# coverage = true
-# coverageDir = "coverage"
+# Coverage settings - enabled by default for test runs
+coverage = true
+coverageDir = "coverage"
+
+# Skip coverage for test files and node_modules
+coverageSkipTestFiles = true
+
+# Reporter format for CI integration
+# - text: console output with summary table
+# - lcov: standard format for coverage tools
+coverageReporter = ["text", "lcov"]

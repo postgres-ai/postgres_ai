@@ -32,6 +32,8 @@
     "start:node": "node ./dist/bin/postgres-ai.js --help",
     "dev": "bun run embed-metrics && bun --watch ./bin/postgres-ai.ts",
     "test": "bun run embed-metrics && bun test",
+    "test:fast": "bun run embed-metrics && bun test --coverage=false",
+    "test:coverage": "bun run embed-metrics && bun test --coverage && echo 'Coverage report: cli/coverage/lcov-report/index.html'",
     "typecheck": "bun run embed-metrics && bunx tsc --noEmit"
   },
   "dependencies": {
