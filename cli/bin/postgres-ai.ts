@@ -10,7 +10,7 @@ import * as os from "os";
 import * as crypto from "node:crypto";
 import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
-import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
+import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
 import * as pkce from "../lib/pkce";
@@ -42,7 +42,7 @@ async function execPromise(command: string): Promise<{ stdout: string; stderr: s
     childProcess.exec(command, (error, stdout, stderr) => {
       if (error) {
         const err = error as Error & { code: number };
-        err.code = error.code ?? 1;
+        err.code = typeof error.code === "number" ? error.code : 1;
         reject(err);
       } else {
         resolve({ stdout, stderr });
@@ -56,7 +56,7 @@ async function execFilePromise(file: string, args: string[]): Promise<{ stdout: 
     childProcess.execFile(file, args, (error, stdout, stderr) => {
       if (error) {
         const err = error as Error & { code: number };
-        err.code = error.code ?? 1;
+        err.code = typeof error.code === "number" ? error.code : 1;
         reject(err);
       } else {
         resolve({ stdout, stderr });
@@ -2508,7 +2508,7 @@ issues
   });
 
 issues
-  .command("post_comment <issueId> <content>")
+  .command("post-comment <issueId> <content>")
   .description("post a new comment to an issue")
   .option("--parent <uuid>", "parent comment id")
   .option("--debug", "enable debug output")
@@ -2543,6 +2543,194 @@ issues
         issueId,
         content,
         parentCommentId: opts.parent,
+        debug: !!opts.debug,
+      });
+      printResult(result, opts.json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("create <title>")
+  .description("create a new issue")
+  .option("--org-id <id>", "organization id (defaults to config orgId)", (v) => parseInt(v, 10))
+  .option("--project-id <id>", "project id", (v) => parseInt(v, 10))
+  .option("--description <text>", "issue description (supports \\\\n)")
+  .option(
+    "--label <label>",
+    "issue label (repeatable)",
+    (value: string, previous: string[]) => {
+      previous.push(value);
+      return previous;
+    },
+    [] as string[]
+  )
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (rawTitle: string, opts: { orgId?: number; projectId?: number; description?: string; label?: string[]; debug?: boolean; json?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const title = interpretEscapes(String(rawTitle || "").trim());
+      if (!title) {
+        console.error("title is required");
+        process.exitCode = 1;
+        return;
+      }
+
+      const orgId = typeof opts.orgId === "number" && !Number.isNaN(opts.orgId) ? opts.orgId : cfg.orgId;
+      if (typeof orgId !== "number") {
+        console.error("org_id is required. Either pass --org-id or run 'pgai auth' to store it in config.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+      const labels = Array.isArray(opts.label) && opts.label.length > 0 ? opts.label.map(String) : undefined;
+      const projectId = typeof opts.projectId === "number" && !Number.isNaN(opts.projectId) ? opts.projectId : undefined;
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+      const result = await createIssue({
+        apiKey,
+        apiBaseUrl,
+        title,
+        orgId,
+        description,
+        projectId,
+        labels,
+        debug: !!opts.debug,
+      });
+      printResult(result, opts.json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("update <issueId>")
+  .description("update an existing issue (title/description/status/labels)")
+  .option("--title <text>", "new title (supports \\\\n)")
+  .option("--description <text>", "new description (supports \\\\n)")
+  .option("--status <value>", "status: open|closed|0|1")
+  .option(
+    "--label <label>",
+    "set labels (repeatable). If provided, replaces existing labels.",
+    (value: string, previous: string[]) => {
+      previous.push(value);
+      return previous;
+    },
+    [] as string[]
+  )
+  .option("--clear-labels", "set labels to an empty list")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (issueId: string, opts: { title?: string; description?: string; status?: string; label?: string[]; clearLabels?: boolean; debug?: boolean; json?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const title = opts.title !== undefined ? interpretEscapes(String(opts.title)) : undefined;
+      const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+
+      let status: number | undefined = undefined;
+      if (opts.status !== undefined) {
+        const raw = String(opts.status).trim().toLowerCase();
+        if (raw === "open") status = 0;
+        else if (raw === "closed") status = 1;
+        else {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) {
+            console.error("status must be open|closed|0|1");
+            process.exitCode = 1;
+            return;
+          }
+          status = n;
+        }
+        if (status !== 0 && status !== 1) {
+          console.error("status must be 0 (open) or 1 (closed)");
+          process.exitCode = 1;
+          return;
+        }
+      }
+
+      let labels: string[] | undefined = undefined;
+      if (opts.clearLabels) {
+        labels = [];
+      } else if (Array.isArray(opts.label) && opts.label.length > 0) {
+        labels = opts.label.map(String);
+      }
+
+      const result = await updateIssue({
+        apiKey,
+        apiBaseUrl,
+        issueId,
+        title,
+        description,
+        status,
+        labels,
+        debug: !!opts.debug,
+      });
+      printResult(result, opts.json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("update-comment <commentId> <content>")
+  .description("update an existing issue comment")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (commentId: string, content: string, opts: { debug?: boolean; json?: boolean }) => {
+    try {
+      if (opts.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+      }
+      content = interpretEscapes(content);
+      if (opts.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+      }
+
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await updateIssueComment({
+        apiKey,
+        apiBaseUrl,
+        commentId,
+        content,
         debug: !!opts.debug,
       });
       printResult(result, opts.json);
