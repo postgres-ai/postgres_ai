@@ -92,6 +92,7 @@ reporter:tests:
     expire_in: 7 days
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
 
 cli:smoke:test:
   stage: test
@@ -239,6 +240,7 @@ cli:node:tests:
     expire_in: 7 days
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
 
 cli:npm:publish:
   stage: publish
