@@ -145,29 +145,29 @@ If you see errors like `permission denied` / `insufficient_privilege` / code `42
     npx postgresai prepare-db --print-sql -d mydb
     ```
 
-**One command setup:**
+**Install the CLI:**
 
 ```bash
-# Download the CLI
-curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai \
-  && chmod +x postgres_ai
+npm install -g postgresai
 ```
 
-Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
+**Start monitoring:**
+
+To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
 
 ```bash
 # Production setup with your Access token
-./postgres_ai quickstart --api-key=your_access_token
+postgresai mon local-install --api-key=your_access_token
 ```
 **Note:** You can also add your database instance in the same command:
 ```bash
-./postgres_ai quickstart --api-key=your_access_token --add-instance="postgresql://user:pass@host:port/DB"
+postgresai mon local-install --api-key=your_access_token --db-url="postgresql://user:pass@host:port/DB"
 ```
 
 Or if you want to just check out how it works:
 ```bash
 # Complete setup with demo database
-./postgres_ai quickstart --demo
+postgresai mon local-install --demo
 ```
 
 That's it! Everything is installed, configured, and running.
@@ -205,32 +205,32 @@ Failure to secure these ports may expose sensitive database information!
 
 **For developers:**
 ```bash
-./postgres_ai quickstart --demo
+postgresai mon local-install --demo
 ```
 Get a complete monitoring setup with demo data in under 2 minutes.
 
 **For production:**
 ```bash
-./postgres_ai quickstart --api-key=your_key
+postgresai mon local-install --api-key=your_key
 # Then add your databases
-./postgres_ai add-instance "postgresql://user:pass@host:port/DB"
+postgresai mon targets add "postgresql://user:pass@host:port/DB"
 ```
 
 ## 🔧 Management commands
 
 ```bash
 # Instance management
-./postgres_ai add-instance "postgresql://user:pass@host:port/DB"
-./postgres_ai list-instances
-./postgres_ai test-instance my-DB
+postgresai mon targets add "postgresql://user:pass@host:port/DB"
+postgresai mon targets list
+postgresai mon targets test my-DB
 
-# Service management  
-./postgres_ai status
-./postgres_ai logs
-./postgres_ai restart
+# Service management
+postgresai mon status
+postgresai mon logs
+postgresai mon restart
 
 # Health check
-./postgres_ai health
+postgresai mon health
 ```
 
 ## 📋 Checkup reports
@@ -297,9 +297,9 @@ postgres_ai monitoring generates automated health check reports based on [postgr
 
 ## 🌐 Access points
 
-After running quickstart:
+After running local-install:
 
-- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitoring`; password is shown at the end of quickstart)
+- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitoring`; password is shown at the end of local-install)
 
 Technical URLs (for advanced users):
 - **Demo DB**: postgresql://postgres:postgres@localhost:55432/target_database
@@ -309,27 +309,8 @@ Technical URLs (for advanced users):
 ## 📖 Help
 
 ```bash
-./postgres_ai help
-```
-
-### Node.js CLI (early preview)
-
-```bash
-# run without install
-node ./cli/bin/postgres-ai.js --help
-
-# local dev: install aliases into PATH
-npm --prefix cli install --no-audit --no-fund
-npm link ./cli
-postgres-ai --help
 postgresai --help
-pgai --help
-
-# or install globally after publish (planned)
-# npm i -g @postgresai/cli
-# postgres-ai --help
-# postgresai --help
-# pgai --help
+postgresai mon --help
 ```
 
 ## 🔑 PostgresAI access token

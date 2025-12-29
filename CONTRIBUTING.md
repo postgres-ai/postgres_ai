@@ -124,7 +124,7 @@ The demo DB is initialized by `config/target-db/init.sql` and creates the `monit
 PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname
 ```
 
-- Add your instance to `instances.yml` (or use the helper CLI: `./postgres_ai add-instance 'postgresql://user:pass@host:port/db' my-db`)
+- Add your instance to `instances.yml` (or use the CLI: `postgresai mon targets add 'postgresql://user:pass@host:port/db' my-db`)
 - Make sure `is_enabled: true` for that instance.
 
 #### 2) Generate pgwatch sources from `instances.yml`
@@ -296,12 +296,12 @@ make up
 make up-local
 ```
 
-### Option A: Run via the `postgres_ai` script (recommended)
+### Option A: Run via the CLI (recommended)
 
-`postgres_ai` uses a single compose file path stored in `COMPOSE_FILE`. You can override it to include the local compose override:
+Use the CLI with `COMPOSE_FILE` to include the local compose override:
 
 ```bash
-COMPOSE_FILE="docker-compose.yml:docker-compose.local.yml" ./postgres_ai quickstart --demo -y
+COMPOSE_FILE="docker-compose.yml:docker-compose.local.yml" postgresai mon local-install --demo -y
 ```
 
 To rebuild on every run:
@@ -310,7 +310,7 @@ To rebuild on every run:
 COMPOSE_FILE="docker-compose.yml:docker-compose.local.yml" \
   docker compose -f docker-compose.yml -f docker-compose.local.yml build --no-cache
 
-COMPOSE_FILE="docker-compose.yml:docker-compose.local.yml" ./postgres_ai restart
+COMPOSE_FILE="docker-compose.yml:docker-compose.local.yml" postgresai mon restart
 ```
 
 ### Option B: Run Docker Compose directly
@@ -333,22 +333,22 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --force-r
 ### Reset everything
 
 ```bash
-./postgres_ai reset
+postgresai mon reset
 ```
 
 ### View logs
 
 ```bash
-./postgres_ai logs
-./postgres_ai logs grafana
-./postgres_ai logs monitoring_flask_backend
+postgresai mon logs
+postgresai mon logs grafana
+postgresai mon logs monitoring_flask_backend
 ```
 
 ### Stop / start
 
 ```bash
-./postgres_ai stop
-./postgres_ai start
+postgresai mon stop
+postgresai mon start
 ```
 
 

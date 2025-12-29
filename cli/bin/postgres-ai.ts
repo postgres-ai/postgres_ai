@@ -1185,17 +1185,33 @@ mon
 
     // Update .env with custom tag if provided
     const envFile = path.resolve(projectDir, ".env");
-    const imageTag = opts.tag || pkg.version;
 
-    // Build .env content
-    const envLines: string[] = [`PGAI_TAG=${imageTag}`];
-    // Preserve GF_SECURITY_ADMIN_PASSWORD if it exists
+    // Build .env content, preserving important existing values
+    // Read existing .env first to preserve CI/custom settings
+    let existingTag: string | null = null;
+    let existingRegistry: string | null = null;
+    let existingPassword: string | null = null;
+
     if (fs.existsSync(envFile)) {
       const existingEnv = fs.readFileSync(envFile, "utf8");
+      // Extract existing values
+      const tagMatch = existingEnv.match(/^PGAI_TAG=(.+)$/m);
+      if (tagMatch) existingTag = tagMatch[1].trim();
+      const registryMatch = existingEnv.match(/^PGAI_REGISTRY=(.+)$/m);
+      if (registryMatch) existingRegistry = registryMatch[1].trim();
       const pwdMatch = existingEnv.match(/^GF_SECURITY_ADMIN_PASSWORD=(.+)$/m);
-      if (pwdMatch) {
-        envLines.push(`GF_SECURITY_ADMIN_PASSWORD=${pwdMatch[1]}`);
-      }
+      if (pwdMatch) existingPassword = pwdMatch[1].trim();
+    }
+
+    // Priority: CLI --tag flag > existing .env > package version
+    const imageTag = opts.tag || existingTag || pkg.version;
+
+    const envLines: string[] = [`PGAI_TAG=${imageTag}`];
+    if (existingRegistry) {
+      envLines.push(`PGAI_REGISTRY=${existingRegistry}`);
+    }
+    if (existingPassword) {
+      envLines.push(`GF_SECURITY_ADMIN_PASSWORD=${existingPassword}`);
     }
     fs.writeFileSync(envFile, envLines.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
 

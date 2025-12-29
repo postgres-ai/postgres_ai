@@ -94,84 +94,6 @@ reporter:tests:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-cli:smoke:test:
-  stage: test
-  image: alpine:3.20
-  variables:
-    GIT_STRATEGY: fetch
-  before_script:
-    - apk add --no-cache bash curl git docker-cli docker-compose
-  script:
-    - bash -n ./postgres_ai
-    - |
-      set -euo pipefail
-      out=$(./postgres_ai help | tr -d "\r")
-      echo "$out" | grep -q "Postgres AI CLI"
-      echo "$out" | grep -q "COMMANDS:"
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
-cli:e2e:dind:
-  stage: test
-  image: alpine:3.20
-  services:
-    - name: docker:24-dind
-      command: ["--tls=false"]
-  needs:
-    - job: build:test:images
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_API_VERSION: "1.43"
-    GIT_STRATEGY: fetch
-    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
-  before_script:
-    - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
-    - docker version
-    # Pull images from GitLab Container Registry
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
-    - |
-      echo "Pulling images from GitLab Container Registry..."
-      docker pull "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
-      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
-      docker pull "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
-      echo "Images ready:"
-      docker images | grep "$CI_REGISTRY_IMAGE"
-    # Create .env file with registry and tag
-    - |
-      cat > .env << EOF
-      PGAI_REGISTRY=$CI_REGISTRY_IMAGE
-      PGAI_TAG=$PGAI_TAG
-      EOF
-  script:
-    - set -euo pipefail
-    - bash -n ./postgres_ai
-    - ./postgres_ai check || true
-    - ./postgres_ai quickstart --demo -y
-    - timeout 60 ./postgres_ai status
-    - timeout 10 ./postgres_ai logs grafana || true
-    - ./postgres_ai config
-    - ./postgres_ai update-config
-    - ./postgres_ai list-instances || true
-    - ./postgres_ai add-key "test_key_123"
-    - ./postgres_ai show-key
-    - ./postgres_ai remove-key
-    - ./postgres_ai generate-grafana-password || true
-    - ./postgres_ai show-grafana-credentials || true
-    - ./postgres_ai add-instance "postgresql://postgres:postgres@target-db:5432/target_database" "ci-demo"
-    - ./postgres_ai test-instance "ci-demo" || true
-    - printf "y\n" | ./postgres_ai reset sink-postgres
-    - ./postgres_ai restart
-    - ./postgres_ai stop
-    - ./postgres_ai start
-    - printf "y\n" | ./postgres_ai reset
-    - ./postgres_ai clean
-  after_script:
-    - docker ps -a || true
-    - docker system prune -af || true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
 cli:node:smoke:
   stage: test
   image: node:20-alpine
@@ -465,10 +387,7 @@ cli:node:e2e:dind:
       docker images | grep "$CI_REGISTRY_IMAGE"
     # Create .env file with registry and tag
     - |
-      cat > .env << EOF
-      PGAI_REGISTRY=$CI_REGISTRY_IMAGE
-      PGAI_TAG=$PGAI_TAG
-      EOF
+      printf "%s\n" "PGAI_REGISTRY=$CI_REGISTRY_IMAGE" "PGAI_TAG=$PGAI_TAG" > .env
   script:
     - ./tests/e2e.cli.sh
   after_script:
@@ -509,13 +428,10 @@ cli:node:full:dind:
       docker images | grep "$CI_REGISTRY_IMAGE"
     # Create .env file with registry and tag
     - |
-      cat > .env << EOF
-      PGAI_REGISTRY=$CI_REGISTRY_IMAGE
-      PGAI_TAG=$PGAI_TAG
-      EOF
+      printf "%s\n" "PGAI_REGISTRY=$CI_REGISTRY_IMAGE" "PGAI_TAG=$PGAI_TAG" > .env
   script:
-    - echo "=== Testing quickstart (demo mode) ==="
-    - node ./cli/dist/bin/postgres-ai.js mon quickstart --demo
+    - echo "=== Testing local-install (demo mode) ==="
+    - node ./cli/dist/bin/postgres-ai.js mon local-install --demo
     - sleep 10
     - node ./cli/dist/bin/postgres-ai.js mon status
     - echo ""
@@ -535,6 +451,7 @@ cli:node:full:dind:
   after_script:
     - docker ps -a || true
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
   allow_failure: false
 
