@@ -205,7 +205,7 @@ services:
         condition: service_started
     command: ["bash", "/postgres_ai_configs/scripts/postgres-reports.sh"]
 
-  # Self-monitoring components (Linux-only, will fail on macOS)
+  # Self-monitoring components (may have reduced functionality on macOS)
 
   # cAdvisor - Container metrics
   cadvisor:
@@ -232,7 +232,7 @@ services:
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     volumes:
-      - /:/host:ro,rslave
+      - /:/host:ro
     restart: unless-stopped
 
   # Postgres Exporter - Metrics for sink-postgres database
