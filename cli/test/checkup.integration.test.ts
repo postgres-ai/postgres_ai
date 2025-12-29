@@ -112,11 +112,12 @@ async function createTempPostgres(): Promise<TempPostgres> {
   const cleanup = async () => {
     postgresProc.kill("SIGTERM");
     try {
+      // 30s timeout to handle slower CI environments gracefully
       await waitFor(
         async () => {
           if (postgresProc.exitCode === null) throw new Error("still running");
         },
-        { timeoutMs: 5000, intervalMs: 100 }
+        { timeoutMs: 30000, intervalMs: 100 }
       );
     } catch {
       postgresProc.kill("SIGKILL");
