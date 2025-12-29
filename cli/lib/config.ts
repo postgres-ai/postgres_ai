@@ -56,10 +56,10 @@ export function readConfig(): Config {
     try {
       const content = fs.readFileSync(userConfigPath, "utf8");
       const parsed = JSON.parse(content);
-      config.apiKey = parsed.apiKey || null;
-      config.baseUrl = parsed.baseUrl || null;
-      config.orgId = parsed.orgId || null;
-      config.defaultProject = parsed.defaultProject || null;
+      config.apiKey = parsed.apiKey ?? null;
+      config.baseUrl = parsed.baseUrl ?? null;
+      config.orgId = parsed.orgId ?? null;
+      config.defaultProject = parsed.defaultProject ?? null;
       return config;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
