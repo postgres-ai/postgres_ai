@@ -303,17 +303,24 @@ Normalization:
 
 ### Examples
 
-Linux/macOS (bash/zsh):
+For production (uses default URLs):
 
 ```bash
+# Production auth - uses console.postgres.ai by default
+postgresai auth --debug
+```
+
+For staging/development environments:
+
+```bash
+# Linux/macOS (bash/zsh)
 export PGAI_API_BASE_URL=https://v2.postgres.ai/api/general/
 export PGAI_UI_BASE_URL=https://console-dev.postgres.ai
 postgresai auth --debug
 ```
 
-Windows PowerShell:
-
 ```powershell
+# Windows PowerShell
 $env:PGAI_API_BASE_URL = "https://v2.postgres.ai/api/general/"
 $env:PGAI_UI_BASE_URL = "https://console-dev.postgres.ai"
 postgresai auth --debug
