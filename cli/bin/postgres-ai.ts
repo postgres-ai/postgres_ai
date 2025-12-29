@@ -1104,7 +1104,7 @@ function checkRunningContainers(): { running: boolean; containers: string[] } {
 /**
  * Run docker compose command
  */
-async function runCompose(args: string[]): Promise<number> {
+async function runCompose(args: string[], grafanaPassword?: string): Promise<number> {
   let composeFile: string;
   let projectDir: string;
   try {
@@ -1130,21 +1130,28 @@ async function runCompose(args: string[]): Promise<number> {
     return 1;
   }
 
-  // Read Grafana password from .pgwatch-config and pass to Docker Compose
+  // Set Grafana password from parameter or .pgwatch-config
   const env = { ...process.env };
-  const cfgPath = path.resolve(projectDir, ".pgwatch-config");
-  if (fs.existsSync(cfgPath)) {
-    try {
-      const stats = fs.statSync(cfgPath);
-      if (!stats.isDirectory()) {
-        const content = fs.readFileSync(cfgPath, "utf8");
-        const match = content.match(/^grafana_password=([^\r\n]+)/m);
-        if (match) {
-          env.GF_SECURITY_ADMIN_PASSWORD = match[1].trim();
+  if (grafanaPassword) {
+    env.GF_SECURITY_ADMIN_PASSWORD = grafanaPassword;
+  } else {
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
+    if (fs.existsSync(cfgPath)) {
+      try {
+        const stats = fs.statSync(cfgPath);
+        if (!stats.isDirectory()) {
+          const content = fs.readFileSync(cfgPath, "utf8");
+          const match = content.match(/^grafana_password=([^\r\n]+)/m);
+          if (match) {
+            env.GF_SECURITY_ADMIN_PASSWORD = match[1].trim();
+          }
+        }
+      } catch (err) {
+        // If we can't read the config, log warning and continue without setting the password
+        if (process.env.DEBUG) {
+          console.warn(`Warning: Could not read Grafana password from config: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
-    } catch (err) {
-      // If we can't read the config, continue without setting the password
     }
   }
 
@@ -1461,8 +1468,8 @@ mon
     }
 
     // Step 5: Start services
-    console.log(opts.demo ? "Step 5: Starting monitoring services..." : "Step 5: Starting monitoring services...");
-    const code2 = await runCompose(["up", "-d", "--force-recreate"]);
+    console.log("Step 5: Starting monitoring services...");
+    const code2 = await runCompose(["up", "-d", "--force-recreate"], grafanaPassword);
     if (code2 !== 0) {
       process.exitCode = code2;
       return;
