@@ -38,6 +38,8 @@ function isolatedEnv(extra: Record<string, string> = {}) {
   return {
     XDG_CONFIG_HOME: cfgHome,
     HOME: cfgHome,
+    // Explicitly clear API key to prevent leakage from parent environment
+    PGAI_API_KEY: "",
     ...extra,
   };
 }
