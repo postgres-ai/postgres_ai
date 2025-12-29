@@ -358,6 +358,7 @@ def test_schema_h001(
 ) -> None:
     monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
     monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_invalid": "CREATE INDEX idx_invalid ON public.tbl USING btree (col)"})
     responses = {
         "pgwatch_db_size_size_b": prom_result([{"metric": {"datname": "maindb"}, "value": [0, "8192"]}]),
         "pgwatch_pg_invalid_indexes": prom_result(

@@ -117,6 +117,8 @@ export interface InvalidIndex {
   relation_name: string;
   index_size_bytes: number;
   index_size_pretty: string;
+  /** Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations */
+  index_definition: string;
   supports_fk: boolean;
 }
 
@@ -581,6 +583,7 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
       relation_name: String(transformed.relation_name || ""),
       index_size_bytes: indexSizeBytes,
       index_size_pretty: formatBytes(indexSizeBytes),
+      index_definition: String(transformed.index_definition || ""),
       supports_fk: toBool(transformed.supports_fk),
     };
   });

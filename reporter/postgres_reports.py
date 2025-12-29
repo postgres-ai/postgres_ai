@@ -622,6 +622,8 @@ class PostgresReportGenerator:
 
         invalid_indexes_by_db = {}
         for db_name in databases:
+            # Fetch index definitions from the sink for this database (used to aid remediation)
+            index_definitions = self.get_index_definitions_from_sink(db_name)
             # Query invalid indexes for each database
             invalid_indexes_query = f'last_over_time(pgwatch_pg_invalid_indexes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
             result = self.query_instant(invalid_indexes_query)
@@ -648,6 +650,7 @@ class PostgresReportGenerator:
                         "relation_name": relation_name,
                         "index_size_bytes": index_size_bytes,
                         "index_size_pretty": self.format_bytes(index_size_bytes),
+                        "index_definition": index_definitions.get(index_name, "Definition not available"),
                         "supports_fk": bool(int(supports_fk))
                     }
 
@@ -755,7 +758,7 @@ class PostgresReportGenerator:
                         'result') else 0
 
                     # Get index definition from collected metrics
-                    index_definition = index_definitions.get(index_name, 'Definition not available')
+                    index_definition = index_definitions.get(index_name, "Definition not available")
 
                     index_data = {
                         "schema_name": schema_name,
@@ -885,7 +888,7 @@ class PostgresReportGenerator:
                     for idx_name in [r.strip() for r in reason.split(',') if r.strip()]:
                         redundant_to.append({
                             "index_name": idx_name,
-                            "index_definition": index_definitions.get(idx_name, 'Definition not available'),
+                            "index_definition": index_definitions.get(idx_name, "Definition not available"),
                             "index_size_bytes": 0,
                             "index_size_pretty": "N/A"
                         })
@@ -901,7 +904,7 @@ class PostgresReportGenerator:
                         "table_size_bytes": table_size_bytes,
                         "index_usage": index_usage,
                         "supports_fk": supports_fk,
-                        "index_definition": index_definitions.get(index_name, 'Definition not available'),
+                        "index_definition": index_definitions.get(index_name, "Definition not available"),
                         "index_size_pretty": self.format_bytes(index_size_bytes),
                         "table_size_pretty": self.format_bytes(table_size_bytes),
                         "redundant_to": redundant_to
