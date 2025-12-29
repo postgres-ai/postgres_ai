@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { URL } from "url";
+import { URL, fileURLToPath } from "url";
 import type { ConnectionOptions as TlsConnectionOptions } from "tls";
 import type { Client as PgClient } from "pg";
 import * as fs from "fs";
@@ -163,9 +163,15 @@ function sqlDir(): string {
   // Handle both development and production paths
   // Development: lib/init.ts -> ../sql
   // Production (bundled): dist/bin/postgres-ai.js -> ../sql (copied during build)
+  //
+  // IMPORTANT: Use import.meta.url instead of __dirname because bundlers (bun/esbuild)
+  // bake in __dirname at build time, while import.meta.url resolves at runtime.
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = path.dirname(currentFile);
+
   const candidates = [
-    path.resolve(__dirname, "..", "sql"),       // bundled: dist/bin -> dist/sql
-    path.resolve(__dirname, "..", "..", "sql"), // dev from lib: lib -> ../sql
+    path.resolve(currentDir, "..", "sql"),       // bundled: dist/bin -> dist/sql
+    path.resolve(currentDir, "..", "..", "sql"), // dev from lib: lib -> ../sql
   ];
 
   for (const candidate of candidates) {

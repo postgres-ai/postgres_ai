@@ -110,6 +110,8 @@ cli:node:smoke:
     - node ./cli/dist/bin/postgres-ai.js --help
     - node ./cli/dist/bin/postgres-ai.js mon status --help
     - node ./cli/dist/bin/postgres-ai.js mon targets list --help
+    # Verify prepare-db --print-sql works (SQL templates are bundled correctly)
+    - node ./cli/dist/bin/postgres-ai.js prepare-db --print-sql 2>&1 | grep -q "CREATE" || (echo "prepare-db --print-sql failed to output SQL" && exit 1)
     - npm install -g ./cli
     - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
     - command -v postgres-ai && postgres-ai --help
