@@ -2102,7 +2102,8 @@ auth
       }
 
       // Step 3: Open browser
-      const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      // Pass api_url so UI calls oauth_approve on the same backend where oauth_init created the session
+      const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}&api_url=${encodeURIComponent(apiBaseUrl)}`;
 
       if (opts.debug) {
         console.log(`Debug: Auth URL: ${authUrl}`);

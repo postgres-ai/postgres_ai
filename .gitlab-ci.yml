@@ -179,7 +179,7 @@ cli:node:smoke:
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true
-    - apk add --no-cache bash curl unzip
+    - apk add --no-cache bash curl unzip openssl
     - curl -fsSL https://bun.sh/install | bash
     - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
   script:
@@ -202,6 +202,21 @@ cli:node:smoke:
     - node ./cli/dist/bin/postgres-ai.js mon targets list | head -n 1 || true
     - node ./cli/dist/bin/postgres-ai.js mon targets add 'postgresql://user:pass@host:5432/db' ci-test || true
     - node ./cli/dist/bin/postgres-ai.js mon targets remove ci-test || true
+    # Verify production OAuth endpoint is reachable (smoke test for auth flow)
+    - |
+      echo "Testing OAuth endpoint reachability..."
+      # Generate random state and code_challenge for smoke test (these are throwaway values)
+      CI_STATE=$(openssl rand -base64 16 | tr -d '/+=')
+      CI_CHALLENGE=$(openssl rand -base64 32 | tr -d '/+=')
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"client_type\":\"cli\",\"state\":\"${CI_STATE}\",\"code_challenge\":\"${CI_CHALLENGE}\",\"code_challenge_method\":\"S256\",\"redirect_uri\":\"http://localhost:0/callback\"}" \
+        "https://postgres.ai/api/general/rpc/oauth_init" || echo "000")
+      echo "OAuth init endpoint returned HTTP $HTTP_CODE"
+      if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+        echo "WARNING: OAuth endpoint returned unexpected status (expected 200/201, got $HTTP_CODE)"
+        echo "This may indicate the OAuth endpoint is misconfigured or unreachable"
+      fi
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
