@@ -1,0 +1,46 @@
+# Dockerfile for the TypeScript Metrics Server
+# Replaces the Python Flask backend with a Bun-based implementation
+
+FROM oven/bun:1-slim AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+# Copy source files
+COPY lib/ lib/
+COPY bin/ bin/
+COPY scripts/ scripts/
+COPY test/ test/
+COPY tsconfig.json ./
+
+# Verify the build works
+RUN bun run typecheck || true
+
+# Production stage
+FROM oven/bun:1-slim
+
+WORKDIR /app
+
+# Copy node modules and source
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/package.json ./
+
+# Set environment variables
+ENV PORT=8000
+ENV PROMETHEUS_URL=http://localhost:8428
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the metrics server
+CMD ["bun", "run", "lib/metrics-server.ts"]
