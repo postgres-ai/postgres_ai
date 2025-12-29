@@ -480,7 +480,7 @@ describe("H001 - Invalid indexes", () => {
   test("getInvalidIndexes returns invalid indexes", async () => {
     const mockClient = createMockClient({
       invalidIndexesRows: [
-        { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", supports_fk: false },
+        { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", index_definition: "CREATE INDEX users_email_idx ON public.users USING btree (email)", supports_fk: false },
       ],
     });
 
@@ -491,6 +491,7 @@ describe("H001 - Invalid indexes", () => {
     expect(indexes[0].index_name).toBe("users_email_idx");
     expect(indexes[0].index_size_bytes).toBe(1048576);
     expect(indexes[0].index_size_pretty).toBeTruthy();
+    expect(indexes[0].index_definition).toMatch(/^CREATE INDEX/);
     expect(indexes[0].relation_name).toBe("users");
     expect(indexes[0].supports_fk).toBe(false);
   });
@@ -502,7 +503,7 @@ describe("H001 - Invalid indexes", () => {
         { name: "server_version_num", setting: "160003" },
       ],
         invalidIndexesRows: [
-          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", supports_fk: false },
+          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", index_definition: "CREATE INDEX orders_status_idx ON public.orders USING btree (status)", supports_fk: false },
         ],
       }
     );

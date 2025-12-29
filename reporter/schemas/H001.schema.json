@@ -49,6 +49,7 @@
         "relation_name",
         "index_size_bytes",
         "index_size_pretty",
+        "index_definition",
         "supports_fk"
       ],
       "properties": {
@@ -58,6 +59,7 @@
         "relation_name": { "type": "string" },
         "index_size_bytes": { "type": "number" },
         "index_size_pretty": { "type": "string" },
+        "index_definition": { "type": "string", "description": "Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations" },
         "supports_fk": { "type": "boolean" }
       }
     },

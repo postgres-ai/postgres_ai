@@ -30,7 +30,7 @@ const indexTestData = {
     emptyRows: { invalidIndexesRows: [] },
     dataRows: {
       invalidIndexesRows: [
-        { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", supports_fk: false },
+        { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", index_definition: "CREATE INDEX users_email_idx ON public.users USING btree (email)", supports_fk: false },
       ],
     },
   },

@@ -253,6 +253,52 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     expect(typeof nodeResult.data).toBe("object");
   });
 
+  test("H001 returns index_definition with CREATE INDEX statement", async () => {
+    // Create a table and an index, then mark the index as invalid
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS test_invalid_idx_table (id serial PRIMARY KEY, value text);
+      CREATE INDEX IF NOT EXISTS test_invalid_idx ON test_invalid_idx_table(value);
+    `);
+
+    // Mark the index as invalid (simulating a failed CONCURRENTLY build)
+    await client.query(`
+      UPDATE pg_index SET indisvalid = false
+      WHERE indexrelid = 'test_invalid_idx'::regclass;
+    `);
+
+    try {
+      const report = await checkup.generateH001(client, "test-node");
+      validateAgainstSchema(report, "H001");
+
+      const nodeResult = report.results["test-node"];
+      const dbName = Object.keys(nodeResult.data)[0];
+      expect(dbName).toBeTruthy();
+
+      const dbData = nodeResult.data[dbName] as any;
+      expect(dbData.invalid_indexes).toBeDefined();
+      expect(dbData.invalid_indexes.length).toBeGreaterThan(0);
+
+      // Find our test index
+      const testIndex = dbData.invalid_indexes.find(
+        (idx: any) => idx.index_name === "test_invalid_idx"
+      );
+      expect(testIndex).toBeDefined();
+
+      // Verify index_definition contains the actual CREATE INDEX statement
+      expect(testIndex.index_definition).toMatch(/^CREATE INDEX/);
+      expect(testIndex.index_definition).toContain("test_invalid_idx");
+      expect(testIndex.index_definition).toContain("test_invalid_idx_table");
+    } finally {
+      // Cleanup: restore the index and drop test objects
+      await client.query(`
+        UPDATE pg_index SET indisvalid = true
+        WHERE indexrelid = 'test_invalid_idx'::regclass;
+        DROP INDEX IF EXISTS test_invalid_idx;
+        DROP TABLE IF EXISTS test_invalid_idx_table;
+      `);
+    }
+  });
+
   test("H002 (unused indexes) has correct data structure", async () => {
     const report = await checkup.generateH002(client, "test-node");
     validateAgainstSchema(report, "H002");

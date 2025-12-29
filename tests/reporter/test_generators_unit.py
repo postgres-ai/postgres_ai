@@ -467,6 +467,7 @@ def test_generate_h001_invalid_indexes_report(
     prom_result,
 ) -> None:
     monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_invalid": "CREATE INDEX idx_invalid ON public.tbl USING btree (col)"})
 
     responses = {
         "pgwatch_pg_invalid_indexes": prom_result(
@@ -494,6 +495,7 @@ def test_generate_h001_invalid_indexes_report(
     entry = db_data["invalid_indexes"][0]
     assert entry["index_name"] == "idx_invalid"
     assert entry["index_size_pretty"].endswith("KiB")
+    assert entry["index_definition"].startswith("CREATE INDEX")
     assert entry["supports_fk"] is True
 
 

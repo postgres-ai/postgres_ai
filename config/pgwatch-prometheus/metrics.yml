@@ -1604,6 +1604,7 @@ metrics:
             quote_ident(pci.relname) as tag_index_name,
             quote_ident(pct.relname) as tag_table_name,
             coalesce(nullif(quote_ident(pn.nspname), 'public') || '.', '') || quote_ident(pct.relname) as tag_relation_name,
+            pg_get_indexdef(pidx.indexrelid) as index_definition,
             pg_relation_size(pidx.indexrelid) index_size_bytes,
             ((
               select count(1)
