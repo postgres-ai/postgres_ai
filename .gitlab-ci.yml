@@ -81,7 +81,15 @@ reporter:tests:
     - pip install -r reporter/requirements-dev.txt
   script:
     - chown -R postgres:postgres "$CI_PROJECT_DIR"
-    - su - postgres -c "cd \"$CI_PROJECT_DIR\" && python -m pytest --run-integration tests/reporter"
+    - su - postgres -c "cd \"$CI_PROJECT_DIR\" && python -m pytest --run-integration --cov=reporter --cov-report=term --cov-report=xml:coverage/reporter-coverage.xml tests/reporter"
+    # Fix ownership for artifact collection
+    - chown -R root:root "$CI_PROJECT_DIR/coverage" || true
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+)%/'
+  artifacts:
+    when: always
+    paths:
+      - coverage/
+    expire_in: 7 days
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
@@ -218,7 +226,17 @@ cli:node:tests:
     - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun install"
   script:
     # Use 'bun run test' (not 'bun test') to invoke the npm script which generates metrics-embedded.ts first
+    # Coverage is enabled via bunfig.toml and outputs text + lcov reports
     - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun run test"
+    # Fix ownership of coverage directory for artifact collection
+    - chown -R root:root "$CI_PROJECT_DIR/cli/coverage" || true
+  # Regex matches Bun coverage table: "All files | % Funcs | % Lines |" - captures % Lines
+  coverage: '/All files[^|]*\|[^|]*\|\s*([\d.]+)/'
+  artifacts:
+    when: always
+    paths:
+      - cli/coverage/
+    expire_in: 7 days
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
