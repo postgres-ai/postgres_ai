@@ -337,9 +337,81 @@ describe("CLI commands", () => {
     expect(r.stdout).toMatch(/--api-key/);
   });
 
+  test("cli: mon local-install --api-key and --db-url skip interactive prompts", () => {
+    // This test verifies that when --api-key and --db-url are provided,
+    // the CLI uses them directly without prompting for input.
+    // The command will fail later (no Docker, invalid DB), but we check
+    // that the options were parsed and used correctly.
+    const r = runCli([
+      "mon", "local-install",
+      "--api-key", "test-api-key-12345",
+      "--db-url", "postgresql://user:pass@localhost:5432/testdb"
+    ]);
+
+    // Should show that API key was provided via CLI option (not prompting)
+    expect(r.stdout).toMatch(/Using API key provided via --api-key parameter/);
+    // Should show that DB URL was provided via CLI option (not prompting)
+    expect(r.stdout).toMatch(/Using database URL provided via --db-url parameter/);
+  });
+
   test("cli: auth login --help shows --set-key option", () => {
     const r = runCli(["auth", "login", "--help"]);
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/--set-key/);
+  });
+
+  test("cli: mon local-install reads global --api-key option", () => {
+    // The fix ensures --api-key works when passed as a global option (before subcommand)
+    // Commander.js routes global options to program.opts(), not subcommand opts
+    const r = runCli([
+      "--api-key", "global-api-key-test",
+      "mon", "local-install",
+      "--db-url", "postgresql://user:pass@localhost:5432/testdb"
+    ]);
+
+    // Should detect the API key from global options
+    expect(r.stdout).toMatch(/Using API key provided via --api-key parameter/);
+  });
+
+  test("cli: mon local-install works with --api-key after subcommand", () => {
+    // Test that --api-key works when passed after the subcommand
+    // Note: Commander.js routes --api-key to global opts, the fix reads from both
+    const r = runCli([
+      "mon", "local-install",
+      "--api-key", "test-key-after-subcommand",
+      "--db-url", "postgresql://user:pass@localhost:5432/testdb"
+    ]);
+
+    // Should detect the API key regardless of position
+    expect(r.stdout).toMatch(/Using API key provided via --api-key parameter/);
+    // Verify the key was saved
+    expect(r.stdout).toMatch(/API key saved/);
+  });
+
+  test("cli: mon local-install with --yes and no --api-key skips API setup", () => {
+    // When --yes is provided without --api-key, the CLI should skip
+    // the interactive prompt and proceed without API key
+    const r = runCli([
+      "mon", "local-install",
+      "--db-url", "postgresql://user:pass@localhost:5432/testdb",
+      "--yes"
+    ]);
+
+    // Should indicate auto-yes mode without API key
+    expect(r.stdout).toMatch(/Auto-yes mode: no API key provided/);
+    expect(r.stdout).toMatch(/Reports will be generated locally only/);
+  });
+
+  test("cli: mon local-install --demo with global --api-key shows error", () => {
+    // When --demo is used with global --api-key, it should still be detected and error
+    const r = runCli([
+      "--api-key", "global-api-key-test",
+      "mon", "local-install",
+      "--demo"
+    ]);
+
+    // Should reject demo mode with API key (from global option)
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/Cannot use --api-key with --demo mode/);
   });
 });

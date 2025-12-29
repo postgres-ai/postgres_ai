@@ -1174,6 +1174,11 @@ mon
   .option("--tag <tag>", "Docker image tag to use (e.g., 0.14.0, 0.14.0-dev.33)")
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
   .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
+    // Get apiKey from global program options (--api-key is defined globally)
+    // This is needed because Commander.js routes --api-key to the global option, not the subcommand's option
+    const globalOpts = program.opts<CliOptions>();
+    const apiKey = opts.apiKey || globalOpts.apiKey;
+
     console.log("\n=================================");
     console.log("  PostgresAI monitoring local install");
     console.log("=================================\n");
@@ -1226,7 +1231,7 @@ mon
       opts.dbUrl = undefined;
     }
 
-    if (opts.demo && opts.apiKey) {
+    if (opts.demo && apiKey) {
       console.error("✗ Cannot use --api-key with --demo mode");
       console.error("✗ Demo mode is for testing only and does not support API key integration");
       console.error("\nUse demo mode without API key: postgres-ai mon local-install --demo");
@@ -1248,11 +1253,11 @@ mon
       console.log("Step 1: Postgres AI API Configuration (Optional)");
       console.log("An API key enables automatic upload of PostgreSQL reports to Postgres AI\n");
 
-      if (opts.apiKey) {
+      if (apiKey) {
         console.log("Using API key provided via --api-key parameter");
-        config.writeConfig({ apiKey: opts.apiKey });
+        config.writeConfig({ apiKey });
         // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
-        fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${opts.apiKey}\n`, {
+        fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${apiKey}\n`, {
           encoding: "utf8",
           mode: 0o600
         });
