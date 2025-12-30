@@ -37,6 +37,29 @@ def get_prometheus_client():
         logger.error(f"Failed to connect to Prometheus: {e}")
         raise
 
+def read_version_file(filepath, default='unknown'):
+    """Read version information from file"""
+    try:
+        with open(filepath, 'r') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return default
+
+
+# Read version info at startup
+APP_VERSION = read_version_file('/VERSION')
+APP_BUILD_TS = read_version_file('/BUILD_TS')
+
+
+@app.route('/version', methods=['GET'])
+def version():
+    """Return application version and build timestamp"""
+    return jsonify({
+        "version": APP_VERSION,
+        "build_ts": APP_BUILD_TS
+    })
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
