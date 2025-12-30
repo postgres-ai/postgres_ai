@@ -23,17 +23,31 @@ class TestVersionEndpoint:
         assert response.status_code == 200
         assert response.content_type == 'application/json'
 
+    def test_version_endpoint_returns_array(self, client):
+        """Test that /version returns array for Grafana Infinity datasource."""
+        response = client.get('/version')
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+        assert len(data) == 1
+
     def test_version_endpoint_contains_version_field(self, client):
         """Test that /version response contains version field."""
         response = client.get('/version')
         data = json.loads(response.data)
-        assert 'version' in data
+        assert 'version' in data[0]
 
     def test_version_endpoint_contains_build_ts_field(self, client):
         """Test that /version response contains build_ts field."""
         response = client.get('/version')
         data = json.loads(response.data)
-        assert 'build_ts' in data
+        assert 'build_ts' in data[0]
+
+    def test_version_endpoint_contains_display_field(self, client):
+        """Test that /version response contains pre-formatted display field."""
+        response = client.get('/version')
+        data = json.loads(response.data)
+        assert 'display' in data[0]
+        assert 'PostgresAI v' in data[0]['display']
 
 
 class TestReadVersionFile:

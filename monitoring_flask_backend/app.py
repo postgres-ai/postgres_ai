@@ -53,11 +53,13 @@ APP_BUILD_TS = read_version_file('/BUILD_TS')
 
 @app.route('/version', methods=['GET'])
 def version():
-    """Return application version and build timestamp"""
-    return jsonify({
+    """Return application version and build timestamp as array for Grafana Infinity datasource"""
+    display = f"PostgresAI v{APP_VERSION} (built: {APP_BUILD_TS})"
+    return jsonify([{
         "version": APP_VERSION,
-        "build_ts": APP_BUILD_TS
-    })
+        "build_ts": APP_BUILD_TS,
+        "display": display
+    }])
 
 
 @app.route('/health', methods=['GET'])
