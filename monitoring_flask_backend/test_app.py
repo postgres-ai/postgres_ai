@@ -42,6 +42,13 @@ class TestVersionEndpoint:
         data = json.loads(response.data)
         assert 'build_ts' in data[0]
 
+    def test_version_endpoint_contains_display_field(self, client):
+        """Test that /version response contains pre-formatted display field."""
+        response = client.get('/version')
+        data = json.loads(response.data)
+        assert 'display' in data[0]
+        assert 'PostgresAI v' in data[0]['display']
+
 
 class TestReadVersionFile:
     """Tests for the read_version_file function."""
