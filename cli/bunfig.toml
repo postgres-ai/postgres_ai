@@ -2,9 +2,10 @@
 # https://bun.sh/docs/runtime/bunfig
 
 [test]
-# Default timeout for all tests (30 seconds)
+# Default timeout for all tests (60 seconds)
 # Integration tests that connect to databases need longer timeouts
-timeout = 30000
+# PostgreSQL startup can take up to 30s in slow CI environments
+timeout = 60000
 
 # Coverage settings - enabled by default for test runs
 coverage = true

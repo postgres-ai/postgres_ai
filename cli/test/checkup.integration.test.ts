@@ -131,11 +131,11 @@ async function createTempPostgres(): Promise<TempPostgres> {
     return c;
   };
 
-  // Wait for Postgres to start
+  // Wait for Postgres to start (30s timeout for slower CI environments)
   await waitFor(async () => {
     const c = await connect();
     await c.end();
-  });
+  }, { timeoutMs: 30000, intervalMs: 100 });
 
   return { port, socketDir, cleanup, connect };
 }
@@ -172,15 +172,16 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
   let pg: TempPostgres;
   let client: Client;
 
+  // 60s timeout for hooks - PostgreSQL startup can take 30s+ in slow CI
   beforeAll(async () => {
     pg = await createTempPostgres();
     client = await pg.connect();
-  });
+  }, { timeout: 60000 });
 
   afterAll(async () => {
     if (client) await client.end();
     if (pg) await pg.cleanup();
-  });
+  }, { timeout: 60000 });
 
   // Test all checks supported by express mode
   const expressChecks = Object.keys(checkup.CHECK_INFO);
