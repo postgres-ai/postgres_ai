@@ -96,7 +96,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://flask-pgss-api:8000/version",
+          "url": "http://monitoring_flask_backend:8000/version",
           "url_options": {
             "method": "GET"
           },
