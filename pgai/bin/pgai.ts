@@ -16,17 +16,13 @@ function die(msg: string): never {
 }
 
 let target: string;
+let isTsFile = false;
 
 // Try to find the postgresai package
 try {
-  // First try to resolve from node_modules - look for the compiled dist version
-  const postgresaiPkg = require.resolve("postgresai/package.json");
-  target = resolve(dirname(postgresaiPkg), "dist", "bin", "postgres-ai.js");
-
-  // Fallback to source TS if dist doesn't exist (development)
-  if (!existsSync(target)) {
-    target = resolve(dirname(postgresaiPkg), "bin", "postgres-ai.ts");
-  }
+  // Resolve the exported "cli" entry point from the postgresai package.
+  // This uses the exports field which is the proper way to resolve ESM packages.
+  target = require.resolve("postgresai/cli");
 } catch {
   // Dev-friendly fallback when running from the monorepo checkout (postgresai lives under ../cli).
   const fallbackJs = resolve(__dirname, "..", "..", "cli", "dist", "bin", "postgres-ai.js");
@@ -36,6 +32,7 @@ try {
     target = fallbackJs;
   } else if (existsSync(fallbackTs)) {
     target = fallbackTs;
+    isTsFile = true;
   } else {
     die(
       [
@@ -48,7 +45,6 @@ try {
 }
 
 // Determine if we should use node or bun based on the file extension
-const isTsFile = target.endsWith(".ts");
 const runtime = isTsFile ? "bun" : process.execPath;
 
 const child = spawn(runtime, [target, ...process.argv.slice(2)], {
