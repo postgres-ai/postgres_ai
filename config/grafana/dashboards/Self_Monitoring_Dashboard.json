@@ -100,12 +100,7 @@
           "url_options": {
             "method": "GET"
           },
-          "computed_columns": [
-            {
-              "selector": "concat('PostgresAI v', version, ' (built: ', build_ts, ')')",
-              "text": "display"
-            }
-          ]
+          "computed_columns": []
         }
       ],
       "title": "",
