@@ -1155,8 +1155,14 @@ async function runCompose(args: string[], grafanaPassword?: string): Promise<num
     }
   }
 
+  // On macOS, node-exporter can't mount host root filesystem - skip it
+  const finalArgs = [...args];
+  if (process.platform === "darwin" && args.includes("up")) {
+    finalArgs.push("--scale", "node-exporter=0");
+  }
+
   return new Promise<number>((resolve) => {
-    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], {
+    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...finalArgs], {
       stdio: "inherit",
       env: env,
       cwd: projectDir
@@ -1215,8 +1221,8 @@ mon
       if (pwdMatch) existingPassword = pwdMatch[1].trim();
     }
 
-    // Priority: CLI --tag flag > existing .env > package version
-    const imageTag = opts.tag || existingTag || pkg.version;
+    // Priority: CLI --tag flag > PGAI_TAG env var > existing .env > package version
+    const imageTag = opts.tag || process.env.PGAI_TAG || existingTag || pkg.version;
 
     const envLines: string[] = [`PGAI_TAG=${imageTag}`];
     if (existingRegistry) {
@@ -1527,6 +1533,34 @@ mon
     if (code !== 0) process.exitCode = code;
   });
 
+// Known container names for cleanup
+const MONITORING_CONTAINERS = [
+  "postgres-ai-config-init",
+  "node-exporter",
+  "cadvisor",
+  "grafana-with-datasources",
+  "sink-postgres",
+  "sink-prometheus",
+  "target-db",
+  "pgwatch-postgres",
+  "pgwatch-prometheus",
+  "postgres-exporter-sink",
+  "flask-pgss-api",
+  "sources-generator",
+  "postgres-reports",
+];
+
+/** Remove orphaned containers that docker compose down might miss */
+async function removeOrphanedContainers(): Promise<void> {
+  for (const container of MONITORING_CONTAINERS) {
+    try {
+      await execFilePromise("docker", ["rm", "-f", container]);
+    } catch {
+      // Container doesn't exist, ignore
+    }
+  }
+}
+
 mon
   .command("stop")
   .description("stop monitoring services")
@@ -1783,6 +1817,10 @@ mon
       } else {
         console.log("⚠ Could not stop services (may not be running)");
       }
+
+      // Remove any orphaned containers that docker compose down missed
+      await removeOrphanedContainers();
+      console.log("✓ Removed orphaned containers");
 
       // Remove orphaned volumes from previous installs with different project names
       if (!options.keepVolumes) {

@@ -232,7 +232,7 @@ services:
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     volumes:
-      - /:/host:ro
+      - /:/host:ro,rslave
     restart: unless-stopped
 
   # Postgres Exporter - Metrics for sink-postgres database
