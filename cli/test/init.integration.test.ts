@@ -137,10 +137,11 @@ async function createTempPostgres(): Promise<TempPostgres> {
     return c;
   };
 
+  // Wait for Postgres to start (30s timeout for slower CI environments)
   await waitFor(async () => {
     const c = await connectLocal();
     await c.end();
-  });
+  }, { timeoutMs: 30000, intervalMs: 100 });
 
   const postgresPassword = "postgrespw";
   {
