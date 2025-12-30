@@ -96,7 +96,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://monitoring-flask-backend:5000/version",
+          "url": "http://monitoring_flask_backend:8000/version",
           "url_options": {
             "method": "GET"
           },
