@@ -1804,14 +1804,18 @@ mon
         const orphanedVolumes = volumeList.filter(v => volumePatterns.includes(v));
 
         if (orphanedVolumes.length > 0) {
+          let removedCount = 0;
           for (const vol of orphanedVolumes) {
             try {
               await execFilePromise("docker", ["volume", "rm", vol]);
+              removedCount++;
             } catch {
-              // Volume might be in use, skip
+              // Volume might be in use, skip silently
             }
           }
-          console.log(`✓ Removed ${orphanedVolumes.length} orphaned volume(s) from previous installs`);
+          if (removedCount > 0) {
+            console.log(`✓ Removed ${removedCount} orphaned volume(s) from previous installs`);
+          }
         }
       }
 
