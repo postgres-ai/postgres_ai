@@ -259,6 +259,14 @@ cli:npm:publish:
       npm publish --dry-run --tag "$DIST_TAG" --access public
       npm publish --tag "$DIST_TAG" --access public
 
+      for i in $(seq 1 30); do
+        if npm view "pgai@${NPM_VERSION}" version >/dev/null 2>&1; then
+          break
+        fi
+        echo "Waiting for npm to recognize pgai@${NPM_VERSION} (attempt $i/30)..."
+        sleep 2
+      done
+
       # Verify both packages are visible as published versions.
       npm view "postgresai@${NPM_VERSION}" version >/dev/null
       npm view "pgai@${NPM_VERSION}" version >/dev/null
