@@ -53,11 +53,11 @@ APP_BUILD_TS = read_version_file('/BUILD_TS')
 
 @app.route('/version', methods=['GET'])
 def version():
-    """Return application version and build timestamp"""
-    return jsonify({
+    """Return application version and build timestamp as array for Grafana Infinity datasource"""
+    return jsonify([{
         "version": APP_VERSION,
         "build_ts": APP_BUILD_TS
-    })
+    }])
 
 
 @app.route('/health', methods=['GET'])
