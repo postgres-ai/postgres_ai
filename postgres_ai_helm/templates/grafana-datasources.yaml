@@ -32,12 +32,12 @@ data:
           postgresVersion: 1500
         secureJsonData:
           password: {{ .Values.secrets.postgres.password }}
-      {{- if .Values.flask.enabled }}
-      - name: Flask API
+      {{- if .Values.metricsServer.enabled }}
+      - name: Metrics Server API
         type: yesoreyeram-infinity-datasource
         access: proxy
         uid: aerffb0z8rjlsc
-        url: http://{{ include "postgres-ai-monitoring.fullname" . }}-flask:{{ .Values.flask.service.port }}
+        url: http://{{ include "postgres-ai-monitoring.fullname" . }}-metrics-server:{{ .Values.metricsServer.service.port }}
         isDefault: false
         editable: true
         jsonData:

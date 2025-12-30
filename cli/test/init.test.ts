@@ -1,8 +1,21 @@
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterEach } from "bun:test";
 import { resolve } from "path";
+import { existsSync, unlinkSync } from "fs";
 
 // Import from source directly since we're using Bun
 import * as init from "../lib/init";
+
+// Clean up .pgwatch-config after tests that may create it
+afterEach(() => {
+  const pgwatchConfig = resolve(process.cwd(), ".pgwatch-config");
+  if (existsSync(pgwatchConfig)) {
+    try {
+      unlinkSync(pgwatchConfig);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+});
 const DEFAULT_MONITORING_USER = init.DEFAULT_MONITORING_USER;
 
 function runCli(args: string[], env: Record<string, string> = {}) {

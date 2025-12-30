@@ -364,7 +364,7 @@
               "root_selector": "",
               "source": "url",
               "type": "csv",
-              "url": "http://flask-pgss-api:8000/pgss_metrics/csv",
+              "url": "http://metrics-server:8000/pgss_metrics/csv",
               "url_options": {
                 "data": "",
                 "method": "GET",

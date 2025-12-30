@@ -169,11 +169,11 @@ services:
       sink-prometheus:
         condition: service_started
     restart: unless-stopped
-  monitoring_flask_backend:
-    image: ${PGAI_REGISTRY:-postgresai}/monitoring-flask-backend:${PGAI_TAG:?PGAI_TAG is required}
-    container_name: flask-pgss-api
+  metrics-server:
+    image: ${PGAI_REGISTRY:-postgresai}/metrics-server:${PGAI_TAG:?PGAI_TAG is required}
+    container_name: metrics-server
     environment:
-      - FLASK_ENV=production
+      - PORT=8000
       - PROMETHEUS_URL=http://sink-prometheus:9090
     depends_on:
       - sink-prometheus

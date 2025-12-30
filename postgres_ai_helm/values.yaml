@@ -60,9 +60,9 @@ pgwatchPrometheus:
   image: cybertecpostgresql/pgwatch:3
   resources: {}
 
-flask:
+metricsServer:
   enabled: true
-  image: postgresai/monitoring-flask-backend:latest
+  image: postgresai/metrics-server:latest
   imagePullPolicy: IfNotPresent
   containerPort: 8000
   healthPath: /health

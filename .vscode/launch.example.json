@@ -2,39 +2,42 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Reporter (local)",
-      "type": "debugpy",
+      "name": "Run Reporter (TypeScript)",
+      "type": "node",
       "request": "launch",
-      "module": "reporter.postgres_reports",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      },
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run"],
+      "program": "${workspaceFolder}/cli/lib/reporter.ts",
       "args": [
         "--prometheus-url",
-        "http://127.0.0.1:59090",
-        "--postgres-sink-url",
-        "postgresql://pgwatch@127.0.0.1:55433/measurements",
-        "--no-upload",
-        "--output",
-        "-"
+        "http://127.0.0.1:59090"
       ],
-      "console": "integratedTerminal",
-      "justMyCode": true
+      "cwd": "${workspaceFolder}/cli",
+      "console": "integratedTerminal"
     },
     {
-      "name": "Attach (Flask in Docker: debugpy 5678)",
-      "type": "debugpy",
-      "request": "attach",
-      "connect": { "host": "127.0.0.1", "port": 5678 },
-      "pathMappings": [
-        {
-          "localRoot": "${workspaceFolder}/monitoring_flask_backend",
-          "remoteRoot": "/app"
-        }
-      ],
-      "justMyCode": true
+      "name": "Run Metrics Server (TypeScript)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run"],
+      "program": "${workspaceFolder}/cli/lib/metrics-server.ts",
+      "env": {
+        "PORT": "8000",
+        "PROMETHEUS_URL": "http://127.0.0.1:59090"
+      },
+      "cwd": "${workspaceFolder}/cli",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run CLI Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["test"],
+      "cwd": "${workspaceFolder}/cli",
+      "console": "integratedTerminal"
     }
   ]
 }
-
 

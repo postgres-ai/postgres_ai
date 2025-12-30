@@ -1481,7 +1481,7 @@ mon
     console.log("  ✅ PostgreSQL monitoring infrastructure");
     console.log("  ✅ Grafana dashboards (with secure password)");
     console.log("  ✅ Prometheus metrics storage");
-    console.log("  ✅ Flask API backend");
+    console.log("  ✅ Metrics server API");
     console.log("  ✅ Automated report generation (every 24h)");
     console.log("  ✅ Host stats monitoring (CPU, memory, disk, I/O)\n");
 

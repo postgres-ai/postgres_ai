@@ -1,8 +1,9 @@
 services:
-  # Local development override: build Flask backend from source instead of pulling an image.
-  monitoring_flask_backend:
+  # Local development override: build metrics-server from source instead of pulling an image.
+  metrics-server:
     build:
-      context: ./monitoring_flask_backend
-    image: postgresai/monitoring_flask_backend:local
+      context: ./cli
+      dockerfile: Dockerfile.metrics-server
+    image: postgresai/metrics-server:local
 
 

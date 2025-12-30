@@ -24,6 +24,9 @@ RUN bun run typecheck || true
 # Production stage
 FROM oven/bun:1-slim
 
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy node modules and source

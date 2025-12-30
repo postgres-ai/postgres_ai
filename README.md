@@ -182,7 +182,7 @@ This monitoring solution exposes several ports that **MUST** be properly firewal
 - **Port 58089** (PGWatch Prometheus) - Database monitoring interface
 - **Port 59090** (Victoria Metrics) - Metrics storage and queries
 - **Port 59091** (PGWatch Prometheus endpoint) - Metrics collection
-- **Port 55000** (Flask API) - Backend API service
+- **Port 55000** (Metrics Server) - Backend API service
 - **Port 55432** (Demo DB) - When using `--demo` option
 - **Port 55433** (Metrics DB) - Postgres metrics storage
 

@@ -24,12 +24,12 @@ This workflow lets you:
 - run the monitoring stack via Docker Compose
 - iterate on **custom code** without rebuilding images or committing changes
 - run the **reporter on your host** (recommended) and debug it
-- optionally debug the Flask backend running in Docker
+- optionally debug the metrics server running in Docker
 
 ### What runs where (quick mental model)
 
-- **Docker**: pgwatch collectors + sinks + Grafana (+ optional Flask dev container)
-- **Host**: `reporter/postgres_reports.py` (recommended for iteration & debugging)
+- **Docker**: pgwatch collectors + sinks + Grafana (+ optional metrics-server dev container)
+- **Host**: `cli/lib/reporter.ts` (recommended for iteration & debugging)
 
 ### One-time local setup (no commits)
 
@@ -53,7 +53,7 @@ cp docker-compose.override.example.yml docker-compose.override.yml
 This enables:
 
 - using local `./config/**` (Prometheus/Grafana/pgwatch configs) instead of published config images
-- Flask bind-mount + optional debugpy
+- Metrics server bind-mount for live reload
 - exposing `sink-postgres` on localhost for host-run reporter
 - (optional) an alternate mode to run the reporter *inside Docker* (commented in the example override). **Host-run reporter is the primary workflow.**
 
@@ -238,41 +238,31 @@ This repo includes `.vscode/launch.json` with a config:
 
 Use **Run and Debug** → select **Run Reporter (local)**.
 
-### Debug Flask backend in Docker (optional)
+### Debug metrics-server in Docker (optional)
 
-The override file bind-mounts `./monitoring_flask_backend` into the container for fast iteration.
+The override file bind-mounts `./cli/lib` into the container for fast iteration.
 
-#### Run without debugger
-
-```bash
-docker compose up -d --force-recreate monitoring_flask_backend
-```
-
-#### Enable debugpy (attach debugger)
+#### Run metrics-server locally
 
 ```bash
-DEBUGPY_FLASK=1 docker compose up -d --force-recreate monitoring_flask_backend
+docker compose up -d --force-recreate metrics-server
 ```
 
-Then attach from Cursor/VS Code:
-
-- **Attach (Flask in Docker: debugpy 5678)**
-
-The Flask service (gunicorn) is exposed on:
+The metrics server is exposed on:
 
 - `http://localhost:55000`
 
-### (Optional) Debug reporter in Docker
+### Debug reporter locally
 
-This is usually slower than host-run debugging, but it exists for parity:
+The reporter is a TypeScript/Bun application. Run it directly:
 
 ```bash
-DEBUGPY_REPORTER=1 docker compose up -d --force-recreate postgres-reports
+cd cli && bun run lib/reporter.ts --prometheus-url http://localhost:59090
 ```
 
-Then attach:
+Then use VS Code debugging:
 
-- **Attach (Reporter in Docker: debugpy 5679)**
+- **Run Reporter (TypeScript)** - from `.vscode/launch.example.json`
 
 ### Troubleshooting
 
@@ -341,7 +331,7 @@ postgresai mon reset
 ```bash
 postgresai mon logs
 postgresai mon logs grafana
-postgresai mon logs monitoring_flask_backend
+postgresai mon logs metrics-server
 ```
 
 ### Stop / start
