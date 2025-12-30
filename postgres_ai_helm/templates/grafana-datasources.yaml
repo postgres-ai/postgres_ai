@@ -29,7 +29,7 @@ data:
         jsonData:
           database: {{ .Values.sinkPostgres.database }}
           sslmode: disable
-          postgresVersion: 1500
+          postgresVersion: 1800
         secureJsonData:
           password: {{ .Values.secrets.postgres.password }}
       {{- if .Values.flask.enabled }}

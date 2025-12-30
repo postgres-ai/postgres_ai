@@ -30,7 +30,7 @@ global:
   customTags: {}
 
 sinkPostgres:
-  image: postgres:15
+  image: postgres:18
   database: measurements
   user: pgwatch
   resources: {}

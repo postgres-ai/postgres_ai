@@ -12,7 +12,7 @@ datasources:
       password: pgwatchadmin
     jsonData:
       sslmode: disable
-      postgresVersion: 1500
+      postgresVersion: 1800
     isDefault: false
 
   - name: PGWatch-Prometheus

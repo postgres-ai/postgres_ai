@@ -24,7 +24,7 @@ services:
 
   # Target Database - The PostgreSQL database being monitored (demo only)
   target-db:
-    image: postgres:15
+    image: postgres:18
     container_name: target-db
     environment:
       POSTGRES_DB: target_database
@@ -53,7 +53,7 @@ services:
   # and postgres-exporter connectivity without compromising security since
   # the database is not exposed externally.
   sink-postgres:
-    image: postgres:15
+    image: postgres:18
     container_name: sink-postgres
     environment:
       POSTGRES_DB: postgres
@@ -135,7 +135,7 @@ services:
 
   # Grafana with datasources - Visualization layer
   grafana:
-    image: grafana/grafana:12.0.2
+    image: grafana/grafana:12.3.1
     container_name: grafana-with-datasources
     environment:
       GF_SECURITY_ADMIN_USER: monitor
