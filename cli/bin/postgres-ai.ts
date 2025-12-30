@@ -1765,34 +1765,68 @@ mon
   });
 mon
   .command("clean")
-  .description("cleanup monitoring services artifacts")
-  .action(async () => {
-    console.log("Cleaning up Docker resources...\n");
+  .description("cleanup monitoring services artifacts (stops services and removes volumes)")
+  .option("--keep-volumes", "keep data volumes (only stop and remove containers)")
+  .action(async (options: { keepVolumes?: boolean }) => {
+    console.log("Cleaning up monitoring services...\n");
 
     try {
-      // Remove stopped containers
-      const { stdout: containers } = await execFilePromise("docker", ["ps", "-aq", "--filter", "status=exited"]);
-      if (containers.trim()) {
-        const containerIds = containers.trim().split('\n');
-        await execFilePromise("docker", ["rm", ...containerIds]);
-        console.log("✓ Removed stopped containers");
+      // First, use docker-compose down to properly stop and remove containers/volumes
+      const downArgs = options.keepVolumes ? ["down"] : ["down", "-v"];
+      console.log(options.keepVolumes
+        ? "Stopping and removing containers (keeping volumes)..."
+        : "Stopping and removing containers and volumes...");
+
+      const downCode = await runCompose(downArgs);
+      if (downCode === 0) {
+        console.log("✓ Monitoring services stopped and removed");
       } else {
-        console.log("✓ No stopped containers to remove");
+        console.log("⚠ Could not stop services (may not be running)");
       }
 
-      // Remove unused volumes
-      await execFilePromise("docker", ["volume", "prune", "-f"]);
-      console.log("✓ Removed unused volumes");
+      // Remove orphaned volumes from previous installs with different project names
+      if (!options.keepVolumes) {
+        const volumePatterns = [
+          "monitoring_grafana_data",
+          "monitoring_postgres_ai_configs",
+          "monitoring_sink_postgres_data",
+          "monitoring_target_db_data",
+          "monitoring_victoria_metrics_data",
+          "postgres_ai_configs_grafana_data",
+          "postgres_ai_configs_sink_postgres_data",
+          "postgres_ai_configs_target_db_data",
+          "postgres_ai_configs_victoria_metrics_data",
+          "postgres_ai_configs_postgres_ai_configs",
+        ];
 
-      // Remove unused networks
+        const { stdout: existingVolumes } = await execFilePromise("docker", ["volume", "ls", "-q"]);
+        const volumeList = existingVolumes.trim().split('\n').filter(Boolean);
+        const orphanedVolumes = volumeList.filter(v => volumePatterns.includes(v));
+
+        if (orphanedVolumes.length > 0) {
+          let removedCount = 0;
+          for (const vol of orphanedVolumes) {
+            try {
+              await execFilePromise("docker", ["volume", "rm", vol]);
+              removedCount++;
+            } catch {
+              // Volume might be in use, skip silently
+            }
+          }
+          if (removedCount > 0) {
+            console.log(`✓ Removed ${removedCount} orphaned volume(s) from previous installs`);
+          }
+        }
+      }
+
+      // Remove any dangling resources
       await execFilePromise("docker", ["network", "prune", "-f"]);
       console.log("✓ Removed unused networks");
 
-      // Remove dangling images
       await execFilePromise("docker", ["image", "prune", "-f"]);
       console.log("✓ Removed dangling images");
 
-      console.log("\nCleanup completed");
+      console.log("\n✓ Cleanup completed - ready for fresh install");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Error during cleanup: ${message}`);
