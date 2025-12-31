@@ -4,11 +4,13 @@ This project includes an AI DBA plugin for Claude Code that monitors PostgreSQL 
 
 ## Quick Start
 
-Use the `/ai-dba` slash command to start an AI DBA session:
+Use the `/pgai` slash command to start an AI DBA session:
 
 ```
-/ai-dba
+/pgai
 ```
+
+(alias: `/postgresai`)
 
 Or use specialized commands:
 - `/health-check <connection_string>` - Quick health assessment
