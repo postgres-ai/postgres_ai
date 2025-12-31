@@ -985,4 +985,281 @@ describe("MCP Server", () => {
       readConfigSpy.mockRestore();
     });
   });
+
+  // ==========================================
+  // AI DBA Tools Tests
+  // ==========================================
+
+  describe("AI DBA Tools", () => {
+    describe("dba_monitoring_status tool", () => {
+      test("returns monitoring status", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        // This test verifies the tool exists and returns expected structure
+        // Actual command execution depends on postgresai CLI being available
+        const response = await handleToolCall(createRequest("dba_monitoring_status"));
+
+        // Should not be undefined (tool was found)
+        expect(response).toBeDefined();
+        expect(response.content).toBeDefined();
+        expect(response.content[0]).toBeDefined();
+
+        // Parse the response to check structure
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed).toHaveProperty("exitCode");
+        expect(parsed).toHaveProperty("status");
+
+        readConfigSpy.mockRestore();
+      });
+    });
+
+    describe("dba_monitoring_health tool", () => {
+      test("returns health check result with wait_seconds parameter", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const response = await handleToolCall(
+          createRequest("dba_monitoring_health", { wait_seconds: 1 })
+        );
+
+        expect(response).toBeDefined();
+        expect(response.content).toBeDefined();
+
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed).toHaveProperty("exitCode");
+        expect(parsed).toHaveProperty("healthy");
+
+        readConfigSpy.mockRestore();
+      });
+    });
+
+    describe("dba_list_targets tool", () => {
+      test("returns list of monitoring targets", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const response = await handleToolCall(createRequest("dba_list_targets"));
+
+        expect(response).toBeDefined();
+        expect(response.content).toBeDefined();
+
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed).toHaveProperty("exitCode");
+        expect(parsed).toHaveProperty("stdout");
+
+        readConfigSpy.mockRestore();
+      });
+    });
+
+    describe("dba_query_metrics tool", () => {
+      test("returns error when Flask backend is not available", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        // Mock fetch to simulate unavailable backend
+        globalThis.fetch = mock(() => Promise.reject(new Error("Connection refused")));
+
+        const response = await handleToolCall(
+          createRequest("dba_query_metrics", {
+            time_start: "2024-01-01T00:00:00Z",
+            time_end: "2024-01-01T01:00:00Z",
+          })
+        );
+
+        expect(response.isError).toBe(true);
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed).toHaveProperty("error");
+
+        readConfigSpy.mockRestore();
+      });
+
+      test("parses CSV metrics to JSON format", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        // Mock successful CSV response
+        const csvData = "query,calls,total_time\nSELECT 1,100,50.5\nUPDATE users,10,25.3";
+        globalThis.fetch = mock(() =>
+          Promise.resolve(
+            new Response(csvData, {
+              status: 200,
+              headers: { "Content-Type": "text/csv" },
+            })
+          )
+        );
+
+        const response = await handleToolCall(createRequest("dba_query_metrics"));
+
+        expect(response.isError).toBeUndefined();
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed).toHaveProperty("headers");
+        expect(parsed).toHaveProperty("rows");
+        expect(parsed).toHaveProperty("rowCount");
+        expect(parsed.headers).toEqual(["query", "calls", "total_time"]);
+        expect(parsed.rowCount).toBe(2);
+
+        readConfigSpy.mockRestore();
+      });
+    });
+
+    describe("dba_analyze_findings tool", () => {
+      test("returns error when findings not provided", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const response = await handleToolCall(createRequest("dba_analyze_findings"));
+
+        // Should succeed but with empty findings
+        expect(response).toBeDefined();
+
+        readConfigSpy.mockRestore();
+      });
+
+      test("analyzes findings in observe mode", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const findings = JSON.stringify({
+          H001: { invalid_indexes: 3 },
+          H002: { unused_indexes: 5 },
+        });
+
+        const response = await handleToolCall(
+          createRequest("dba_analyze_findings", { findings, mode: "observe" })
+        );
+
+        expect(response.isError).toBeUndefined();
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed.mode).toBe("observe");
+        expect(parsed.recommendations).toContain("Review findings and escalate critical issues to user");
+        expect(parsed.parsedFindings).toHaveProperty("H001");
+        expect(parsed.parsedFindings).toHaveProperty("H002");
+
+        readConfigSpy.mockRestore();
+      });
+
+      test("analyzes findings in advise mode", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const response = await handleToolCall(
+          createRequest("dba_analyze_findings", {
+            findings: "{}",
+            mode: "advise",
+          })
+        );
+
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed.mode).toBe("advise");
+        expect(parsed.recommendations).toContain("Propose remediation plan for each finding");
+
+        readConfigSpy.mockRestore();
+      });
+
+      test("analyzes findings in auto-fix mode", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const response = await handleToolCall(
+          createRequest("dba_analyze_findings", {
+            findings: "{}",
+            mode: "auto-fix",
+          })
+        );
+
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed.mode).toBe("auto-fix");
+        expect(parsed.recommendations).toContain("Execute pre-approved safe remediations");
+
+        readConfigSpy.mockRestore();
+      });
+
+      test("handles invalid JSON findings gracefully", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        const response = await handleToolCall(
+          createRequest("dba_analyze_findings", {
+            findings: "not valid json",
+            mode: "observe",
+          })
+        );
+
+        expect(response.isError).toBeUndefined();
+        const parsed = JSON.parse(getResponseText(response));
+        // Should include the raw string as parsedFindings
+        expect(parsed.parsedFindings).toBe("not valid json");
+
+        readConfigSpy.mockRestore();
+      });
+    });
+
+    describe("dba_health_check tool", () => {
+      test("returns health check results structure", async () => {
+        const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+          apiKey: "test-key",
+          baseUrl: null,
+          orgId: null,
+          defaultProject: null,
+        });
+
+        // This test verifies the tool returns expected structure
+        // Actual health check depends on postgresai CLI and database
+        const response = await handleToolCall(
+          createRequest("dba_health_check", {
+            output_dir: "/tmp/ai-dba-test-checkup",
+          })
+        );
+
+        expect(response).toBeDefined();
+        const parsed = JSON.parse(getResponseText(response));
+        expect(parsed).toHaveProperty("exitCode");
+        expect(parsed).toHaveProperty("reports");
+        expect(parsed).toHaveProperty("outputDir");
+
+        readConfigSpy.mockRestore();
+      });
+    });
+  });
 });

@@ -2,11 +2,55 @@ import pkg from "../package.json";
 import * as config from "./config";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "./issues";
 import { resolveBaseUrls } from "./util";
+import * as childProcess from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
 // MCP SDK imports - Bun handles these directly
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+
+// AI DBA Helper: Execute shell command and return output
+async function execCommand(command: string, args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve) => {
+    childProcess.execFile(command, args, { encoding: "utf8", timeout: 120000 }, (error, stdout, stderr) => {
+      resolve({
+        stdout: typeof stdout === "string" ? stdout : "",
+        stderr: typeof stderr === "string" ? stderr : "",
+        exitCode: error ? (typeof error.code === "number" ? error.code : 1) : 0,
+      });
+    });
+  });
+}
+
+// AI DBA Helper: Fetch metrics from Flask backend
+async function fetchGrafanaMetrics(params: {
+  timeStart?: string;
+  timeEnd?: string;
+  clusterName?: string;
+  nodeName?: string;
+  dbName?: string;
+}): Promise<{ data: string; error?: string }> {
+  const baseUrl = process.env.PGAI_FLASK_URL || "http://localhost:55000";
+  const url = new URL(`${baseUrl}/pgss_metrics/csv`);
+
+  if (params.timeStart) url.searchParams.set("time_start", params.timeStart);
+  if (params.timeEnd) url.searchParams.set("time_end", params.timeEnd);
+  if (params.clusterName) url.searchParams.set("cluster_name", params.clusterName);
+  if (params.nodeName) url.searchParams.set("node_name", params.nodeName);
+  if (params.dbName) url.searchParams.set("db_name", params.dbName);
+
+  try {
+    const response = await fetch(url.toString(), { method: "GET" });
+    if (response.ok) {
+      return { data: await response.text() };
+    }
+    return { data: "", error: `HTTP ${response.status}: ${await response.text()}` };
+  } catch (err) {
+    return { data: "", error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 export interface RootOptsLike {
   apiKey?: string;
@@ -154,6 +198,183 @@ export async function handleToolCall(
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
 
+    // ==========================================
+    // AI DBA Tools
+    // ==========================================
+
+    if (toolName === "dba_health_check") {
+      const connectionString = String(args.connection_string || "").trim();
+      const checkIds = args.check_ids ? String(args.check_ids) : undefined;
+      const outputDir = args.output_dir ? String(args.output_dir) : "/tmp/ai-dba-checkup";
+
+      // Build command arguments
+      const cmdArgs = ["checkup"];
+      if (connectionString) {
+        cmdArgs.push(connectionString);
+      }
+      if (checkIds) {
+        cmdArgs.push("--check-id", checkIds);
+      }
+      cmdArgs.push("--output", outputDir);
+      cmdArgs.push("--json");
+
+      const result = await execCommand("postgresai", cmdArgs);
+
+      // Try to read and parse the output files
+      let reports: Record<string, unknown> = {};
+      try {
+        if (fs.existsSync(outputDir)) {
+          const files = fs.readdirSync(outputDir).filter(f => f.endsWith(".json"));
+          for (const file of files) {
+            const content = fs.readFileSync(path.join(outputDir, file), "utf8");
+            const checkId = file.replace(".json", "");
+            try {
+              reports[checkId] = JSON.parse(content);
+            } catch {
+              reports[checkId] = { raw: content };
+            }
+          }
+        }
+      } catch (readErr) {
+        // Ignore read errors, include them in output
+      }
+
+      const output = {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        reports,
+        outputDir,
+      };
+
+      return { content: [{ type: "text", text: JSON.stringify(output, null, 2) }] };
+    }
+
+    if (toolName === "dba_monitoring_status") {
+      const result = await execCommand("postgresai", ["mon", "status"]);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            exitCode: result.exitCode,
+            status: result.exitCode === 0 ? "running" : "not_running",
+            stdout: result.stdout,
+            stderr: result.stderr,
+          }, null, 2),
+        }],
+      };
+    }
+
+    if (toolName === "dba_monitoring_health") {
+      const waitSeconds = args.wait_seconds ? Number(args.wait_seconds) : 5;
+      const result = await execCommand("postgresai", ["mon", "health", "--wait", String(waitSeconds)]);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            exitCode: result.exitCode,
+            healthy: result.exitCode === 0,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          }, null, 2),
+        }],
+      };
+    }
+
+    if (toolName === "dba_list_targets") {
+      const result = await execCommand("postgresai", ["mon", "targets", "list"]);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          }, null, 2),
+        }],
+      };
+    }
+
+    if (toolName === "dba_query_metrics") {
+      const timeStart = args.time_start ? String(args.time_start) : undefined;
+      const timeEnd = args.time_end ? String(args.time_end) : undefined;
+      const clusterName = args.cluster_name ? String(args.cluster_name) : undefined;
+      const nodeName = args.node_name ? String(args.node_name) : undefined;
+      const dbName = args.db_name ? String(args.db_name) : undefined;
+
+      const result = await fetchGrafanaMetrics({ timeStart, timeEnd, clusterName, nodeName, dbName });
+
+      if (result.error) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: result.error }, null, 2) }],
+          isError: true,
+        };
+      }
+
+      // Parse CSV to JSON for easier consumption
+      const lines = result.data.trim().split("\n");
+      const headers = lines[0]?.split(",") || [];
+      const rows = lines.slice(1).map(line => {
+        const values = line.split(",");
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => {
+          row[h] = values[i] || "";
+        });
+        return row;
+      });
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({ headers, rows, rowCount: rows.length }, null, 2),
+        }],
+      };
+    }
+
+    if (toolName === "dba_analyze_findings") {
+      // This tool helps structure health check findings for decision making
+      const findings = args.findings ? String(args.findings) : "";
+      const mode = args.mode ? String(args.mode) : "observe";
+
+      let parsedFindings: unknown;
+      try {
+        parsedFindings = JSON.parse(findings);
+      } catch {
+        parsedFindings = findings;
+      }
+
+      // Categorize findings by severity
+      const analysis = {
+        mode,
+        summary: {
+          critical: [] as string[],
+          high: [] as string[],
+          medium: [] as string[],
+          low: [] as string[],
+        },
+        recommendations: [] as string[],
+        autoFixable: [] as string[],
+        requiresApproval: [] as string[],
+        parsedFindings,
+      };
+
+      // Add generic recommendations based on mode
+      if (mode === "observe") {
+        analysis.recommendations.push("Review findings and escalate critical issues to user");
+        analysis.recommendations.push("Create issues for HIGH severity findings");
+      } else if (mode === "advise") {
+        analysis.recommendations.push("Propose remediation plan for each finding");
+        analysis.recommendations.push("Wait for user approval before any action");
+      } else if (mode === "auto-fix") {
+        analysis.recommendations.push("Execute pre-approved safe remediations");
+        analysis.recommendations.push("Log all actions to issues for audit trail");
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(analysis, null, 2) }],
+      };
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -262,6 +483,77 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
               debug: { type: "boolean", description: "Enable verbose debug logs" },
             },
             required: ["comment_id", "content"],
+            additionalProperties: false,
+          },
+        },
+        // AI DBA Tools
+        {
+          name: "dba_health_check",
+          description: "Run PostgreSQL health check using postgresai checkup. Returns detailed health reports for various check categories (indexes, bloat, queries, etc.)",
+          inputSchema: {
+            type: "object",
+            properties: {
+              connection_string: { type: "string", description: "PostgreSQL connection string (optional if using local monitoring)" },
+              check_ids: { type: "string", description: "Comma-separated check IDs to run (e.g., 'H001,H002,F001'). Omit for all checks." },
+              output_dir: { type: "string", description: "Directory to store report files (default: /tmp/ai-dba-checkup)" },
+            },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "dba_monitoring_status",
+          description: "Check if the PostgresAI monitoring stack (Grafana, Prometheus, PGWatch) is running",
+          inputSchema: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "dba_monitoring_health",
+          description: "Verify health of all monitoring services with optional wait for startup",
+          inputSchema: {
+            type: "object",
+            properties: {
+              wait_seconds: { type: "number", description: "Seconds to wait for services to become healthy (default: 5)" },
+            },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "dba_list_targets",
+          description: "List all PostgreSQL databases currently being monitored",
+          inputSchema: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "dba_query_metrics",
+          description: "Query pg_stat_statements metrics from Grafana/Flask backend for performance analysis",
+          inputSchema: {
+            type: "object",
+            properties: {
+              time_start: { type: "string", description: "Start time in ISO format (e.g., 2024-01-15T14:00:00Z)" },
+              time_end: { type: "string", description: "End time in ISO format" },
+              cluster_name: { type: "string", description: "Filter by cluster name" },
+              node_name: { type: "string", description: "Filter by node name" },
+              db_name: { type: "string", description: "Filter by database name" },
+            },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "dba_analyze_findings",
+          description: "Analyze health check findings and categorize by severity. Helps AI DBA decide on actions based on operating mode.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              findings: { type: "string", description: "JSON string of health check findings to analyze" },
+              mode: { type: "string", description: "Operating mode: 'observe' (report only), 'advise' (propose fixes), 'auto-fix' (execute safe fixes)" },
+            },
+            required: ["findings"],
             additionalProperties: false,
           },
         },

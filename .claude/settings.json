@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/settings.schema.json",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "ai-dba-monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"AI DBA: Monitoring paused. Health check snapshot saved.\"; postgresai mon status 2>/dev/null || echo \"Monitoring stack not running\"'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if echo \"$TOOL_INPUT\" | grep -q \"DROP\\|TRUNCATE\\|DELETE.*FROM\"; then echo \"AI_DBA_SAFETY: Destructive operation detected. Requires explicit approval.\"; fi'"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(postgresai *)",
+      "Bash(curl http://localhost:*)",
+      "Bash(cat /tmp/ai-dba-*)",
+      "Read(/tmp/ai-dba-*)",
+      "Read(/home/user/postgres_ai/**)"
+    ],
+    "deny": [
+      "Bash(*DROP*)",
+      "Bash(*TRUNCATE*)",
+      "Bash(*DELETE FROM*)"
+    ]
+  }
+}
