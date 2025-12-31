@@ -1,6 +1,6 @@
-# Continuous Monitoring Loop
+# PGAI Monitor
 
-Start a continuous monitoring session that periodically checks cluster health.
+Continuous monitoring session that periodically checks cluster health.
 
 ## Arguments
 - `$ARGUMENTS` should contain: `<connection_string> [interval_seconds]`

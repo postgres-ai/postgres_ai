@@ -1,4 +1,4 @@
-# Fix Index Issues
+# PGAI Fix Indexes
 
 Analyze and remediate index-related issues identified by health checks.
 

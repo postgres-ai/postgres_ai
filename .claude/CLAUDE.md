@@ -4,20 +4,23 @@ This project includes an AI DBA plugin for Claude Code that monitors PostgreSQL 
 
 ## Quick Start
 
-Use the `/pgai` slash command to start an AI DBA session:
+Use the `/postgresai` slash command to start an AI DBA session:
 
 ```
-/pgai
+/postgresai
 ```
 
-(alias: `/postgresai`)
+(alias: `/pgai`)
 
-Or use specialized commands:
-- `/health-check <connection_string>` - Quick health assessment
-- `/monitor-loop <connection_string> [interval]` - Continuous monitoring
-- `/analyze-issue <issue_id>` - Deep dive into a specific issue
-- `/fix-indexes` - Analyze and remediate index issues
-- `/grafana-rca <incident>` - Root cause analysis using Grafana
+### Specialized Commands (pgai: namespace)
+
+| Command | Description |
+|---------|-------------|
+| `/pgai:checkup <conn>` | Quick health assessment (alias: `/pgai:health`) |
+| `/pgai:monitor <conn> [interval]` | Continuous monitoring loop |
+| `/pgai:analyze <issue_id>` | Deep-dive issue analysis |
+| `/pgai:fix-indexes` | Analyze and remediate index issues |
+| `/pgai:rca <incident>` | Root cause analysis using Grafana |
 
 ## Operating Modes
 

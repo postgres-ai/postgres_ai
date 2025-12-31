@@ -1,4 +1,4 @@
-# Analyze Issue
+# PGAI Analyze
 
 Deep-dive analysis of a specific issue from PostgresAI.
 

@@ -1,6 +1,8 @@
-# Quick Health Check
+# PGAI Checkup
 
-Run a quick health assessment of the PostgreSQL cluster.
+> Alias: `/pgai:health`
+
+Quick health assessment of a PostgreSQL cluster.
 
 ## Instructions
 

@@ -1,4 +1,4 @@
-# Grafana RCA (Root Cause Analysis)
+# PGAI RCA (Root Cause Analysis)
 
 Use Grafana dashboards to perform deep root cause analysis of database incidents.
 
