@@ -4,7 +4,7 @@
 class Postgresai < Formula
   desc "postgres_ai CLI (Node.js)"
   homepage "https://gitlab.com/postgres-ai/postgres_ai"
-  url "https://registry.npmjs.org/postgresai/-/postgresai-0.11.0-alpha.8.tgz"
+  url "https://registry.npmjs.org/postgresai/-/postgresai-0.14.0-beta.3.tgz"
   sha256 "" # Will be calculated after publishing to npm
   license "Apache-2.0"
 
