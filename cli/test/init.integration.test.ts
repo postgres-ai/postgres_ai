@@ -399,6 +399,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     }
   });
 
+  // 60s timeout for PostgreSQL startup + multiple SQL queries in slow CI
   test("explain_generic validates input and prevents SQL injection", async () => {
     pg = await createTempPostgres();
 
@@ -495,5 +496,5 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 60000 });
 });

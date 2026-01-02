@@ -1,5 +1,7 @@
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { resolve } from "path";
+import * as fs from "fs";
+import * as os from "os";
 
 // Import from source directly since we're using Bun
 import * as init from "../lib/init";
@@ -413,5 +415,113 @@ describe("CLI commands", () => {
     // Should reject demo mode with API key (from global option)
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/Cannot use --api-key with --demo mode/);
+  });
+});
+
+describe("imageTag priority behavior", () => {
+  // Tests for the imageTag priority: --tag flag > PGAI_TAG env var > pkg.version
+  // This verifies the fix that prevents stale .env PGAI_TAG from being used
+
+  let tempDir: string;
+
+  beforeAll(() => {
+    tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "pgai-test-"));
+  });
+
+  afterAll(() => {
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("stale .env PGAI_TAG is NOT used - CLI version takes precedence", () => {
+    // Create a stale .env with an old tag value
+    const testDir = resolve(tempDir, "stale-tag-test");
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(resolve(testDir, ".env"), "PGAI_TAG=beta\n");
+    // Create minimal docker-compose.yml so resolvePaths() finds it
+    fs.writeFileSync(resolve(testDir, "docker-compose.yml"), "version: '3'\nservices: {}\n");
+
+    // Run from the test directory (so resolvePaths finds docker-compose.yml)
+    const cliPath = resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
+    const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
+      env: { ...process.env, PGAI_TAG: undefined },
+      cwd: testDir,
+    });
+
+    // Read the .env that was written
+    const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
+
+    // The .env should NOT contain the stale "beta" tag - it should use pkg.version
+    expect(envContent).not.toMatch(/PGAI_TAG=beta/);
+    // It should contain the CLI version (0.0.0-dev.0 in dev)
+    expect(envContent).toMatch(/PGAI_TAG=\d+\.\d+\.\d+|PGAI_TAG=0\.0\.0-dev/);
+  });
+
+  test("--tag flag takes priority over pkg.version", () => {
+    const testDir = resolve(tempDir, "tag-flag-test");
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(resolve(testDir, "docker-compose.yml"), "version: '3'\nservices: {}\n");
+
+    const cliPath = resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
+    const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--tag", "v1.2.3-custom", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
+      env: { ...process.env, PGAI_TAG: undefined },
+      cwd: testDir,
+    });
+
+    const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
+    expect(envContent).toMatch(/PGAI_TAG=v1\.2\.3-custom/);
+
+    // Verify stdout confirms the tag being used
+    const stdout = new TextDecoder().decode(result.stdout);
+    expect(stdout).toMatch(/Using image tag: v1\.2\.3-custom/);
+  });
+
+  test("PGAI_TAG env var is intentionally ignored (Bun auto-loads .env)", () => {
+    // Note: We do NOT use process.env.PGAI_TAG because Bun auto-loads .env files,
+    // which would cause stale .env values to pollute the environment.
+    // Users should use --tag flag to override, not env vars.
+    const testDir = resolve(tempDir, "env-var-ignored-test");
+    fs.mkdirSync(testDir, { recursive: true });
+    fs.writeFileSync(resolve(testDir, "docker-compose.yml"), "version: '3'\nservices: {}\n");
+
+    const cliPath = resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
+    const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
+      env: { ...process.env, PGAI_TAG: "v2.0.0-from-env" },
+      cwd: testDir,
+    });
+
+    const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
+    // PGAI_TAG env var should be IGNORED - uses pkg.version instead
+    expect(envContent).not.toMatch(/PGAI_TAG=v2\.0\.0-from-env/);
+    expect(envContent).toMatch(/PGAI_TAG=\d+\.\d+\.\d+|PGAI_TAG=0\.0\.0-dev/);
+  });
+
+  test("existing registry and password are preserved while tag is updated", () => {
+    const testDir = resolve(tempDir, "preserve-test");
+    fs.mkdirSync(testDir, { recursive: true });
+    // Create .env with stale tag but valid registry and password
+    fs.writeFileSync(resolve(testDir, ".env"),
+      "PGAI_TAG=stale-tag\nPGAI_REGISTRY=my.registry.com\nGF_SECURITY_ADMIN_PASSWORD=secret123\n");
+    fs.writeFileSync(resolve(testDir, "docker-compose.yml"), "version: '3'\nservices: {}\n");
+
+    const cliPath = resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
+    const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
+      env: { ...process.env, PGAI_TAG: undefined },
+      cwd: testDir,
+    });
+
+    const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
+
+    // Tag should be updated (not stale-tag)
+    expect(envContent).not.toMatch(/PGAI_TAG=stale-tag/);
+
+    // But registry and password should be preserved
+    expect(envContent).toMatch(/PGAI_REGISTRY=my\.registry\.com/);
+    expect(envContent).toMatch(/GF_SECURITY_ADMIN_PASSWORD=secret123/);
   });
 });
