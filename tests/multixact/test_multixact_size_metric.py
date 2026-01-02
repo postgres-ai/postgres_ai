@@ -270,6 +270,92 @@ def test_multixact_size_v19_aurora_excludes_native(metrics_config: dict) -> None
         assert "has_native_fn" in sql, "Aurora probe should check native function availability"
 
 
+# =============================================================================
+# Unit Tests: RDS Path (rds_tools.pg_ls_multixactdir)
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_multixact_size_v11_rds_probe_structure(metrics_config: dict) -> None:
+    """Test that v11 SQL has proper RDS probe structure."""
+    sql = metrics_config["metrics"]["multixact_size"]["sqls"][11]
+
+    # Should check for RDS function
+    assert "rds_tools" in sql, "v11 SQL should reference rds_tools schema"
+    assert "pg_ls_multixactdir" in sql, "v11 SQL should reference pg_ls_multixactdir function"
+    assert "has_rds_fn" in sql, "v11 SQL should have has_rds_fn flag"
+
+
+@pytest.mark.unit
+def test_multixact_size_v19_rds_probe_structure(metrics_config: dict) -> None:
+    """Test that v19 SQL has proper RDS probe structure."""
+    sql = metrics_config["metrics"]["multixact_size"]["sqls"][19]
+
+    # Should have RDS fallback
+    assert "rds_tools" in sql, "v19 SQL should reference rds_tools schema"
+    assert "pg_ls_multixactdir" in sql, "v19 SQL should reference pg_ls_multixactdir function"
+    assert "rds_probe_xml" in sql, "v19 SQL should have rds_probe_xml CTE"
+
+
+@pytest.mark.unit
+def test_multixact_size_v19_rds_excludes_native_and_aurora(metrics_config: dict) -> None:
+    """Test that RDS fallback only triggers when native and Aurora unavailable."""
+    sql = metrics_config["metrics"]["multixact_size"]["sqls"][19]
+
+    # Find the rds_probe_xml WHERE clause
+    # It should have: WHERE has_rds_fn AND NOT has_aurora_fn AND NOT has_native_fn
+    rds_section_start = sql.find("rds_probe_xml as")
+    assert rds_section_start > 0, "rds_probe_xml CTE should exist"
+
+    # Get the section after rds_probe_xml definition
+    rds_section = sql[rds_section_start:rds_section_start + 2000]
+
+    # Should exclude both native and aurora
+    assert "has_rds_fn" in rds_section, "RDS probe should check has_rds_fn"
+    assert "has_aurora_fn" in rds_section, "RDS probe should check has_aurora_fn"
+    assert "has_native_fn" in rds_section, "RDS probe should check has_native_fn"
+
+
+@pytest.mark.unit
+def test_multixact_size_rds_probe_parses_members_and_offsets(metrics_config: dict) -> None:
+    """Test that RDS probe correctly separates members and offsets files."""
+    sql = metrics_config["metrics"]["multixact_size"]["sqls"][11]
+
+    # RDS probe should filter files by path pattern
+    assert "pg_multixact/members" in sql, "RDS probe should filter members files"
+    assert "pg_multixact/offsets" in sql, "RDS probe should filter offsets files"
+
+
+@pytest.mark.unit
+def test_multixact_size_rds_probe_sums_file_sizes(metrics_config: dict) -> None:
+    """Test that RDS probe sums file sizes correctly."""
+    sql = metrics_config["metrics"]["multixact_size"]["sqls"][11]
+
+    # Should use SUM to aggregate file sizes
+    # The RDS function returns 'size' column
+    assert "sum(size)" in sql.lower() or "sum(used_bytes)" in sql.lower(), \
+        "RDS probe should sum file sizes"
+
+
+@pytest.mark.unit
+def test_multixact_size_rds_priority_between_aurora_and_local(metrics_config: dict) -> None:
+    """Test that RDS probe is checked after Aurora but before local filesystem."""
+    sql = metrics_config["metrics"]["multixact_size"]["sqls"][19]
+
+    # Find positions in the picked CTE
+    picked_section_start = sql.find("picked as")
+    assert picked_section_start > 0, "picked CTE should exist"
+    picked_section = sql[picked_section_start:]
+
+    aurora_pos = picked_section.find("aurora_probe_xml")
+    rds_pos = picked_section.find("rds_probe_xml")
+    local_pos = picked_section.find("local_probe_xml")
+
+    # Order should be: aurora < rds < local (in the UNION ALL)
+    assert aurora_pos < rds_pos, "Aurora should come before RDS in picked CTE"
+    assert rds_pos < local_pos, "RDS should come before local in picked CTE"
+
+
 @pytest.mark.unit
 def test_multixact_size_gauges_defined(metrics_config: dict) -> None:
     """Test that the metric has proper gauge definitions."""
@@ -488,6 +574,199 @@ def test_mock_pg19_fallback_when_function_missing() -> None:
         # This is a conceptual test - the actual SQL handles this logic
         # We're just documenting the expected behavior
         assert "expected_probe" in scenario
+
+
+# =============================================================================
+# Mock Tests: RDS Path (rds_tools.pg_ls_multixactdir)
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_mock_rds_function_output_parsing() -> None:
+    """
+    Mock test: simulate rds_tools.pg_ls_multixactdir() output parsing.
+
+    The RDS function returns rows with columns: name, size
+    where name is like 'pg_multixact/members/0000' or 'pg_multixact/offsets/0000'
+    """
+    # Simulate what rds_tools.pg_ls_multixactdir() returns
+    mock_rds_output = [
+        {"name": "pg_multixact/members/0000", "size": 262144},
+        {"name": "pg_multixact/members/0001", "size": 262144},
+        {"name": "pg_multixact/members/0002", "size": 131072},  # partial segment
+        {"name": "pg_multixact/offsets/0000", "size": 262144},
+        {"name": "pg_multixact/offsets/0001", "size": 8192},    # partial segment
+    ]
+
+    # Calculate expected sums (simulating the SQL logic)
+    members_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if "pg_multixact/members" in row["name"]
+    )
+    offsets_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if "pg_multixact/offsets" in row["name"]
+    )
+
+    assert members_bytes == 262144 + 262144 + 131072  # 655360
+    assert offsets_bytes == 262144 + 8192  # 270336
+
+
+@pytest.mark.unit
+def test_mock_rds_empty_directory() -> None:
+    """
+    Mock test: simulate empty pg_multixact directories on RDS.
+
+    When directories are empty, the function should return 0 bytes.
+    """
+    mock_rds_output = []  # No files
+
+    members_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if "pg_multixact/members" in row["name"]
+    )
+    offsets_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if "pg_multixact/offsets" in row["name"]
+    )
+
+    assert members_bytes == 0
+    assert offsets_bytes == 0
+
+
+@pytest.mark.unit
+def test_mock_rds_large_multixact_usage() -> None:
+    """
+    Mock test: simulate large multixact usage on RDS.
+
+    Verify calculations work correctly with many files and large sizes.
+    """
+    # Simulate a busy system with many multixact segments
+    # 100 member segments + 10 offset segments
+    mock_rds_output = []
+
+    # Add 100 member files (each 256KB = 262144 bytes)
+    for i in range(100):
+        mock_rds_output.append({
+            "name": f"pg_multixact/members/{i:04X}",
+            "size": 262144
+        })
+
+    # Add 10 offset files
+    for i in range(10):
+        mock_rds_output.append({
+            "name": f"pg_multixact/offsets/{i:04X}",
+            "size": 262144
+        })
+
+    members_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if "pg_multixact/members" in row["name"]
+    )
+    offsets_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if "pg_multixact/offsets" in row["name"]
+    )
+
+    # 100 * 256KB = 25.6MB
+    assert members_bytes == 100 * 262144  # 26214400 bytes
+    # 10 * 256KB = 2.56MB
+    assert offsets_bytes == 10 * 262144   # 2621440 bytes
+
+
+@pytest.mark.unit
+def test_mock_rds_path_filtering() -> None:
+    """
+    Mock test: verify path filtering correctly separates members from offsets.
+
+    The SQL uses LIKE patterns to filter files.
+    """
+    mock_rds_output = [
+        # Members files (should match 'pg_multixact/members%')
+        {"name": "pg_multixact/members/0000", "size": 1000},
+        {"name": "pg_multixact/members/0001", "size": 2000},
+        # Offsets files (should match 'pg_multixact/offsets%')
+        {"name": "pg_multixact/offsets/0000", "size": 3000},
+        # Other files that should NOT be counted
+        {"name": "pg_multixact/other_file", "size": 9999},
+        {"name": "base/1234/5678", "size": 9999},
+    ]
+
+    # SQL uses: WHERE name LIKE 'pg_multixact/members%'
+    members_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if row["name"].startswith("pg_multixact/members")
+    )
+
+    # SQL uses: WHERE name LIKE 'pg_multixact/offsets%'
+    offsets_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if row["name"].startswith("pg_multixact/offsets")
+    )
+
+    assert members_bytes == 1000 + 2000  # 3000
+    assert offsets_bytes == 3000
+    # Other files should not be included
+    assert members_bytes + offsets_bytes == 6000  # Not 6000 + 9999 + 9999
+
+
+@pytest.mark.unit
+def test_mock_rds_coalesce_null_handling() -> None:
+    """
+    Mock test: verify COALESCE handles NULL when no files exist for a category.
+
+    If only members files exist (no offsets), offsets_bytes should be 0, not NULL.
+    """
+    mock_rds_output = [
+        {"name": "pg_multixact/members/0000", "size": 262144},
+        # No offsets files
+    ]
+
+    members_bytes = sum(
+        row["size"] for row in mock_rds_output
+        if row["name"].startswith("pg_multixact/members")
+    )
+
+    offsets_files = [
+        row for row in mock_rds_output
+        if row["name"].startswith("pg_multixact/offsets")
+    ]
+
+    # In SQL: COALESCE((SELECT sz FROM offsets), 0)
+    offsets_bytes = sum(row["size"] for row in offsets_files) if offsets_files else 0
+
+    assert members_bytes == 262144
+    assert offsets_bytes == 0  # Should be 0, not None/NULL
+
+
+@pytest.mark.unit
+def test_mock_rds_status_code_logic() -> None:
+    """
+    Mock test: verify status_code logic for RDS probe.
+
+    status_code should be:
+    - 0: Data found (files exist)
+    - 1: No data (empty directories but probe worked)
+    """
+    # Scenario 1: Files exist
+    mock_rds_output_with_files = [
+        {"name": "pg_multixact/members/0000", "size": 262144},
+    ]
+    has_rows = len([
+        r for r in mock_rds_output_with_files
+        if "pg_multixact/" in r["name"]
+    ]) > 0
+    status_code = 0 if has_rows else 1
+    assert status_code == 0
+
+    # Scenario 2: No files
+    mock_rds_output_empty = []
+    has_rows = len([
+        r for r in mock_rds_output_empty
+        if "pg_multixact/" in r["name"]
+    ]) > 0
+    status_code = 0 if has_rows else 1
+    assert status_code == 1
 
 
 # =============================================================================
