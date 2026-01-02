@@ -1204,25 +1204,25 @@ mon
     // Update .env with custom tag if provided
     const envFile = path.resolve(projectDir, ".env");
 
-    // Build .env content, preserving important existing values
-    // Read existing .env first to preserve CI/custom settings
-    let existingTag: string | null = null;
+    // Build .env content, preserving important existing values (registry, password)
+    // Note: PGAI_TAG is intentionally NOT preserved - the CLI version should always match Docker images
     let existingRegistry: string | null = null;
     let existingPassword: string | null = null;
 
     if (fs.existsSync(envFile)) {
       const existingEnv = fs.readFileSync(envFile, "utf8");
-      // Extract existing values
-      const tagMatch = existingEnv.match(/^PGAI_TAG=(.+)$/m);
-      if (tagMatch) existingTag = tagMatch[1].trim();
+      // Extract existing values (except tag - always use CLI version)
       const registryMatch = existingEnv.match(/^PGAI_REGISTRY=(.+)$/m);
       if (registryMatch) existingRegistry = registryMatch[1].trim();
       const pwdMatch = existingEnv.match(/^GF_SECURITY_ADMIN_PASSWORD=(.+)$/m);
       if (pwdMatch) existingPassword = pwdMatch[1].trim();
     }
 
-    // Priority: CLI --tag flag > PGAI_TAG env var > existing .env > package version
-    const imageTag = opts.tag || process.env.PGAI_TAG || existingTag || pkg.version;
+    // Priority: CLI --tag flag > package version
+    // Note: We intentionally do NOT use process.env.PGAI_TAG here because Bun auto-loads .env files,
+    // which would cause stale .env values to override the CLI version. The CLI version should always
+    // match the Docker images. Users can override with --tag if needed.
+    const imageTag = opts.tag || pkg.version;
 
     const envLines: string[] = [`PGAI_TAG=${imageTag}`];
     if (existingRegistry) {
