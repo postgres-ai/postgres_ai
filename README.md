@@ -3,6 +3,8 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![GitLab](https://img.shields.io/badge/GitLab-postgres--ai%2Fpostgres__ai-orange?logo=gitlab)](https://gitlab.com/postgres-ai/postgres_ai)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-blue?logo=postgresql)](https://www.postgresql.org/)
+[![CLI Coverage](https://img.shields.io/gitlab/pipeline-coverage/postgres-ai%2Fpostgres_ai?branch=main&job_name=cli%3Anode%3Atests&label=CLI%20coverage)](https://gitlab.com/postgres-ai/postgres_ai/-/pipelines)
+[![Reporter Coverage](https://img.shields.io/gitlab/pipeline-coverage/postgres-ai%2Fpostgres_ai?branch=main&job_name=reporter%3Atests&label=Reporter%20coverage)](https://gitlab.com/postgres-ai/postgres_ai/-/pipelines)
 
 **Expert-level Postgres monitoring tool designed for humans and AI systems**
 
@@ -63,6 +65,113 @@ Experience the full monitoring solution: **https://demo.postgres.ai** (login: `d
 - Supports Postgres versions 14-18
 - **pg_stat_statements extension must be created** for the DB used for connection
 
+## 🚀 Quick start
+
+Create a database user for monitoring (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database).
+
+Use the CLI to create/update the monitoring role and grant all required permissions (idempotent):
+
+```bash
+# Connect as an admin/superuser and run the idempotent setup:
+# - create/update the monitoring role
+# - create required view(s)
+# - apply required grants (and optional extensions where supported)
+# Admin password comes from PGPASSWORD (libpq standard) unless you pass --admin-password.
+#
+# Monitoring password:
+# - by default, postgresai generates a strong password automatically
+# - it is printed only in interactive (TTY) mode, or if you opt in via --print-password
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname
+```
+
+Optional permissions (RDS/self-managed extras) are enabled by default. To skip them:
+
+```bash
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --skip-optional-permissions
+```
+
+Verify everything is in place (no changes):
+
+```bash
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --verify
+```
+
+If you want to reset the monitoring password only (no other changes), you can rely on auto-generation:
+
+```bash
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password
+```
+
+By default, `postgresai prepare-db` auto-generates a strong password (see above).
+
+If you want to set a specific password instead:
+
+```bash
+PGPASSWORD='...' npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
+```
+
+If you want to see what will be executed first, use `--print-sql` (prints the SQL plan and exits; passwords redacted by default). This can be done without a DB connection:
+
+```bash
+npx postgresai prepare-db --print-sql
+```
+
+Optionally, to render the plan for a specific database:
+
+```bash
+# Pick database (default is PGDATABASE or "postgres"):
+npx postgresai prepare-db --print-sql -d dbname
+
+# Provide an explicit monitoring password (still redacted in output):
+npx postgresai prepare-db --print-sql -d dbname --password '...'
+```
+
+### Troubleshooting
+
+**Permission denied errors**
+
+If you see errors like `permission denied` / `insufficient_privilege` / code `42501`, you are not connected with enough privileges to create roles, grant permissions, or create extensions/views.
+
+- **How to fix**:
+  - Connect as a **superuser**, or a role with **CREATEROLE** and sufficient **GRANT/DDL** privileges
+  - On RDS/Aurora: use a user with the `rds_superuser` role (typically `postgres`, the most highly privileged user on RDS for PostgreSQL)
+  - On Cloud SQL: use a user with the `cloudsqlsuperuser` role (often `postgres`)
+  - On Supabase: use the `postgres` user (default administrator with elevated privileges for role/permission management)
+  - On managed providers: use the provider’s **admin** role/user
+
+- **Review SQL before running** (audit-friendly):
+
+    ```bash
+    npx postgresai prepare-db --print-sql -d mydb
+    ```
+
+**Install the CLI:**
+
+```bash
+npm install -g postgresai
+```
+
+**Start monitoring:**
+
+To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
+
+```bash
+# Production setup with your Access token
+postgresai mon local-install --api-key=your_access_token
+```
+**Note:** You can also add your database instance in the same command:
+```bash
+postgresai mon local-install --api-key=your_access_token --db-url="postgresql://user:pass@host:port/DB"
+```
+
+Or if you want to just check out how it works:
+```bash
+# Complete setup with demo database
+postgresai mon local-install --demo
+```
+
+That's it! Everything is installed, configured, and running.
+
 ## ⚠️ Security Notice
 
 **WARNING: Security is your responsibility!**
@@ -84,84 +193,6 @@ This monitoring solution exposes several ports that **MUST** be properly firewal
 
 Failure to secure these ports may expose sensitive database information!
 
-## 🚀 Quick start
-
-Create a new DB user in the database to be monitored (skip this if you want to just check out `postgres_ai` monitoring with a synthetic `demo` database):
-```sql
--- Create a user for postgres_ai monitoring
-begin;
-create user postgres_ai_mon with password '<password>';
-
-grant connect on database <database_name> to postgres_ai_mon;
-
-grant pg_monitor to postgres_ai_mon;
-grant select on pg_index to postgres_ai_mon;
-
--- Create a public view for pg_statistic access (optional, for bloat analysis)
-create view public.pg_statistic as
-select 
-    n.nspname as schemaname,
-    c.relname as tablename,
-    a.attname,
-    s.stanullfrac as null_frac,
-    s.stawidth as avg_width,
-    false as inherited
-from pg_statistic s
-join pg_class c on c.oid = s.starelid
-join pg_namespace n on n.oid = c.relnamespace  
-join pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
-where a.attnum > 0 and not a.attisdropped;
-
-grant select on public.pg_statistic to postgres_ai_mon;
-alter user postgres_ai_mon set search_path = "$user", public, pg_catalog;
-commit;
-```
-
-### Optional permissions to analyze risks of certain performance cliffs
-
-For RDS Postgres and Aurora:
-
-```sql
-create extension if not exists rds_tools;
-grant execute on function rds_tools.pg_ls_multixactdir() to postgres_ai_mon;
-```
-
-For self-managed Postgres:
-
-```sql
-grant execute on function pg_stat_file(text) to postgres_ai_mon;
-grant execute on function pg_stat_file(text, boolean) to postgres_ai_mon;
-grant execute on function pg_ls_dir(text) to postgres_ai_mon;
-grant execute on function pg_ls_dir(text, boolean, boolean) to postgres_ai_mon;
-```
-
-**One command setup:**
-
-```bash
-# Download the CLI
-curl -o postgres_ai https://gitlab.com/postgres-ai/postgres_ai/-/raw/main/postgres_ai \
-  && chmod +x postgres_ai
-```
-
-Now, start it and wait for a few minutes. To obtain a PostgresAI access token for your organization, visit https://console.postgres.ai (`Your org name → Manage → Access tokens`):
-
-```bash
-# Production setup with your Access token
-./postgres_ai quickstart --api-key=your_access_token
-```
-**Note:** You can also add your database instance in the same command:
-```bash
-./postgres_ai quickstart --api-key=your_access_token --add-instance="postgresql://user:pass@host:port/DB"
-```
-
-Or if you want to just check out how it works:
-```bash
-# Complete setup with demo database
-./postgres_ai quickstart --demo
-```
-
-That's it! Everything is installed, configured, and running.
-
 ## 📊 What you get
 
 - **Grafana Dashboards** - Visual monitoring at http://localhost:3000
@@ -174,39 +205,101 @@ That's it! Everything is installed, configured, and running.
 
 **For developers:**
 ```bash
-./postgres_ai quickstart --demo
+postgresai mon local-install --demo
 ```
 Get a complete monitoring setup with demo data in under 2 minutes.
 
 **For production:**
 ```bash
-./postgres_ai quickstart --api-key=your_key
+postgresai mon local-install --api-key=your_key
 # Then add your databases
-./postgres_ai add-instance "postgresql://user:pass@host:port/DB"
+postgresai mon targets add "postgresql://user:pass@host:port/DB"
 ```
 
 ## 🔧 Management commands
 
 ```bash
 # Instance management
-./postgres_ai add-instance "postgresql://user:pass@host:port/DB"
-./postgres_ai list-instances
-./postgres_ai test-instance my-DB
+postgresai mon targets add "postgresql://user:pass@host:port/DB"
+postgresai mon targets list
+postgresai mon targets test my-DB
 
-# Service management  
-./postgres_ai status
-./postgres_ai logs
-./postgres_ai restart
+# Service management
+postgresai mon status
+postgresai mon logs
+postgresai mon restart
 
 # Health check
-./postgres_ai health
+postgresai mon health
 ```
+
+## 📋 Checkup reports
+
+postgres_ai monitoring generates automated health check reports based on [postgres-checkup](https://gitlab.com/postgres-ai/postgres-checkup). Each report has a unique check ID and title:
+
+### A. General / Infrastructural
+| Check ID | Title |
+|----------|-------|
+| A001 | System information |
+| A002 | Version information |
+| A003 | Postgres settings |
+| A004 | Cluster information |
+| A005 | Extensions |
+| A006 | Postgres setting deviations |
+| A007 | Altered settings |
+| A008 | Disk usage and file system type |
+
+### D. Monitoring / Troubleshooting
+| Check ID | Title |
+|----------|-------|
+| D004 | pg_stat_statements and pg_stat_kcache settings |
+
+### F. Autovacuum, Bloat
+| Check ID | Title |
+|----------|-------|
+| F001 | Autovacuum: current settings |
+| F004 | Autovacuum: heap bloat (estimated) |
+| F005 | Autovacuum: index bloat (estimated) |
+
+### G. Performance / Connections / Memory-related settings
+| Check ID | Title |
+|----------|-------|
+| G001 | Memory-related settings |
+
+### H. Index analysis
+| Check ID | Title |
+|----------|-------|
+| H001 | Invalid indexes |
+| H002 | Unused indexes |
+| H004 | Redundant indexes |
+
+### K. SQL query analysis
+| Check ID | Title |
+|----------|-------|
+| K001 | Globally aggregated query metrics |
+| K003 | Top queries by total time (total_exec_time + total_plan_time) |
+| K004 | Top queries by temp bytes written |
+| K005 | Top queries by WAL generation |
+| K006 | Top queries by shared blocks read |
+| K007 | Top queries by shared blocks hit |
+
+### M. SQL query analysis (top queries)
+| Check ID | Title |
+|----------|-------|
+| M001 | Top queries by mean execution time |
+| M002 | Top queries by rows (I/O intensity) |
+| M003 | Top queries by I/O time |
+
+### N. Wait events analysis
+| Check ID | Title |
+|----------|-------|
+| N001 | Wait events grouped by type and query |
 
 ## 🌐 Access points
 
-After running quickstart:
+After running local-install:
 
-- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitoring`; password is shown at the end of quickstart)
+- **🚀 MAIN: Grafana Dashboard**: http://localhost:3000 (login: `monitoring`; password is shown at the end of local-install)
 
 Technical URLs (for advanced users):
 - **Demo DB**: postgresql://postgres:postgres@localhost:55432/target_database
@@ -216,25 +309,8 @@ Technical URLs (for advanced users):
 ## 📖 Help
 
 ```bash
-./postgres_ai help
-```
-
-### Node.js CLI (early preview)
-
-```bash
-# run without install
-node ./cli/bin/postgres-ai.js --help
-
-# local dev: install aliases into PATH
-npm --prefix cli install --no-audit --no-fund
-npm link ./cli
-postgres-ai --help
-pgai --help
-
-# or install globally after publish (planned)
-# npm i -g @postgresai/cli
-# postgres-ai --help
-# pgai --help
+postgresai --help
+postgresai mon --help
 ```
 
 ## 🔑 PostgresAI access token
@@ -247,6 +323,54 @@ Get your access token at [PostgresAI](https://postgres.ai) for automated report 
 - Additional expert dashboards: autovacuum, checkpointer, lock analysis
 - Query plan analysis and automated recommendations
 - Enhanced AI integration capabilities
+
+## 🧪 Testing
+
+Python-based report generation lives under `reporter/` and now ships with a pytest suite.
+
+### Installation
+
+Install dev dependencies (includes `pytest`, `pytest-postgresql`, `psycopg`, etc.):
+```bash
+python3 -m pip install -r reporter/requirements-dev.txt
+```
+
+### Running Tests
+
+#### Unit Tests Only (Fast, No External Services Required)
+
+Run only unit tests with mocked Prometheus interactions:
+```bash
+pytest tests/reporter
+```
+
+This automatically skips integration tests. Or run specific test files:
+```bash
+pytest tests/reporter/test_generators_unit.py -v
+pytest tests/reporter/test_formatters.py -v
+```
+
+#### All Tests: Unit + Integration (Requires PostgreSQL)
+
+Run the complete test suite (both unit and integration tests):
+```bash
+pytest tests/reporter --run-integration
+```
+
+Integration tests create a temporary PostgreSQL instance automatically and require PostgreSQL binaries (`initdb`, `postgres`) on your PATH. No manual database setup or environment variables are required - the tests create and destroy their own temporary PostgreSQL instances.
+
+**Summary:**
+- `pytest tests/reporter` → **Unit tests only** (integration tests skipped)
+- `pytest tests/reporter --run-integration` → **Both unit and integration tests**
+
+### Test Coverage
+
+Generate coverage report:
+```bash
+pytest tests/reporter -m unit --cov=reporter --cov-report=html
+```
+
+View the coverage report by opening `htmlcov/index.html` in your browser.
 
 ## 🤝 Contributing
 

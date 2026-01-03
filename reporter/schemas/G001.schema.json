@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "G001 report schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "version": { "type": ["string", "null"] },
+    "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
+    "checkId": { "const": "G001" },
+    "checkTitle": { "const": "Memory-related settings" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setting", "unit", "category", "context", "vartype", "pretty_value"],
+      "properties": {
+        "setting": { "type": "string" },
+        "unit": { "type": "string" },
+        "category": { "type": "string" },
+        "context": { "type": "string" },
+        "vartype": { "type": "string" },
+        "pretty_value": { "type": "string" }
+      }
+    },
+    "estimatedTotalMemoryUsageFull": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shared_buffers_bytes",
+        "shared_buffers_pretty",
+        "wal_buffers_bytes",
+        "wal_buffers_pretty",
+        "shared_memory_total_bytes",
+        "shared_memory_total_pretty",
+        "work_mem_per_connection_bytes",
+        "work_mem_per_connection_pretty",
+        "max_work_mem_usage_bytes",
+        "max_work_mem_usage_pretty",
+        "maintenance_work_mem_bytes",
+        "maintenance_work_mem_pretty",
+        "effective_cache_size_bytes",
+        "effective_cache_size_pretty"
+      ],
+      "properties": {
+        "shared_buffers_bytes": { "type": "number" },
+        "shared_buffers_pretty": { "type": "string" },
+        "wal_buffers_bytes": { "type": "number" },
+        "wal_buffers_pretty": { "type": "string" },
+        "shared_memory_total_bytes": { "type": "number" },
+        "shared_memory_total_pretty": { "type": "string" },
+        "work_mem_per_connection_bytes": { "type": "number" },
+        "work_mem_per_connection_pretty": { "type": "string" },
+        "max_work_mem_usage_bytes": { "type": "number" },
+        "max_work_mem_usage_pretty": { "type": "string" },
+        "maintenance_work_mem_bytes": { "type": "number" },
+        "maintenance_work_mem_pretty": { "type": "string" },
+        "effective_cache_size_bytes": { "type": "number" },
+        "effective_cache_size_pretty": { "type": "string" }
+      }
+    },
+    "estimatedTotalMemoryUsageEmpty": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimated_total_memory_usage"],
+      "properties": {
+        "estimated_total_memory_usage": {
+          "oneOf": [
+            { "$ref": "#/$defs/estimatedTotalMemoryUsageEmpty" },
+            { "$ref": "#/$defs/estimatedTotalMemoryUsageFull" }
+          ]
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["settings", "analysis"],
+      "properties": {
+        "settings": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/setting" }
+        },
+        "analysis": { "$ref": "#/$defs/analysis" }
+      }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}
+
+

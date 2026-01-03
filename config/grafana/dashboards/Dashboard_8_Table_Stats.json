@@ -414,7 +414,7 @@
               "root_selector": "",
               "source": "url",
               "type": "csv",
-              "url": "http://flask-pgss-api:5000/table_info/csv",
+              "url": "http://flask-pgss-api:8000/table_info/csv",
               "url_options": {
                 "data": "",
                 "method": "GET",
@@ -659,7 +659,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by size change rate (absolute)",
+      "title": "Top $top_n tables by size growth /s",
       "type": "timeseries"
     },
     {
@@ -761,7 +761,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (w/o TOAST) size",
+      "title": "Top $top_n tables by heap size (excl. TOAST)",
       "type": "timeseries"
     },
     {
@@ -863,7 +863,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (w/o TOAST) size change rate (absolute)",
+      "title": "Top $top_n tables by heap size growth /s",
       "type": "timeseries"
     },
     {
@@ -1067,7 +1067,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by TOAST size change rate (absolute)",
+      "title": "Top $top_n tables by TOAST size growth /s",
       "type": "timeseries"
     },
     {
@@ -1169,7 +1169,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by index size",
+      "title": "Top $top_n tables by indexes size",
       "type": "timeseries"
     },
     {
@@ -1271,7 +1271,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by index size change rate (absolute)",
+      "title": "Top $top_n tables by indexes size growth /s",
       "type": "timeseries"
     },
     {
@@ -1280,11 +1280,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 67
       },
       "id": 11,
       "panels": [],
-      "title": "Tuple stats",
+      "title": "Activity stats",
       "type": "row"
     },
     {
@@ -1350,7 +1350,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 68
       },
       "id": 3,
       "options": {
@@ -1464,7 +1464,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 68
       },
       "id": 5,
       "options": {
@@ -1579,7 +1579,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 78
       },
       "id": 6,
       "options": {
@@ -1693,7 +1693,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 78
       },
       "id": 10,
       "options": {
@@ -1802,7 +1802,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 88
       },
       "id": 40,
       "options": {
@@ -1907,7 +1907,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 87
+        "y": 101
       },
       "id": 41,
       "options": {
@@ -1953,7 +1953,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 100
+        "y": 114
       },
       "id": 30,
       "panels": [],
@@ -2025,7 +2025,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 101
+        "y": 115
       },
       "id": 31,
       "options": {
@@ -2129,7 +2129,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 101
+        "y": 115
       },
       "id": 42,
       "options": {
@@ -2232,7 +2232,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 114
+        "y": 128
       },
       "id": 37,
       "options": {
@@ -2336,7 +2336,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 114
+        "y": 128
       },
       "id": 43,
       "options": {
@@ -2439,7 +2439,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 127
+        "y": 141
       },
       "id": 36,
       "options": {
@@ -2474,7 +2474,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (without TOAST) shared block hits",
+      "title": "Top $top_n tables by heap shared block hits",
       "type": "timeseries"
     },
     {
@@ -2542,7 +2542,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 140
+        "y": 154
       },
       "id": 32,
       "options": {
@@ -2577,7 +2577,7 @@
           "useBackend": false
         }
       ],
-      "title": "Top $top_n tables by table (without TOAST) shared block reads",
+      "title": "Top $top_n tables by heap shared block reads",
       "type": "timeseries"
     },
     {
@@ -2645,7 +2645,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 153
+        "y": 167
       },
       "id": 38,
       "options": {
@@ -2748,7 +2748,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 166
+        "y": 180
       },
       "id": 39,
       "options": {
@@ -2851,7 +2851,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 179
+        "y": 193
       },
       "id": 33,
       "options": {
@@ -2954,7 +2954,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 192
+        "y": 206
       },
       "id": 34,
       "options": {
@@ -3023,7 +3023,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 205
+        "y": 53
       },
       "id": 22,
       "panels": [],
@@ -3096,7 +3096,7 @@
         "h": 13,
         "w": 12,
         "x": 0,
-        "y": 206
+        "y": 54
       },
       "id": 8,
       "options": {
@@ -3200,7 +3200,7 @@
         "h": 13,
         "w": 12,
         "x": 12,
-        "y": 206
+        "y": 54
       },
       "id": 2,
       "options": {
@@ -3250,13 +3250,13 @@
           "text": "default",
           "value": "default"
         },
-        "definition": "label_values(pgwatch_settings_configured,cluster)",
+        "definition": "label_values(pgwatch_db_size_size_b,cluster)",
         "label": "Cluster name",
         "name": "cluster_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_configured,cluster)",
+          "query": "label_values(pgwatch_db_size_size_b,cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -3268,13 +3268,13 @@
           "text": "postgres_ai",
           "value": "postgres_ai"
         },
-        "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
         "name": "node_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -3286,13 +3286,13 @@
           "text": "workloaddb",
           "value": "workloaddb"
         },
-        "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
         "name": "db_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -3345,9 +3345,19 @@
             "selected": false,
             "text": "20",
             "value": "20"
+          },
+          {
+            "selected": false,
+            "text": "50",
+            "value": "50"
+          },
+          {
+            "selected": false,
+            "text": "100",
+            "value": "100"
           }
         ],
-        "query": "5,10,15,20",
+        "query": "5,10,15,20,50,100",
         "type": "custom"
       }
     ]

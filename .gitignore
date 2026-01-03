@@ -9,6 +9,10 @@ Thumbs.db
 
 # IDE and editor files
 .vscode/
+# Keep an example debug config in git:
+!.vscode/
+.vscode/*
+!.vscode/launch.example.json
 .idea/
 *.swp
 *.swo
@@ -17,6 +21,9 @@ Thumbs.db
 # Docker generated files
 .env.local
 .env.*.local
+
+# Compose local override (auto-loaded by docker compose) - dev-only
+docker-compose.override.yml
 
 # Logs
 *.log
@@ -27,6 +34,17 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# Local report outputs (dev-only)
+dev_reports/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Python virtual environments
+.venv/
+venv/
 
 # Node artifacts
 node_modules/
@@ -40,6 +58,10 @@ cli/**/*.js.map
 cli/**/*.d.ts
 cli/**/*.d.ts.map
 !cli/jest.config.js
+!cli/packages/postgres-ai/bin/postgres-ai.js
+
+# Generated at build time from metrics.yml
+cli/lib/metrics-embedded.ts
 
 # Generated config files (these are created by the sources-generator)
 config/pgwatch-postgres/sources.yml
@@ -48,4 +70,6 @@ config/pgwatch-prometheus/sources.yml
 # Volume data (if accidentally committed)
 data/
 volumes/
-.pgwatch-config 
+.pgwatch-config
+
+.env

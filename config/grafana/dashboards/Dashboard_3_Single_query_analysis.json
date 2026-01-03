@@ -120,9 +120,9 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "axisSoftMin": 0,
-            "barWidthFactor": 0.5,
+            "barWidthFactor": 1,
             "drawStyle": "bars",
-            "fillOpacity": 40,
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -168,7 +168,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "Timeout"
+              "options": "Timeout.*"
             },
             "properties": [
               {
@@ -198,7 +198,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "Lock"
+              "options": "Lock.*"
             },
             "properties": [
               {
@@ -213,7 +213,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "LWLock"
+              "options": "LWLock.*"
             },
             "properties": [
               {
@@ -228,7 +228,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "IO"
+              "options": "IO.*"
             },
             "properties": [
               {
@@ -243,7 +243,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "Client"
+              "options": "Client.*"
             },
             "properties": [
               {
@@ -251,37 +251,6 @@
                 "value": {
                   "fixedColor": "super-light-yellow",
                   "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "CPU*",
-                  "Lock",
-                  "LWLock",
-                  "IO",
-                  "Timeout",
-                  "BufferPin",
-                  "Extension",
-                  "IPC"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
                 }
               }
             ]
@@ -316,9 +285,9 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (wait_event_type) (pgwatch_wait_events_total{query_id=\"$query_id\"})",
+          "expr": "sum by (wait_event_type, wait_event) (pgwatch_wait_events_total{query_id=\"$query_id\"})",
           "hide": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{wait_event_type}}:{{wait_event}}",
           "range": true,
           "refId": "A"
         },
@@ -2181,13 +2150,13 @@
           "text": "local",
           "value": "local"
         },
-        "definition": "label_values(pgwatch_settings_configured,cluster)",
+        "definition": "label_values(pgwatch_db_size_size_b,cluster)",
         "label": "Cluster name",
         "name": "cluster_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_configured,cluster)",
+          "query": "label_values(pgwatch_db_size_size_b,cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2199,13 +2168,13 @@
           "text": "node-01",
           "value": "node-01"
         },
-        "definition": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
         "label": "Node name",
         "name": "node_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_settings_configured{cluster=\"$cluster_name\"},node_name)",
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\"},node_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -2217,13 +2186,13 @@
           "text": "postgres",
           "value": "postgres"
         },
-        "definition": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+        "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "label": "DB name",
         "name": "db_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(pgwatch_pg_database_wraparound_age_datfrozenxid{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
+          "query": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,

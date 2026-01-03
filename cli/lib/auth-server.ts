@@ -1,5 +1,4 @@
 import * as http from "http";
-import { URL } from "url";
 
 /**
  * OAuth callback result
@@ -13,8 +12,9 @@ export interface CallbackResult {
  * Callback server structure
  */
 export interface CallbackServer {
-  server: http.Server;
+  server: { stop: () => void };
   promise: Promise<CallbackResult>;
+  ready: Promise<number>; // Resolves with actual port when server is listening
   getPort: () => number;
 }
 
@@ -34,11 +34,21 @@ function escapeHtml(str: string | null): string {
 }
 
 /**
- * Create and start callback server, returning server object and promise
+ * Create and start callback server using Node.js http module
+ *
  * @param port - Port to listen on (0 for random available port)
  * @param expectedState - Expected state parameter for CSRF protection
  * @param timeoutMs - Timeout in milliseconds
- * @returns Server object with promise and getPort function
+ * @returns Server object with promise, ready promise, and getPort function
+ *
+ * @remarks
+ * The `ready` promise resolves with the actual port once the server is listening.
+ * Callers should await `ready` before using `getPort()` when using port 0.
+ *
+ * The server stops asynchronously ~100ms after the callback resolves/rejects.
+ * This delay ensures the HTTP response is fully sent before closing the connection.
+ * Callers should not attempt to reuse the same port immediately after the promise
+ * resolves - wait at least 200ms or use a different port.
  */
 export function createCallbackServer(
   port: number = 0,
@@ -46,54 +56,81 @@ export function createCallbackServer(
   timeoutMs: number = 300000
 ): CallbackServer {
   let resolved = false;
-  let server: http.Server | null = null;
   let actualPort = port;
   let resolveCallback: (value: CallbackResult) => void;
   let rejectCallback: (reason: Error) => void;
-  
+  let resolveReady: (port: number) => void;
+  let rejectReady: (reason: Error) => void;
+  let serverInstance: http.Server | null = null;
+
   const promise = new Promise<CallbackResult>((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
   });
-  
+
+  const ready = new Promise<number>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const stopServer = () => {
+    // Clear timeout to prevent it firing after manual stop
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    if (serverInstance) {
+      serverInstance.close();
+      serverInstance = null;
+    }
+  };
+
   // Timeout handler
-  const timeout = setTimeout(() => {
+  timeoutId = setTimeout(() => {
     if (!resolved) {
       resolved = true;
-      if (server) {
-        server.close();
-      }
+      timeoutId = null; // Already fired, clear reference
+      stopServer();
       rejectCallback(new Error("Authentication timeout. Please try again."));
     }
   }, timeoutMs);
-  
-  // Request handler
-  const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+
+  serverInstance = http.createServer((req, res) => {
     if (resolved) {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Already handled");
       return;
     }
 
+    const url = new URL(req.url || "/", `http://127.0.0.1:${actualPort}`);
+
     // Only handle /callback path
-    if (!req.url || !req.url.startsWith("/callback")) {
+    if (!url.pathname.startsWith("/callback")) {
       res.writeHead(404, { "Content-Type": "text/plain" });
       res.end("Not Found");
       return;
     }
 
-    try {
-      const url = new URL(req.url, `http://localhost:${actualPort}`);
-      const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state");
-      const error = url.searchParams.get("error");
-      const errorDescription = url.searchParams.get("error_description");
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+    const errorDescription = url.searchParams.get("error_description");
 
-      // Handle OAuth error
-      if (error) {
-        resolved = true;
-        clearTimeout(timeout);
-        
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(`
+    // Handle OAuth error
+    if (error) {
+      resolved = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
+      setTimeout(() => stopServer(), 100);
+      rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
+
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -114,19 +151,14 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `);
-        
-        if (server) {
-          server.close();
-        }
-        rejectCallback(new Error(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`));
-        return;
-      }
+      `);
+      return;
+    }
 
-      // Validate required parameters
-      if (!code || !state) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(`
+    // Validate required parameters
+    if (!code || !state) {
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -145,17 +177,23 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `);
-        return;
+      `);
+      return;
+    }
+
+    // Validate state (CSRF protection)
+    if (expectedState && state !== expectedState) {
+      resolved = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
       }
 
-      // Validate state (CSRF protection)
-      if (expectedState && state !== expectedState) {
-        resolved = true;
-        clearTimeout(timeout);
-        
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(`
+      setTimeout(() => stopServer(), 100);
+      rejectCallback(new Error("State mismatch (possible CSRF attack)"));
+
+      res.writeHead(400, { "Content-Type": "text/html" });
+      res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -174,21 +212,24 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-        `);
-        
-        if (server) {
-          server.close();
-        }
-        rejectCallback(new Error("State mismatch (possible CSRF attack)"));
-        return;
-      }
+      `);
+      return;
+    }
 
-      // Success!
-      resolved = true;
-      clearTimeout(timeout);
-      
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(`
+    // Success!
+    resolved = true;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+
+    // Resolve first, then stop server asynchronously after response is sent.
+    // The 100ms delay ensures the HTTP response is fully written before closing.
+    resolveCallback({ code, state });
+    setTimeout(() => stopServer(), 100);
+
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -207,61 +248,38 @@ export function createCallbackServer(
   </div>
 </body>
 </html>
-      `);
-      
-      if (server) {
-        server.close();
-      }
-      resolveCallback({ code, state });
-    } catch (err) {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Internal Server Error");
-        if (server) {
-          server.close();
-        }
-        rejectCallback(err instanceof Error ? err : new Error(String(err)));
-      }
-    }
-  };
+    `);
+  });
 
-  // Create server
-  server = http.createServer(requestHandler);
-  
-  server.on("error", (err: Error) => {
+  // Handle server errors (e.g., EADDRINUSE)
+  serverInstance.on("error", (err: NodeJS.ErrnoException) => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    if (err.code === "EADDRINUSE") {
+      rejectReady(new Error(`Port ${port} is already in use`));
+    } else {
+      rejectReady(new Error(`Server error: ${err.message}`));
+    }
     if (!resolved) {
       resolved = true;
-      clearTimeout(timeout);
       rejectCallback(err);
     }
   });
 
-  server.listen(port, "127.0.0.1", () => {
-    const address = server?.address();
+  serverInstance.listen(port, "127.0.0.1", () => {
+    const address = serverInstance?.address();
     if (address && typeof address === "object") {
       actualPort = address.port;
     }
+    resolveReady(actualPort);
   });
-  
+
   return {
-    server,
+    server: { stop: stopServer },
     promise,
-    getPort: () => {
-      const address = server?.address();
-      return address && typeof address === "object" ? address.port : 0;
-    },
+    ready,
+    getPort: () => actualPort,
   };
 }
-
-/**
- * Get the actual port the server is listening on
- * @param server - HTTP server instance
- * @returns Port number
- */
-export function getServerPort(server: http.Server): number {
-  const address = server.address();
-  return address && typeof address === "object" ? address.port : 0;
-}
-

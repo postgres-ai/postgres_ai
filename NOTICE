@@ -1,0 +1,15 @@
+PostgresAI
+Copyright 2025 PostgresAI https://postgres.ai/
+
+Monitoring, checkup, CLI, and other components for Self-Driving Postgres.
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+Components with different licenses:
+
+- components/index_pilot/ - BSD 3-Clause License
+  See components/index_pilot/LICENSE for the full license text.
+  Copyright (c) 2020-2023, Maxim Boguk (Maxim.Boguk@gmail.com)
+  Copyright (c) 2025 PostgresAI https://postgres.ai/
+

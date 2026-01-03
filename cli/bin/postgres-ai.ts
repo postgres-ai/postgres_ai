@@ -1,23 +1,365 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { Command } from "commander";
-import * as pkg from "../package.json";
+import pkg from "../package.json";
 import * as config from "../lib/config";
 import * as yaml from "js-yaml";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { spawn, spawnSync, exec, execFile } from "child_process";
-import { promisify } from "util";
-import * as readline from "readline";
-import * as http from "https";
-import { URL } from "url";
+import * as crypto from "node:crypto";
+import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
-import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue } from "../lib/issues";
+import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
+import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import * as pkce from "../lib/pkce";
+import * as authServer from "../lib/auth-server";
+import { maskSecret } from "../lib/util";
+import { createInterface } from "readline";
+import * as childProcess from "child_process";
+import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
+import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
 
-const execPromise = promisify(exec);
-const execFilePromise = promisify(execFile);
+// Singleton readline interface for stdin prompts
+let rl: ReturnType<typeof createInterface> | null = null;
+function getReadline() {
+  if (!rl) {
+    rl = createInterface({ input: process.stdin, output: process.stdout });
+  }
+  return rl;
+}
+function closeReadline() {
+  if (rl) {
+    rl.close();
+    rl = null;
+  }
+}
+
+// Helper functions for spawning processes - use Node.js child_process for compatibility
+async function execPromise(command: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    childProcess.exec(command, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as Error & { code: number };
+        err.code = typeof error.code === "number" ? error.code : 1;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+async function execFilePromise(file: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    childProcess.execFile(file, args, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as Error & { code: number };
+        err.code = typeof error.code === "number" ? error.code : 1;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+function spawnSync(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; encoding?: string; env?: Record<string, string | undefined>; cwd?: string }): { status: number | null; stdout: string; stderr: string } {
+  const result = childProcess.spawnSync(cmd, args, {
+    stdio: options?.stdio === "inherit" ? "inherit" : "pipe",
+    env: options?.env as NodeJS.ProcessEnv,
+    cwd: options?.cwd,
+    encoding: "utf8",
+  });
+  return {
+    status: result.status,
+    stdout: typeof result.stdout === "string" ? result.stdout : "",
+    stderr: typeof result.stderr === "string" ? result.stderr : "",
+  };
+}
+
+function spawn(cmd: string, args: string[], options?: { stdio?: "pipe" | "ignore" | "inherit"; env?: Record<string, string | undefined>; cwd?: string; detached?: boolean }): { on: (event: string, cb: (code: number | null, signal?: string) => void) => void; unref: () => void; pid?: number } {
+  const proc = childProcess.spawn(cmd, args, {
+    stdio: options?.stdio ?? "pipe",
+    env: options?.env as NodeJS.ProcessEnv,
+    cwd: options?.cwd,
+    detached: options?.detached,
+  });
+
+  return {
+    on(event: string, cb: (code: number | null, signal?: string) => void) {
+      if (event === "close" || event === "exit") {
+        proc.on(event, (code, signal) => cb(code, signal ?? undefined));
+      } else if (event === "error") {
+        proc.on("error", (err) => cb(null, String(err)));
+      }
+      return this;
+    },
+    unref() {
+      proc.unref();
+    },
+    pid: proc.pid,
+  };
+}
+
+// Simple readline-like interface for prompts using Bun
+async function question(prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    getReadline().question(prompt, (answer) => {
+      resolve(answer);
+    });
+  });
+}
+
+function expandHomePath(p: string): string {
+  const s = (p || "").trim();
+  if (!s) return s;
+  if (s === "~") return os.homedir();
+  if (s.startsWith("~/") || s.startsWith("~\\")) {
+    return path.join(os.homedir(), s.slice(2));
+  }
+  return s;
+}
+
+function createTtySpinner(
+  enabled: boolean,
+  initialText: string
+): { update: (text: string) => void; stop: (finalText?: string) => void } {
+  if (!enabled) {
+    return {
+      update: () => {},
+      stop: () => {},
+    };
+  }
+
+  const frames = ["|", "/", "-", "\\"];
+  const startTs = Date.now();
+  let text = initialText;
+  let frameIdx = 0;
+  let stopped = false;
+
+  const render = (): void => {
+    if (stopped) return;
+    const elapsedSec = ((Date.now() - startTs) / 1000).toFixed(1);
+    const frame = frames[frameIdx % frames.length] ?? frames[0] ?? "⠿";
+    frameIdx += 1;
+    process.stdout.write(`\r\x1b[2K${frame} ${text} (${elapsedSec}s)`);
+  };
+
+  const timer = setInterval(render, 120);
+  render(); // immediate feedback
+
+  return {
+    update: (t: string) => {
+      text = t;
+      render();
+    },
+    stop: (finalText?: string) => {
+      if (stopped) return;
+      // Set flag first so any queued render() calls exit early.
+      // JavaScript is single-threaded, so this is safe: queued callbacks
+      // run after stop() returns and will see stopped=true immediately.
+      stopped = true;
+      clearInterval(timer);
+      process.stdout.write("\r\x1b[2K");
+      if (finalText && finalText.trim()) {
+        process.stdout.write(finalText);
+      }
+      process.stdout.write("\n");
+    },
+  };
+}
+
+// ============================================================================
+// Checkup command helpers
+// ============================================================================
+
+interface CheckupOptions {
+  checkId: string;
+  nodeName: string;
+  output?: string;
+  upload?: boolean;
+  project?: string;
+  json?: boolean;
+}
+
+interface UploadConfig {
+  apiKey: string;
+  apiBaseUrl: string;
+  project: string;
+}
+
+interface UploadSummary {
+  project: string;
+  reportId: number;
+  uploaded: Array<{ checkId: string; filename: string; chunkId: number }>;
+}
+
+/**
+ * Prepare and validate output directory for checkup reports.
+ * @returns Output path if valid, null if should exit with error
+ */
+function prepareOutputDirectory(outputOpt: string | undefined): string | null | undefined {
+  if (!outputOpt) return undefined;
+
+  const outputDir = expandHomePath(outputOpt);
+  const outputPath = path.isAbsolute(outputDir) ? outputDir : path.resolve(process.cwd(), outputDir);
+
+  if (!fs.existsSync(outputPath)) {
+    try {
+      fs.mkdirSync(outputPath, { recursive: true });
+    } catch (e) {
+      const errAny = e as any;
+      const code = typeof errAny?.code === "string" ? errAny.code : "";
+      const msg = errAny instanceof Error ? errAny.message : String(errAny);
+      if (code === "EACCES" || code === "EPERM" || code === "ENOENT") {
+        console.error(`Error: Failed to create output directory: ${outputPath}`);
+        console.error(`Reason: ${msg}`);
+        console.error("Tip: choose a writable path, e.g. --output ./reports or --output ~/reports");
+        return null; // Signal to exit
+      }
+      throw e;
+    }
+  }
+  return outputPath;
+}
+
+/**
+ * Prepare upload configuration for checkup reports.
+ * @returns Upload config if valid, null if should exit, undefined if upload not needed
+ */
+function prepareUploadConfig(
+  opts: CheckupOptions,
+  rootOpts: CliOptions,
+  shouldUpload: boolean,
+  uploadExplicitlyRequested: boolean
+): { config: UploadConfig; projectWasGenerated: boolean } | null | undefined {
+  if (!shouldUpload) return undefined;
+
+  const { apiKey } = getConfig(rootOpts);
+  if (!apiKey) {
+    if (uploadExplicitlyRequested) {
+      console.error("Error: API key is required for upload");
+      console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
+      return null; // Signal to exit
+    }
+    return undefined; // Skip upload silently
+  }
+
+  const cfg = config.readConfig();
+  const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+  let project = ((opts.project || cfg.defaultProject) || "").trim();
+  let projectWasGenerated = false;
+
+  if (!project) {
+    project = `project_${crypto.randomBytes(6).toString("hex")}`;
+    projectWasGenerated = true;
+    try {
+      config.writeConfig({ defaultProject: project });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`Warning: Failed to save generated default project: ${message}`);
+    }
+  }
+
+  return {
+    config: { apiKey, apiBaseUrl, project },
+    projectWasGenerated,
+  };
+}
+
+/**
+ * Upload checkup reports to PostgresAI API.
+ */
+async function uploadCheckupReports(
+  uploadCfg: UploadConfig,
+  reports: Record<string, any>,
+  spinner: ReturnType<typeof createTtySpinner>,
+  logUpload: (msg: string) => void
+): Promise<UploadSummary> {
+  spinner.update("Creating remote checkup report");
+  const created = await withRetry(
+    () => createCheckupReport({
+      apiKey: uploadCfg.apiKey,
+      apiBaseUrl: uploadCfg.apiBaseUrl,
+      project: uploadCfg.project,
+    }),
+    { maxAttempts: 3 },
+    (attempt, err, delayMs) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logUpload(`[Retry ${attempt}/3] createCheckupReport failed: ${errMsg}, retrying in ${delayMs}ms...`);
+    }
+  );
+
+  const reportId = created.reportId;
+  logUpload(`Created remote checkup report: ${reportId}`);
+
+  const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
+  for (const [checkId, report] of Object.entries(reports)) {
+    spinner.update(`Uploading ${checkId}.json`);
+    const jsonText = JSON.stringify(report, null, 2);
+    const r = await withRetry(
+      () => uploadCheckupReportJson({
+        apiKey: uploadCfg.apiKey,
+        apiBaseUrl: uploadCfg.apiBaseUrl,
+        reportId,
+        filename: `${checkId}.json`,
+        checkId,
+        jsonText,
+      }),
+      { maxAttempts: 3 },
+      (attempt, err, delayMs) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logUpload(`[Retry ${attempt}/3] Upload ${checkId}.json failed: ${errMsg}, retrying in ${delayMs}ms...`);
+      }
+    );
+    uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
+  }
+  logUpload("Upload completed");
+
+  return { project: uploadCfg.project, reportId, uploaded };
+}
+
+/**
+ * Write checkup reports to files.
+ */
+function writeReportFiles(reports: Record<string, any>, outputPath: string): void {
+  for (const [checkId, report] of Object.entries(reports)) {
+    const filePath = path.join(outputPath, `${checkId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
+    console.log(`✓ ${checkId}: ${filePath}`);
+  }
+}
+
+/**
+ * Print upload summary to console.
+ */
+function printUploadSummary(
+  summary: UploadSummary,
+  projectWasGenerated: boolean,
+  useStderr: boolean
+): void {
+  const out = useStderr ? console.error : console.log;
+  out("\nCheckup report uploaded");
+  out("======================\n");
+  if (projectWasGenerated) {
+    out(`Project: ${summary.project} (generated and saved as default)`);
+  } else {
+    out(`Project: ${summary.project}`);
+  }
+  out(`Report ID: ${summary.reportId}`);
+  out("View in Console: console.postgres.ai → Support → checkup reports");
+  out("");
+  out("Files:");
+  for (const item of summary.uploaded) {
+    out(`- ${item.checkId}: ${item.filename}`);
+  }
+}
+
+// ============================================================================
+// CLI configuration
+// ============================================================================
 
 /**
  * CLI configuration options
@@ -57,6 +399,86 @@ interface PathResolution {
   projectDir: string;
   composeFile: string;
   instancesFile: string;
+}
+
+function getDefaultMonitoringProjectDir(): string {
+  const override = process.env.PGAI_PROJECT_DIR;
+  if (override && override.trim()) return override.trim();
+  // Keep monitoring project next to user-level config (~/.config/postgresai)
+  return path.join(config.getConfigDir(), "monitoring");
+}
+
+async function downloadText(url: string): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} for ${url}`);
+    }
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function ensureDefaultMonitoringProject(): Promise<PathResolution> {
+  const projectDir = getDefaultMonitoringProjectDir();
+  const composeFile = path.resolve(projectDir, "docker-compose.yml");
+  const instancesFile = path.resolve(projectDir, "instances.yml");
+
+  if (!fs.existsSync(projectDir)) {
+    fs.mkdirSync(projectDir, { recursive: true, mode: 0o700 });
+  }
+
+  if (!fs.existsSync(composeFile)) {
+    const refs = [
+      process.env.PGAI_PROJECT_REF,
+      pkg.version,
+      `v${pkg.version}`,
+      "main",
+    ].filter((v): v is string => Boolean(v && v.trim()));
+
+    let lastErr: unknown;
+    for (const ref of refs) {
+      const url = `https://gitlab.com/postgres-ai/postgres_ai/-/raw/${encodeURIComponent(ref)}/docker-compose.yml`;
+      try {
+        const text = await downloadText(url);
+        fs.writeFileSync(composeFile, text, { encoding: "utf8", mode: 0o600 });
+        break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    if (!fs.existsSync(composeFile)) {
+      const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+      throw new Error(`Failed to bootstrap docker-compose.yml: ${msg}`);
+    }
+  }
+
+  // Ensure instances.yml exists as a FILE (avoid Docker creating a directory)
+  if (!fs.existsSync(instancesFile)) {
+    const header =
+      "# PostgreSQL instances to monitor\n" +
+      "# Add your instances using: pgai mon targets add <connection-string> <name>\n\n";
+    fs.writeFileSync(instancesFile, header, { encoding: "utf8", mode: 0o600 });
+  }
+
+  // Ensure .pgwatch-config exists as a FILE for reporter (may remain empty)
+  const pgwatchConfig = path.resolve(projectDir, ".pgwatch-config");
+  if (!fs.existsSync(pgwatchConfig)) {
+    fs.writeFileSync(pgwatchConfig, "", { encoding: "utf8", mode: 0o600 });
+  }
+
+  // Ensure .env exists and has PGAI_TAG (compose requires it)
+  const envFile = path.resolve(projectDir, ".env");
+  if (!fs.existsSync(envFile)) {
+    const envText = `PGAI_TAG=${pkg.version}\n# PGAI_REGISTRY=registry.gitlab.com/postgres-ai/postgres_ai\n`;
+    fs.writeFileSync(envFile, envText, { encoding: "utf8", mode: 0o600 });
+  }
+
+  return { fs, path, projectDir, composeFile, instancesFile };
 }
 
 /**
@@ -116,6 +538,484 @@ program
     "UI base URL for browser routes (overrides PGAI_UI_BASE_URL)"
   );
 
+program
+  .command("set-default-project <project>")
+  .description("store default project for checkup uploads")
+  .action(async (project: string) => {
+    const value = (project || "").trim();
+    if (!value) {
+      console.error("Error: project is required");
+      process.exitCode = 1;
+      return;
+    }
+    config.writeConfig({ defaultProject: value });
+    console.log(`Default project saved: ${value}`);
+  });
+
+program
+  .command("prepare-db [conn]")
+  .description("prepare database for monitoring: create monitoring user, required view(s), and grant permissions (idempotent)")
+  .option("--db-url <url>", "PostgreSQL connection URL (admin) to run the setup against (deprecated; pass it as positional arg)")
+  .option("-h, --host <host>", "PostgreSQL host (psql-like)")
+  .option("-p, --port <port>", "PostgreSQL port (psql-like)")
+  .option("-U, --username <username>", "PostgreSQL user (psql-like)")
+  .option("-d, --dbname <dbname>", "PostgreSQL database name (psql-like)")
+  .option("--admin-password <password>", "Admin connection password (otherwise uses PGPASSWORD if set)")
+  .option("--monitoring-user <name>", "Monitoring role name to create/update", DEFAULT_MONITORING_USER)
+  .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
+  .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
+  .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
+  .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
+  .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
+  .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  postgresai prepare-db postgresql://admin@host:5432/dbname",
+      "  postgresai prepare-db \"dbname=dbname host=host user=admin\"",
+      "  postgresai prepare-db -h host -p 5432 -U admin -d dbname",
+      "",
+      "Admin password:",
+      "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
+      "",
+      "Monitoring password:",
+      "  --password <password>         or  PGAI_MON_PASSWORD=...  (otherwise auto-generated)",
+      "  If auto-generated, it is printed only on TTY by default.",
+      "  To print it in non-interactive mode: --print-password",
+      "",
+      "SSL connection (sslmode=prefer behavior):",
+      "  Tries SSL first, falls back to non-SSL if server doesn't support it.",
+      "  To force SSL: PGSSLMODE=require or ?sslmode=require in URL",
+      "  To disable SSL: PGSSLMODE=disable or ?sslmode=disable in URL",
+      "",
+      "Environment variables (libpq standard):",
+      "  PGHOST, PGPORT, PGUSER, PGDATABASE  — connection defaults",
+      "  PGPASSWORD                          — admin password",
+      "  PGSSLMODE                           — SSL mode (disable, require, verify-full)",
+      "  PGAI_MON_PASSWORD                   — monitoring password",
+      "",
+      "Inspect SQL without applying changes:",
+      "  postgresai prepare-db <conn> --print-sql",
+      "",
+      "Verify setup (no changes):",
+      "  postgresai prepare-db <conn> --verify",
+      "",
+      "Reset monitoring password only:",
+      "  postgresai prepare-db <conn> --reset-password --password '...'",
+      "",
+      "Offline SQL plan (no DB connection):",
+      "  postgresai prepare-db --print-sql",
+    ].join("\n")
+  )
+  .action(async (conn: string | undefined, opts: {
+    dbUrl?: string;
+    host?: string;
+    port?: string;
+    username?: string;
+    dbname?: string;
+    adminPassword?: string;
+    monitoringUser: string;
+    password?: string;
+    skipOptionalPermissions?: boolean;
+    verify?: boolean;
+    resetPassword?: boolean;
+    printSql?: boolean;
+    printPassword?: boolean;
+  }, cmd: Command) => {
+    if (opts.verify && opts.resetPassword) {
+      console.error("✗ Provide only one of --verify or --reset-password");
+      process.exitCode = 1;
+      return;
+    }
+    if (opts.verify && opts.printSql) {
+      console.error("✗ --verify cannot be combined with --print-sql");
+      process.exitCode = 1;
+      return;
+    }
+
+    const shouldPrintSql = !!opts.printSql;
+    const redactPasswords = (sql: string): string => redactPasswordsInSql(sql);
+
+    // Offline mode: allow printing SQL without providing/using an admin connection.
+    // Useful for audits/reviews; caller can provide -d/PGDATABASE.
+    if (!conn && !opts.dbUrl && !opts.host && !opts.port && !opts.username && !opts.adminPassword) {
+      if (shouldPrintSql) {
+        const database = (opts.dbname ?? process.env.PGDATABASE ?? "postgres").trim();
+        const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+        // Use explicit password/env if provided; otherwise use a placeholder.
+        // Printed SQL always redacts secrets.
+        const monPassword =
+          (opts.password ?? process.env.PGAI_MON_PASSWORD ?? "<redacted>").toString();
+
+        const plan = await buildInitPlan({
+          database,
+          monitoringUser: opts.monitoringUser,
+          monitoringPassword: monPassword,
+          includeOptionalPermissions,
+        });
+
+        console.log("\n--- SQL plan (offline; not connected) ---");
+        console.log(`-- database: ${database}`);
+        console.log(`-- monitoring user: ${opts.monitoringUser}`);
+        console.log(`-- optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+        for (const step of plan.steps) {
+          console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+          console.log(redactPasswords(step.sql));
+        }
+        console.log("\n--- end SQL plan ---\n");
+        console.log("Note: passwords are redacted in the printed SQL output.");
+        return;
+      }
+    }
+
+    let adminConn;
+    try {
+      adminConn = resolveAdminConnection({
+        conn,
+        dbUrlFlag: opts.dbUrl,
+        // Allow libpq standard env vars as implicit defaults (common UX).
+        host: opts.host ?? process.env.PGHOST,
+        port: opts.port ?? process.env.PGPORT,
+        username: opts.username ?? process.env.PGUSER,
+        dbname: opts.dbname ?? process.env.PGDATABASE,
+        adminPassword: opts.adminPassword,
+        envPassword: process.env.PGPASSWORD,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`Error: prepare-db: ${msg}`);
+      // When connection details are missing, show full init help (options + examples).
+      if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
+        console.error("");
+        cmd.outputHelp({ error: true });
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+    console.log(`Connecting to: ${adminConn.display}`);
+    console.log(`Monitoring user: ${opts.monitoringUser}`);
+    console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+
+    // Use native pg client instead of requiring psql to be installed
+    let client: Client | undefined;
+    try {
+      const connResult = await connectWithSslFallback(Client, adminConn);
+      client = connResult.client;
+
+      const dbRes = await client.query("select current_database() as db");
+      const database = dbRes.rows?.[0]?.db;
+      if (typeof database !== "string" || !database) {
+        throw new Error("Failed to resolve current database name");
+      }
+
+      if (opts.verify) {
+        const v = await verifyInitSetup({
+          client,
+          database,
+          monitoringUser: opts.monitoringUser,
+          includeOptionalPermissions,
+        });
+        if (v.ok) {
+          console.log("✓ prepare-db verify: OK");
+          if (v.missingOptional.length > 0) {
+            console.log("⚠ Optional items missing:");
+            for (const m of v.missingOptional) console.log(`- ${m}`);
+          }
+          return;
+        }
+        console.error("✗ prepare-db verify failed: missing required items");
+        for (const m of v.missingRequired) console.error(`- ${m}`);
+        if (v.missingOptional.length > 0) {
+          console.error("Optional items missing:");
+          for (const m of v.missingOptional) console.error(`- ${m}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
+      let monPassword: string;
+      try {
+        const resolved = await resolveMonitoringPassword({
+          passwordFlag: opts.password,
+          passwordEnv: process.env.PGAI_MON_PASSWORD,
+          monitoringUser: opts.monitoringUser,
+        });
+        monPassword = resolved.password;
+        if (resolved.generated) {
+          const canPrint = process.stdout.isTTY || !!opts.printPassword;
+          if (canPrint) {
+            // Print secrets to stderr to reduce the chance they end up in piped stdout logs.
+            const shellSafe = monPassword.replace(/'/g, "'\\''");
+            console.error("");
+            console.error(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
+            // Quote for shell copy/paste safety.
+            console.error(`PGAI_MON_PASSWORD='${shellSafe}'`);
+            console.error("");
+            console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+          } else {
+            console.error(
+              [
+                `✗ Monitoring password was auto-generated for ${opts.monitoringUser} but not printed in non-interactive mode.`,
+                "",
+                "Provide it explicitly:",
+                "  --password <password>   or   PGAI_MON_PASSWORD=...",
+                "",
+                "Or (NOT recommended) print the generated password:",
+                "  --print-password",
+              ].join("\n")
+            );
+            process.exitCode = 1;
+            return;
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`✗ ${msg}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const plan = await buildInitPlan({
+        database,
+        monitoringUser: opts.monitoringUser,
+        monitoringPassword: monPassword,
+        includeOptionalPermissions,
+      });
+
+      const effectivePlan = opts.resetPassword
+        ? { ...plan, steps: plan.steps.filter((s) => s.name === "01.role") }
+        : plan;
+
+      if (shouldPrintSql) {
+        console.log("\n--- SQL plan ---");
+        for (const step of effectivePlan.steps) {
+          console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+          console.log(redactPasswords(step.sql));
+        }
+        console.log("\n--- end SQL plan ---\n");
+              console.log("Note: passwords are redacted in the printed SQL output.");
+        return;
+      }
+
+      const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
+
+      console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
+      if (skippedOptional.length > 0) {
+        console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+        for (const s of skippedOptional) console.log(`- ${s}`);
+      }
+      // Keep output compact but still useful
+      if (process.stdout.isTTY) {
+        console.log(`Applied ${applied.length} steps`);
+      }
+    } catch (error) {
+      const errAny = error as any;
+      let message = "";
+      if (error instanceof Error && error.message) {
+        message = error.message;
+      } else if (errAny && typeof errAny === "object" && typeof errAny.message === "string" && errAny.message) {
+        message = errAny.message;
+      } else {
+        message = String(error);
+      }
+      if (!message || message === "[object Object]") {
+        message = "Unknown error";
+      }
+      console.error(`Error: prepare-db: ${message}`);
+      // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
+      const stepMatch =
+        typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
+      const failedStep = stepMatch?.[1];
+      if (failedStep) {
+        console.error(`  Step: ${failedStep}`);
+      }
+      if (errAny && typeof errAny === "object") {
+        if (typeof errAny.code === "string" && errAny.code) {
+          console.error(`  Code: ${errAny.code}`);
+        }
+        if (typeof errAny.detail === "string" && errAny.detail) {
+          console.error(`  Detail: ${errAny.detail}`);
+        }
+        if (typeof errAny.hint === "string" && errAny.hint) {
+          console.error(`  Hint: ${errAny.hint}`);
+        }
+      }
+      if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+        if (errAny.code === "42501") {
+          if (failedStep === "01.role") {
+            console.error("  Context: role creation/update requires CREATEROLE or superuser");
+          } else if (failedStep === "02.permissions") {
+            console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
+          }
+          console.error("  Fix: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges)");
+          console.error("  Fix: on managed Postgres, use the provider's admin/master user");
+          console.error("  Tip: run with --print-sql to review the exact SQL plan");
+        }
+        if (errAny.code === "ECONNREFUSED") {
+          console.error("  Hint: check host/port and ensure Postgres is reachable from this machine");
+        }
+        if (errAny.code === "ENOTFOUND") {
+          console.error("  Hint: DNS resolution failed; double-check the host name");
+        }
+        if (errAny.code === "ETIMEDOUT") {
+          console.error("  Hint: connection timed out; check network/firewall rules");
+        }
+      }
+      process.exitCode = 1;
+    } finally {
+      if (client) {
+        try {
+          await client.end();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  });
+
+program
+  .command("checkup [conn]")
+  .description("generate health check reports directly from PostgreSQL (express mode)")
+  .option("--check-id <id>", `specific check to run: ${Object.keys(CHECK_INFO).join(", ")}, or ALL`, "ALL")
+  .option("--node-name <name>", "node name for reports", "node-01")
+  .option("--output <path>", "output directory for JSON files")
+  .option("--[no-]upload", "upload JSON results to PostgresAI (default: enabled; requires API key)", undefined)
+  .option(
+    "--project <project>",
+    "project name or ID for remote upload (used with --upload; defaults to config defaultProject; auto-generated on first run)"
+  )
+  .option("--json", "output JSON to stdout (implies --no-upload)")
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Available checks:",
+      ...Object.entries(CHECK_INFO).map(([id, title]) => `  ${id}: ${title}`),
+      "",
+      "Examples:",
+      "  postgresai checkup postgresql://user:pass@host:5432/db",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --check-id A003",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --project my_project",
+      "  postgresai set-default-project my_project",
+      "  postgresai checkup postgresql://user:pass@host:5432/db",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
+    ].join("\n")
+  )
+  .action(async (conn: string | undefined, opts: CheckupOptions, cmd: Command) => {
+    if (!conn) {
+      cmd.outputHelp();
+      process.exitCode = 1;
+      return;
+    }
+
+    const shouldPrintJson = !!opts.json;
+    const uploadExplicitlyRequested = opts.upload === true;
+    const uploadExplicitlyDisabled = opts.upload === false || shouldPrintJson;
+    let shouldUpload = !uploadExplicitlyDisabled;
+
+    // Preflight: validate/create output directory BEFORE connecting / running checks.
+    const outputPath = prepareOutputDirectory(opts.output);
+    if (outputPath === null) {
+      process.exitCode = 1;
+      return;
+    }
+
+    // Preflight: validate upload flags/credentials BEFORE connecting / running checks.
+    const rootOpts = program.opts() as CliOptions;
+    const uploadResult = prepareUploadConfig(opts, rootOpts, shouldUpload, uploadExplicitlyRequested);
+    if (uploadResult === null) {
+      process.exitCode = 1;
+      return;
+    }
+    const uploadCfg = uploadResult?.config;
+    const projectWasGenerated = uploadResult?.projectWasGenerated ?? false;
+    shouldUpload = !!uploadCfg;
+
+    // Connect and run checks
+    const adminConn = resolveAdminConnection({
+      conn,
+      envPassword: process.env.PGPASSWORD,
+    });
+    let client: Client | undefined;
+    const spinnerEnabled = !!process.stdout.isTTY && shouldUpload;
+    const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
+
+    try {
+      spinner.update("Connecting to Postgres");
+      const connResult = await connectWithSslFallback(Client, adminConn);
+      client = connResult.client as Client;
+
+      // Generate reports
+      let reports: Record<string, any>;
+      if (opts.checkId === "ALL") {
+        reports = await generateAllReports(client, opts.nodeName, (p) => {
+          spinner.update(`Running ${p.checkId}: ${p.checkTitle} (${p.index}/${p.total})`);
+        });
+      } else {
+        const checkId = opts.checkId.toUpperCase();
+        const generator = REPORT_GENERATORS[checkId];
+        if (!generator) {
+          spinner.stop();
+          console.error(`Unknown check ID: ${opts.checkId}`);
+          console.error(`Available: ${Object.keys(CHECK_INFO).join(", ")}, ALL`);
+          process.exitCode = 1;
+          return;
+        }
+        spinner.update(`Running ${checkId}: ${CHECK_INFO[checkId] || checkId}`);
+        reports = { [checkId]: await generator(client, opts.nodeName) };
+      }
+
+      // Upload to PostgresAI API (if configured)
+      let uploadSummary: UploadSummary | undefined;
+      if (uploadCfg) {
+        const logUpload = (msg: string): void => {
+          (shouldPrintJson ? console.error : console.log)(msg);
+        };
+        uploadSummary = await uploadCheckupReports(uploadCfg, reports, spinner, logUpload);
+      }
+
+      spinner.stop();
+
+      // Write to files (if output path specified)
+      if (outputPath) {
+        writeReportFiles(reports, outputPath);
+      }
+
+      // Print upload summary
+      if (uploadSummary) {
+        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson);
+      }
+
+      // Output JSON to stdout
+      if (shouldPrintJson || (!shouldUpload && !opts.output)) {
+        console.log(JSON.stringify(reports, null, 2));
+      }
+    } catch (error) {
+      if (error instanceof RpcError) {
+        for (const line of formatRpcErrorForDisplay(error)) {
+          console.error(line);
+        }
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Error: ${message}`);
+      }
+      process.exitCode = 1;
+    } finally {
+      // Always stop spinner to prevent interval leak (idempotent - safe to call multiple times)
+      spinner.stop();
+      if (client) {
+        await client.end();
+      }
+    }
+  });
+
 /**
  * Stub function for not implemented commands
  */
@@ -147,6 +1047,14 @@ function resolvePaths(): PathResolution {
   throw new Error(
     `docker-compose.yml not found. Run monitoring commands from the PostgresAI project directory or one of its subdirectories (starting search from ${startDir}).`
   );
+}
+
+async function resolveOrInitPaths(): Promise<PathResolution> {
+  try {
+    return resolvePaths();
+  } catch {
+    return ensureDefaultMonitoringProject();
+  }
 }
 
 /**
@@ -196,11 +1104,11 @@ function checkRunningContainers(): { running: boolean; containers: string[] } {
 /**
  * Run docker compose command
  */
-async function runCompose(args: string[]): Promise<number> {
+async function runCompose(args: string[], grafanaPassword?: string): Promise<number> {
   let composeFile: string;
   let projectDir: string;
   try {
-    ({ composeFile, projectDir } = resolvePaths());
+    ({ composeFile, projectDir } = await resolveOrInitPaths());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
@@ -222,28 +1130,42 @@ async function runCompose(args: string[]): Promise<number> {
     return 1;
   }
 
-  // Read Grafana password from .pgwatch-config and pass to Docker Compose
+  // Set Grafana password from parameter or .pgwatch-config
   const env = { ...process.env };
-  const cfgPath = path.resolve(projectDir, ".pgwatch-config");
-  if (fs.existsSync(cfgPath)) {
-    try {
-      const stats = fs.statSync(cfgPath);
-      if (!stats.isDirectory()) {
-        const content = fs.readFileSync(cfgPath, "utf8");
-        const match = content.match(/^grafana_password=([^\r\n]+)/m);
-        if (match) {
-          env.GF_SECURITY_ADMIN_PASSWORD = match[1].trim();
+  if (grafanaPassword) {
+    env.GF_SECURITY_ADMIN_PASSWORD = grafanaPassword;
+  } else {
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
+    if (fs.existsSync(cfgPath)) {
+      try {
+        const stats = fs.statSync(cfgPath);
+        if (!stats.isDirectory()) {
+          const content = fs.readFileSync(cfgPath, "utf8");
+          const match = content.match(/^grafana_password=([^\r\n]+)/m);
+          if (match) {
+            env.GF_SECURITY_ADMIN_PASSWORD = match[1].trim();
+          }
+        }
+      } catch (err) {
+        // If we can't read the config, log warning and continue without setting the password
+        if (process.env.DEBUG) {
+          console.warn(`Warning: Could not read Grafana password from config: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
-    } catch (err) {
-      // If we can't read the config, continue without setting the password
     }
   }
 
+  // On macOS, node-exporter can't mount host root filesystem - skip it
+  const finalArgs = [...args];
+  if (process.platform === "darwin" && args.includes("up")) {
+    finalArgs.push("--scale", "node-exporter=0");
+  }
+
   return new Promise<number>((resolve) => {
-    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...args], {
+    const child = spawn(cmd[0], [...cmd.slice(1), "-f", composeFile, ...finalArgs], {
       stdio: "inherit",
-      env: env
+      env: env,
+      cwd: projectDir
     });
     child.on("close", (code) => resolve(code || 0));
   });
@@ -257,17 +1179,63 @@ program.command("help", { isDefault: true }).description("show help").action(() 
 const mon = program.command("mon").description("monitoring services management");
 
 mon
-  .command("quickstart")
-  .description("complete setup (generate config, start monitoring services)")
+  .command("local-install")
+  .description("install local monitoring stack (generate config, start services)")
   .option("--demo", "demo mode with sample database", false)
   .option("--api-key <key>", "Postgres AI API key for automated report uploads")
   .option("--db-url <url>", "PostgreSQL connection URL to monitor")
+  .option("--tag <tag>", "Docker image tag to use (e.g., 0.14.0, 0.14.0-dev.33)")
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
-  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; yes: boolean }) => {
+  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
+    // Get apiKey from global program options (--api-key is defined globally)
+    // This is needed because Commander.js routes --api-key to the global option, not the subcommand's option
+    const globalOpts = program.opts<CliOptions>();
+    const apiKey = opts.apiKey || globalOpts.apiKey;
+
     console.log("\n=================================");
-    console.log("  PostgresAI Monitoring Quickstart");
+    console.log("  PostgresAI monitoring local install");
     console.log("=================================\n");
     console.log("This will install, configure, and start the monitoring system\n");
+
+    // Ensure we have a project directory with docker-compose.yml even if running from elsewhere
+    const { projectDir } = await resolveOrInitPaths();
+    console.log(`Project directory: ${projectDir}\n`);
+
+    // Update .env with custom tag if provided
+    const envFile = path.resolve(projectDir, ".env");
+
+    // Build .env content, preserving important existing values (registry, password)
+    // Note: PGAI_TAG is intentionally NOT preserved - the CLI version should always match Docker images
+    let existingRegistry: string | null = null;
+    let existingPassword: string | null = null;
+
+    if (fs.existsSync(envFile)) {
+      const existingEnv = fs.readFileSync(envFile, "utf8");
+      // Extract existing values (except tag - always use CLI version)
+      const registryMatch = existingEnv.match(/^PGAI_REGISTRY=(.+)$/m);
+      if (registryMatch) existingRegistry = registryMatch[1].trim();
+      const pwdMatch = existingEnv.match(/^GF_SECURITY_ADMIN_PASSWORD=(.+)$/m);
+      if (pwdMatch) existingPassword = pwdMatch[1].trim();
+    }
+
+    // Priority: CLI --tag flag > package version
+    // Note: We intentionally do NOT use process.env.PGAI_TAG here because Bun auto-loads .env files,
+    // which would cause stale .env values to override the CLI version. The CLI version should always
+    // match the Docker images. Users can override with --tag if needed.
+    const imageTag = opts.tag || pkg.version;
+
+    const envLines: string[] = [`PGAI_TAG=${imageTag}`];
+    if (existingRegistry) {
+      envLines.push(`PGAI_REGISTRY=${existingRegistry}`);
+    }
+    if (existingPassword) {
+      envLines.push(`GF_SECURITY_ADMIN_PASSWORD=${existingPassword}`);
+    }
+    fs.writeFileSync(envFile, envLines.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
+
+    if (opts.tag) {
+      console.log(`Using image tag: ${imageTag}\n`);
+    }
 
     // Validate conflicting options
     if (opts.demo && opts.dbUrl) {
@@ -276,11 +1244,11 @@ mon
       opts.dbUrl = undefined;
     }
 
-    if (opts.demo && opts.apiKey) {
+    if (opts.demo && apiKey) {
       console.error("✗ Cannot use --api-key with --demo mode");
       console.error("✗ Demo mode is for testing only and does not support API key integration");
-      console.error("\nUse demo mode without API key: postgres-ai mon quickstart --demo");
-      console.error("Or use production mode with API key: postgres-ai mon quickstart --api-key=your_key");
+      console.error("\nUse demo mode without API key: postgres-ai mon local-install --demo");
+      console.error("Or use production mode with API key: postgres-ai mon local-install --api-key=your_key");
       process.exitCode = 1;
       return;
     }
@@ -298,9 +1266,14 @@ mon
       console.log("Step 1: Postgres AI API Configuration (Optional)");
       console.log("An API key enables automatic upload of PostgreSQL reports to Postgres AI\n");
 
-      if (opts.apiKey) {
+      if (apiKey) {
         console.log("Using API key provided via --api-key parameter");
-        config.writeConfig({ apiKey: opts.apiKey });
+        config.writeConfig({ apiKey });
+        // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+        fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${apiKey}\n`, {
+          encoding: "utf8",
+          mode: 0o600
+        });
         console.log("✓ API key saved\n");
       } else if (opts.yes) {
         // Auto-yes mode without API key - skip API key setup
@@ -308,43 +1281,36 @@ mon
         console.log("⚠ Reports will be generated locally only");
         console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
       } else {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
+        const answer = await question("Do you have a Postgres AI API key? (Y/n): ");
+        const proceedWithApiKey = !answer || answer.toLowerCase() === "y";
 
-        const question = (prompt: string): Promise<string> =>
-          new Promise((resolve) => rl.question(prompt, resolve));
+        if (proceedWithApiKey) {
+          while (true) {
+            const inputApiKey = await question("Enter your Postgres AI API key: ");
+            const trimmedKey = inputApiKey.trim();
 
-        try {
-          const answer = await question("Do you have a Postgres AI API key? (Y/n): ");
-          const proceedWithApiKey = !answer || answer.toLowerCase() === "y";
-
-          if (proceedWithApiKey) {
-            while (true) {
-              const inputApiKey = await question("Enter your Postgres AI API key: ");
-              const trimmedKey = inputApiKey.trim();
-
-              if (trimmedKey) {
-                config.writeConfig({ apiKey: trimmedKey });
-                console.log("✓ API key saved\n");
-                break;
-              }
-
-              console.log("⚠ API key cannot be empty");
-              const retry = await question("Try again or skip API key setup, retry? (Y/n): ");
-              if (retry.toLowerCase() === "n") {
-                console.log("⚠ Skipping API key setup - reports will be generated locally only");
-                console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
-                break;
-              }
+            if (trimmedKey) {
+              config.writeConfig({ apiKey: trimmedKey });
+              // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
+              fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${trimmedKey}\n`, {
+                encoding: "utf8",
+                mode: 0o600
+              });
+              console.log("✓ API key saved\n");
+              break;
             }
-          } else {
-            console.log("⚠ Skipping API key setup - reports will be generated locally only");
-            console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+
+            console.log("⚠ API key cannot be empty");
+            const retry = await question("Try again or skip API key setup, retry? (Y/n): ");
+            if (retry.toLowerCase() === "n") {
+              console.log("⚠ Skipping API key setup - reports will be generated locally only");
+              console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
+              break;
+            }
           }
-        } finally {
-          rl.close();
+        } else {
+          console.log("⚠ Skipping API key setup - reports will be generated locally only");
+          console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
         }
       }
     } else {
@@ -357,9 +1323,11 @@ mon
       console.log("Step 2: Add PostgreSQL Instance to Monitor\n");
 
       // Clear instances.yml in production mode (start fresh)
-      const instancesPath = path.resolve(process.cwd(), "instances.yml");
+      const { instancesFile: instancesPath, projectDir } = await resolveOrInitPaths();
       const emptyInstancesContent = "# PostgreSQL instances to monitor\n# Add your instances using: postgres-ai mon targets add\n\n";
       fs.writeFileSync(instancesPath, emptyInstancesContent, "utf8");
+      console.log(`Instances file: ${instancesPath}`);
+      console.log(`Project directory: ${projectDir}\n`);
 
       if (opts.dbUrl) {
         console.log("Using database URL provided via --db-url parameter");
@@ -388,7 +1356,6 @@ mon
         // Test connection
         console.log("Testing connection to the added instance...");
         try {
-          const { Client } = require("pg");
           const client = new Client({ connectionString: connStr });
           await client.connect();
           const result = await client.query("select version();");
@@ -405,63 +1372,50 @@ mon
         console.log("⚠ No PostgreSQL instance added");
         console.log("You can add one later with: postgres-ai mon targets add\n");
       } else {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
+        console.log("You need to add at least one PostgreSQL instance to monitor");
+        const answer = await question("Do you want to add a PostgreSQL instance now? (Y/n): ");
+        const proceedWithInstance = !answer || answer.toLowerCase() === "y";
 
-        const question = (prompt: string): Promise<string> =>
-          new Promise((resolve) => rl.question(prompt, resolve));
+        if (proceedWithInstance) {
+          console.log("\nYou can provide either:");
+          console.log("  1. A full connection string: postgresql://user:pass@host:port/database");
+          console.log("  2. Press Enter to skip for now\n");
 
-        try {
-          console.log("You need to add at least one PostgreSQL instance to monitor");
-          const answer = await question("Do you want to add a PostgreSQL instance now? (Y/n): ");
-          const proceedWithInstance = !answer || answer.toLowerCase() === "y";
+          const connStr = await question("Enter connection string (or press Enter to skip): ");
 
-          if (proceedWithInstance) {
-            console.log("\nYou can provide either:");
-            console.log("  1. A full connection string: postgresql://user:pass@host:port/database");
-            console.log("  2. Press Enter to skip for now\n");
-
-            const connStr = await question("Enter connection string (or press Enter to skip): ");
-
-            if (connStr.trim()) {
-              const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
-              if (!m) {
-                console.error("✗ Invalid connection string format");
-                console.log("⚠ Continuing without adding instance\n");
-              } else {
-                const host = m[3];
-                const db = m[5];
-                const instanceName = `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
-
-                const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
-                fs.appendFileSync(instancesPath, body, "utf8");
-                console.log(`✓ Monitoring target '${instanceName}' added\n`);
-
-                // Test connection
-                console.log("Testing connection to the added instance...");
-                try {
-                  const { Client } = require("pg");
-                  const client = new Client({ connectionString: connStr });
-                  await client.connect();
-                  const result = await client.query("select version();");
-                  console.log("✓ Connection successful");
-                  console.log(`${result.rows[0].version}\n`);
-                  await client.end();
-                } catch (error) {
-                  const message = error instanceof Error ? error.message : String(error);
-                  console.error(`✗ Connection failed: ${message}\n`);
-                }
-              }
+          if (connStr.trim()) {
+            const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
+            if (!m) {
+              console.error("✗ Invalid connection string format");
+              console.log("⚠ Continuing without adding instance\n");
             } else {
-              console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
+              const host = m[3];
+              const db = m[5];
+              const instanceName = `${host}-${db}`.replace(/[^a-zA-Z0-9-]/g, "-");
+
+              const body = `- name: ${instanceName}\n  conn_str: ${connStr}\n  preset_metrics: full\n  custom_metrics:\n  is_enabled: true\n  group: default\n  custom_tags:\n    env: production\n    cluster: default\n    node_name: ${instanceName}\n    sink_type: ~sink_type~\n`;
+              fs.appendFileSync(instancesPath, body, "utf8");
+              console.log(`✓ Monitoring target '${instanceName}' added\n`);
+
+              // Test connection
+              console.log("Testing connection to the added instance...");
+              try {
+                const client = new Client({ connectionString: connStr });
+                await client.connect();
+                const result = await client.query("select version();");
+                console.log("✓ Connection successful");
+                console.log(`${result.rows[0].version}\n`);
+                await client.end();
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`✗ Connection failed: ${message}\n`);
+              }
             }
           } else {
             console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
           }
-        } finally {
-          rl.close();
+        } else {
+          console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
         }
       }
     } else {
@@ -479,7 +1433,7 @@ mon
 
     // Step 4: Ensure Grafana password is configured
     console.log(opts.demo ? "Step 4: Configuring Grafana security..." : "Step 4: Configuring Grafana security...");
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     let grafanaPassword = "";
 
     try {
@@ -520,8 +1474,8 @@ mon
     }
 
     // Step 5: Start services
-    console.log(opts.demo ? "Step 5: Starting monitoring services..." : "Step 5: Starting monitoring services...");
-    const code2 = await runCompose(["up", "-d", "--force-recreate"]);
+    console.log("Step 5: Starting monitoring services...");
+    const code2 = await runCompose(["up", "-d", "--force-recreate"], grafanaPassword);
     if (code2 !== 0) {
       process.exitCode = code2;
       return;
@@ -530,7 +1484,7 @@ mon
 
     // Final summary
     console.log("=================================");
-    console.log("  🎉 Quickstart setup completed!");
+    console.log("  Local install completed!");
     console.log("=================================\n");
 
     console.log("What's running:");
@@ -578,6 +1532,34 @@ mon
     const code = await runCompose(["up", "-d"]);
     if (code !== 0) process.exitCode = code;
   });
+
+// Known container names for cleanup
+const MONITORING_CONTAINERS = [
+  "postgres-ai-config-init",
+  "node-exporter",
+  "cadvisor",
+  "grafana-with-datasources",
+  "sink-postgres",
+  "sink-prometheus",
+  "target-db",
+  "pgwatch-postgres",
+  "pgwatch-prometheus",
+  "postgres-exporter-sink",
+  "flask-pgss-api",
+  "sources-generator",
+  "postgres-reports",
+];
+
+/** Remove orphaned containers that docker compose down might miss */
+async function removeOrphanedContainers(): Promise<void> {
+  for (const container of MONITORING_CONTAINERS) {
+    try {
+      await execFilePromise("docker", ["rm", "-f", container]);
+    } catch {
+      // Container doesn't exist, ignore
+    }
+  }
+}
 
 mon
   .command("stop")
@@ -647,16 +1629,16 @@ mon
       allHealthy = true;
       for (const service of services) {
         try {
-          const { execSync } = require("child_process");
-          const status = execSync(`docker inspect -f '{{.State.Status}}' ${service.container} 2>/dev/null`, {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe']
-          }).trim();
+          const result = spawnSync("docker", ["inspect", "-f", "{{.State.Status}}", service.container], { stdio: "pipe" });
+          const status = result.stdout.trim();
 
-          if (status === 'running') {
+          if (result.status === 0 && status === 'running') {
             console.log(`✓ ${service.name}: healthy`);
-          } else {
+          } else if (result.status === 0) {
             console.log(`✗ ${service.name}: unhealthy (status: ${status})`);
+            allHealthy = false;
+          } else {
+            console.log(`✗ ${service.name}: unreachable`);
             allHealthy = false;
           }
         } catch (error) {
@@ -686,7 +1668,7 @@ mon
     let composeFile: string;
     let instancesFile: string;
     try {
-      ({ projectDir, composeFile, instancesFile } = resolvePaths());
+      ({ projectDir, composeFile, instancesFile } = await resolveOrInitPaths());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(message);
@@ -761,14 +1743,6 @@ mon
   .command("reset [service]")
   .description("reset all or specific monitoring service")
   .action(async (service?: string) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const question = (prompt: string): Promise<string> =>
-      new Promise((resolve) => rl.question(prompt, resolve));
-
     try {
       if (service) {
         // Reset specific service
@@ -778,7 +1752,6 @@ mon
         const answer = await question("Continue? (y/N): ");
         if (answer.toLowerCase() !== "y") {
           console.log("Cancelled");
-          rl.close();
           return;
         }
 
@@ -805,7 +1778,6 @@ mon
         const answer = await question("Continue? (y/N): ");
         if (answer.toLowerCase() !== "y") {
           console.log("Cancelled");
-          rl.close();
           return;
         }
 
@@ -819,10 +1791,7 @@ mon
           process.exitCode = 1;
         }
       }
-
-      rl.close();
     } catch (error) {
-      rl.close();
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Reset failed: ${message}`);
       process.exitCode = 1;
@@ -830,34 +1799,72 @@ mon
   });
 mon
   .command("clean")
-  .description("cleanup monitoring services artifacts")
-  .action(async () => {
-    console.log("Cleaning up Docker resources...\n");
+  .description("cleanup monitoring services artifacts (stops services and removes volumes)")
+  .option("--keep-volumes", "keep data volumes (only stop and remove containers)")
+  .action(async (options: { keepVolumes?: boolean }) => {
+    console.log("Cleaning up monitoring services...\n");
 
     try {
-      // Remove stopped containers
-      const { stdout: containers } = await execFilePromise("docker", ["ps", "-aq", "--filter", "status=exited"]);
-      if (containers.trim()) {
-        const containerIds = containers.trim().split('\n');
-        await execFilePromise("docker", ["rm", ...containerIds]);
-        console.log("✓ Removed stopped containers");
+      // First, use docker-compose down to properly stop and remove containers/volumes
+      const downArgs = options.keepVolumes ? ["down"] : ["down", "-v"];
+      console.log(options.keepVolumes
+        ? "Stopping and removing containers (keeping volumes)..."
+        : "Stopping and removing containers and volumes...");
+
+      const downCode = await runCompose(downArgs);
+      if (downCode === 0) {
+        console.log("✓ Monitoring services stopped and removed");
       } else {
-        console.log("✓ No stopped containers to remove");
+        console.log("⚠ Could not stop services (may not be running)");
       }
 
-      // Remove unused volumes
-      await execFilePromise("docker", ["volume", "prune", "-f"]);
-      console.log("✓ Removed unused volumes");
+      // Remove any orphaned containers that docker compose down missed
+      await removeOrphanedContainers();
+      console.log("✓ Removed orphaned containers");
 
-      // Remove unused networks
+      // Remove orphaned volumes from previous installs with different project names
+      if (!options.keepVolumes) {
+        const volumePatterns = [
+          "monitoring_grafana_data",
+          "monitoring_postgres_ai_configs",
+          "monitoring_sink_postgres_data",
+          "monitoring_target_db_data",
+          "monitoring_victoria_metrics_data",
+          "postgres_ai_configs_grafana_data",
+          "postgres_ai_configs_sink_postgres_data",
+          "postgres_ai_configs_target_db_data",
+          "postgres_ai_configs_victoria_metrics_data",
+          "postgres_ai_configs_postgres_ai_configs",
+        ];
+
+        const { stdout: existingVolumes } = await execFilePromise("docker", ["volume", "ls", "-q"]);
+        const volumeList = existingVolumes.trim().split('\n').filter(Boolean);
+        const orphanedVolumes = volumeList.filter(v => volumePatterns.includes(v));
+
+        if (orphanedVolumes.length > 0) {
+          let removedCount = 0;
+          for (const vol of orphanedVolumes) {
+            try {
+              await execFilePromise("docker", ["volume", "rm", vol]);
+              removedCount++;
+            } catch {
+              // Volume might be in use, skip silently
+            }
+          }
+          if (removedCount > 0) {
+            console.log(`✓ Removed ${removedCount} orphaned volume(s) from previous installs`);
+          }
+        }
+      }
+
+      // Remove any dangling resources
       await execFilePromise("docker", ["network", "prune", "-f"]);
       console.log("✓ Removed unused networks");
 
-      // Remove dangling images
       await execFilePromise("docker", ["image", "prune", "-f"]);
       console.log("✓ Removed dangling images");
 
-      console.log("\nCleanup completed");
+      console.log("\n✓ Cleanup completed - ready for fresh install");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Error during cleanup: ${message}`);
@@ -886,9 +1893,9 @@ targets
   .command("list")
   .description("list monitoring target databases")
   .action(async () => {
-    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: instancesPath, projectDir } = await resolveOrInitPaths();
     if (!fs.existsSync(instancesPath)) {
-      console.error(`instances.yml not found in ${process.cwd()}`);
+      console.error(`instances.yml not found in ${projectDir}`);
       process.exitCode = 1;
       return;
     }
@@ -935,7 +1942,7 @@ targets
   .command("add [connStr] [name]")
   .description("add monitoring target database")
   .action(async (connStr?: string, name?: string) => {
-    const file = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: file } = await resolveOrInitPaths();
     if (!connStr) {
       console.error("Connection string required: postgresql://user:pass@host:port/db");
       process.exitCode = 1;
@@ -985,7 +1992,7 @@ targets
   .command("remove <name>")
   .description("remove monitoring target database")
   .action(async (name: string) => {
-    const file = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: file } = await resolveOrInitPaths();
     if (!fs.existsSync(file)) {
       console.error("instances.yml not found");
       process.exitCode = 1;
@@ -1022,7 +2029,7 @@ targets
   .command("test <name>")
   .description("test monitoring target database connectivity")
   .action(async (name: string) => {
-    const instancesPath = path.resolve(process.cwd(), "instances.yml");
+    const { instancesFile: instancesPath } = await resolveOrInitPaths();
     if (!fs.existsSync(instancesPath)) {
       console.error("instances.yml not found");
       process.exitCode = 1;
@@ -1056,7 +2063,6 @@ targets
       console.log(`Testing connection to monitoring target '${name}'...`);
 
       // Use native pg client instead of requiring psql to be installed
-      const { Client } = require('pg');
       const client = new Client({ connectionString: instance.conn_str });
 
       try {
@@ -1075,15 +2081,43 @@ targets
   });
 
 // Authentication and API key management
-program
-  .command("auth")
-  .description("authenticate via browser and obtain API key")
+const auth = program.command("auth").description("authentication and API key management");
+
+auth
+  .command("login", { isDefault: true })
+  .description("authenticate via browser (OAuth) or store API key directly")
+  .option("--set-key <key>", "store API key directly without OAuth flow")
   .option("--port <port>", "local callback server port (default: random)", parseInt)
   .option("--debug", "enable debug output")
-  .action(async (opts: { port?: number; debug?: boolean }) => {
-    const pkce = require("../lib/pkce");
-    const authServer = require("../lib/auth-server");
+  .action(async (opts: { setKey?: string; port?: number; debug?: boolean }) => {
+    // If --set-key is provided, store it directly without OAuth
+    if (opts.setKey) {
+      const trimmedKey = opts.setKey.trim();
+      if (!trimmedKey) {
+        console.error("Error: API key cannot be empty");
+        process.exitCode = 1;
+        return;
+      }
+      
+      // Read existing config to check for defaultProject before updating
+      const existingConfig = config.readConfig();
+      const existingProject = existingConfig.defaultProject;
+      
+      config.writeConfig({ apiKey: trimmedKey });
+      // When API key is set directly, only clear orgId (org selection may differ).
+      // Preserve defaultProject to avoid orphaning historical reports.
+      // If the new key lacks access to the project, upload will fail with a clear error.
+      config.deleteConfigKeys(["orgId"]);
+      
+      console.log(`API key saved to ${config.getConfigPath()}`);
+      if (existingProject) {
+        console.log(`Note: Your default project "${existingProject}" has been preserved.`);
+        console.log(`      If this key belongs to a different account, use --project to specify a new one.`);
+      }
+      return;
+    }
 
+    // Otherwise, proceed with OAuth flow
     console.log("Starting authentication flow...\n");
 
     // Generate PKCE parameters
@@ -1104,10 +2138,10 @@ program
       const requestedPort = opts.port || 0; // 0 = OS assigns available port
       const callbackServer = authServer.createCallbackServer(requestedPort, params.state, 120000); // 2 minute timeout
 
-      // Wait a bit for server to start and get port
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const actualPort = callbackServer.getPort();
-      const redirectUri = `http://localhost:${actualPort}/callback`;
+      // Wait for server to start and get the actual port
+      const actualPort = await callbackServer.ready;
+      // Use 127.0.0.1 to match the server bind address (avoids IPv6 issues on some hosts)
+      const redirectUri = `http://127.0.0.1:${actualPort}/callback`;
 
       console.log(`Callback server listening on port ${actualPort}`);
 
@@ -1129,173 +2163,180 @@ program
         console.log(`Debug: Request data: ${initData}`);
       }
 
-      const initReq = http.request(
-        initUrl,
-        {
+      // Step 2: Initialize OAuth session on backend using fetch
+      let initResponse: Response;
+      try {
+        initResponse = await fetch(initUrl.toString(), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(initData),
           },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", async () => {
-            if (res.statusCode !== 200) {
-              console.error(`Failed to initialize auth session: ${res.statusCode}`);
-
-              // Check if response is HTML (common for 404 pages)
-              if (data.trim().startsWith("<!") || data.trim().startsWith("<html")) {
-                console.error("Error: Received HTML response instead of JSON. This usually means:");
-                console.error("  1. The API endpoint URL is incorrect");
-                console.error("  2. The endpoint does not exist (404)");
-                console.error(`\nAPI URL attempted: ${initUrl.toString()}`);
-                console.error("\nPlease verify the --api-base-url parameter.");
-              } else {
-                console.error(data);
-              }
-
-              callbackServer.server.close();
-              process.exit(1);
-            }
-
-            // Step 3: Open browser
-            const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}`;
-
-            if (opts.debug) {
-              console.log(`Debug: Auth URL: ${authUrl}`);
-            }
-
-            console.log(`\nOpening browser for authentication...`);
-            console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
-
-            // Open browser (cross-platform)
-            const openCommand = process.platform === "darwin" ? "open" :
-                               process.platform === "win32" ? "start" :
-                               "xdg-open";
-            spawn(openCommand, [authUrl], { detached: true, stdio: "ignore" }).unref();
-
-            // Step 4: Wait for callback
-            console.log("Waiting for authorization...");
-            console.log("(Press Ctrl+C to cancel)\n");
-
-            // Handle Ctrl+C gracefully
-            const cancelHandler = () => {
-              console.log("\n\nAuthentication cancelled by user.");
-              callbackServer.server.close();
-              process.exit(130); // Standard exit code for SIGINT
-            };
-            process.on("SIGINT", cancelHandler);
-
-            try {
-              const { code } = await callbackServer.promise;
-
-              // Remove the cancel handler after successful auth
-              process.off("SIGINT", cancelHandler);
-
-              // Step 5: Exchange code for token
-              console.log("\nExchanging authorization code for API token...");
-              const exchangeData = JSON.stringify({
-                authorization_code: code,
-                code_verifier: params.codeVerifier,
-                state: params.state,
-              });
-              const exchangeUrl = new URL(`${apiBaseUrl}/rpc/oauth_token_exchange`);
-              const exchangeReq = http.request(
-                exchangeUrl,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Content-Length": Buffer.byteLength(exchangeData),
-                  },
-                },
-                (exchangeRes) => {
-                  let exchangeBody = "";
-                  exchangeRes.on("data", (chunk) => (exchangeBody += chunk));
-                  exchangeRes.on("end", () => {
-                    if (exchangeRes.statusCode !== 200) {
-                      console.error(`Failed to exchange code for token: ${exchangeRes.statusCode}`);
-
-                      // Check if response is HTML (common for 404 pages)
-                      if (exchangeBody.trim().startsWith("<!") || exchangeBody.trim().startsWith("<html")) {
-                        console.error("Error: Received HTML response instead of JSON. This usually means:");
-                        console.error("  1. The API endpoint URL is incorrect");
-                        console.error("  2. The endpoint does not exist (404)");
-                        console.error(`\nAPI URL attempted: ${exchangeUrl.toString()}`);
-                        console.error("\nPlease verify the --api-base-url parameter.");
-                      } else {
-                        console.error(exchangeBody);
-                      }
-
-                      process.exit(1);
-                      return;
-                    }
-
-                    try {
-                      const result = JSON.parse(exchangeBody);
-                      const apiToken = result.api_token || result?.[0]?.result?.api_token; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
-                      const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
-
-                      // Step 6: Save token to config
-                      config.writeConfig({
-                        apiKey: apiToken,
-                        baseUrl: apiBaseUrl,
-                        orgId: orgId,
-                      });
-
-                      console.log("\nAuthentication successful!");
-                      console.log(`API key saved to: ${config.getConfigPath()}`);
-                      console.log(`Organization ID: ${orgId}`);
-                      console.log(`\nYou can now use the CLI without specifying an API key.`);
-                      process.exit(0);
-                    } catch (err) {
-                      const message = err instanceof Error ? err.message : String(err);
-                      console.error(`Failed to parse response: ${message}`);
-                      process.exit(1);
-                    }
-                  });
-                }
-              );
-
-              exchangeReq.on("error", (err: Error) => {
-                console.error(`Exchange request failed: ${err.message}`);
-                process.exit(1);
-              });
-
-              exchangeReq.write(exchangeData);
-              exchangeReq.end();
-
-            } catch (err) {
-              // Remove the cancel handler in error case too
-              process.off("SIGINT", cancelHandler);
-
-              const message = err instanceof Error ? err.message : String(err);
-
-              // Provide more helpful error messages
-              if (message.includes("timeout")) {
-                console.error(`\nAuthentication timed out.`);
-                console.error(`This usually means you closed the browser window without completing authentication.`);
-                console.error(`Please try again and complete the authentication flow.`);
-              } else {
-                console.error(`\nAuthentication failed: ${message}`);
-              }
-
-              process.exit(1);
-            }
-          });
-        }
-      );
-
-      initReq.on("error", (err: Error) => {
-        console.error(`Failed to connect to API: ${err.message}`);
-        callbackServer.server.close();
+          body: initData,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Failed to connect to API: ${message}`);
+        callbackServer.server.stop();
         process.exit(1);
-      });
+        return;
+      }
 
-      initReq.write(initData);
-      initReq.end();
+      if (!initResponse.ok) {
+        const data = await initResponse.text();
+        console.error(`Failed to initialize auth session: ${initResponse.status}`);
+
+        // Check if response is HTML (common for 404 pages)
+        if (data.trim().startsWith("<!") || data.trim().startsWith("<html")) {
+          console.error("Error: Received HTML response instead of JSON. This usually means:");
+          console.error("  1. The API endpoint URL is incorrect");
+          console.error("  2. The endpoint does not exist (404)");
+          console.error(`\nAPI URL attempted: ${initUrl.toString()}`);
+          console.error("\nPlease verify the --api-base-url parameter.");
+        } else {
+          console.error(data);
+        }
+
+        callbackServer.server.stop();
+        process.exit(1);
+        return;
+      }
+
+      // Step 3: Open browser
+      // Pass api_url so UI calls oauth_approve on the same backend where oauth_init created the session
+      const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}&api_url=${encodeURIComponent(apiBaseUrl)}`;
+
+      if (opts.debug) {
+        console.log(`Debug: Auth URL: ${authUrl}`);
+      }
+
+      console.log(`\nOpening browser for authentication...`);
+      console.log(`If browser does not open automatically, visit:\n${authUrl}\n`);
+
+      // Open browser (cross-platform)
+      const openCommand = process.platform === "darwin" ? "open" :
+                         process.platform === "win32" ? "start" :
+                         "xdg-open";
+      spawn(openCommand, [authUrl], { detached: true, stdio: "ignore" }).unref();
+
+      // Step 4: Wait for callback
+      console.log("Waiting for authorization...");
+      console.log("(Press Ctrl+C to cancel)\n");
+
+      // Handle Ctrl+C gracefully
+      const cancelHandler = () => {
+        console.log("\n\nAuthentication cancelled by user.");
+        callbackServer.server.stop();
+        process.exit(130); // Standard exit code for SIGINT
+      };
+      process.on("SIGINT", cancelHandler);
+
+      try {
+        const { code } = await callbackServer.promise;
+
+        // Remove the cancel handler after successful auth
+        process.off("SIGINT", cancelHandler);
+
+        // Step 5: Exchange code for token using fetch
+        console.log("\nExchanging authorization code for API token...");
+        const exchangeData = JSON.stringify({
+          authorization_code: code,
+          code_verifier: params.codeVerifier,
+          state: params.state,
+        });
+        const exchangeUrl = new URL(`${apiBaseUrl}/rpc/oauth_token_exchange`);
+
+        let exchangeResponse: Response;
+        try {
+          exchangeResponse = await fetch(exchangeUrl.toString(), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: exchangeData,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Exchange request failed: ${message}`);
+          process.exit(1);
+          return;
+        }
+
+        const exchangeBody = await exchangeResponse.text();
+
+        if (!exchangeResponse.ok) {
+          console.error(`Failed to exchange code for token: ${exchangeResponse.status}`);
+
+          // Check if response is HTML (common for 404 pages)
+          if (exchangeBody.trim().startsWith("<!") || exchangeBody.trim().startsWith("<html")) {
+            console.error("Error: Received HTML response instead of JSON. This usually means:");
+            console.error("  1. The API endpoint URL is incorrect");
+            console.error("  2. The endpoint does not exist (404)");
+            console.error(`\nAPI URL attempted: ${exchangeUrl.toString()}`);
+            console.error("\nPlease verify the --api-base-url parameter.");
+          } else {
+            console.error(exchangeBody);
+          }
+
+          process.exit(1);
+          return;
+        }
+
+        try {
+          const result = JSON.parse(exchangeBody);
+          const apiToken = result.api_token || result?.[0]?.result?.api_token; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
+          const orgId = result.org_id || result?.[0]?.result?.org_id; // There is a bug with PostgREST Caching that may return an array, not single object, it's a workaround to support both cases.
+
+          // Step 6: Save token to config
+          // Check if org changed to decide whether to preserve defaultProject
+          const existingConfig = config.readConfig();
+          const existingOrgId = existingConfig.orgId;
+          const existingProject = existingConfig.defaultProject;
+          const orgChanged = existingOrgId && existingOrgId !== orgId;
+          
+          config.writeConfig({
+            apiKey: apiToken,
+            baseUrl: apiBaseUrl,
+            orgId: orgId,
+          });
+          
+          // Only clear defaultProject if org actually changed
+          if (orgChanged && existingProject) {
+            config.deleteConfigKeys(["defaultProject"]);
+            console.log(`\nNote: Organization changed (${existingOrgId} → ${orgId}).`);
+            console.log(`      Default project "${existingProject}" has been cleared.`);
+          }
+
+          console.log("\nAuthentication successful!");
+          console.log(`API key saved to: ${config.getConfigPath()}`);
+          console.log(`Organization ID: ${orgId}`);
+          if (!orgChanged && existingProject) {
+            console.log(`Default project: ${existingProject} (preserved)`);
+          }
+          console.log(`\nYou can now use the CLI without specifying an API key.`);
+          process.exit(0);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Failed to parse response: ${message}`);
+          process.exit(1);
+        }
+
+      } catch (err) {
+        // Remove the cancel handler in error case too
+        process.off("SIGINT", cancelHandler);
+
+        const message = err instanceof Error ? err.message : String(err);
+
+        // Provide more helpful error messages
+        if (message.includes("timeout")) {
+          console.error(`\nAuthentication timed out.`);
+          console.error(`This usually means you closed the browser window without completing authentication.`);
+          console.error(`Please try again and complete the authentication flow.`);
+        } else {
+          console.error(`\nAuthentication failed: ${message}`);
+        }
+
+        process.exit(1);
+      }
 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1304,15 +2345,7 @@ program
     }
   });
 
-program
-  .command("add-key <apiKey>")
-  .description("store API key")
-  .action(async (apiKey: string) => {
-    config.writeConfig({ apiKey });
-    console.log(`API key saved to ${config.getConfigPath()}`);
-  });
-
-program
+auth
   .command("show-key")
   .description("show API key (masked)")
   .action(async () => {
@@ -1322,7 +2355,6 @@ program
       console.log(`\nTo authenticate, run: pgai auth`);
       return;
     }
-    const { maskSecret } = require("../lib/util");
     console.log(`Current API key: ${maskSecret(cfg.apiKey)}`);
     if (cfg.orgId) {
       console.log(`Organization ID: ${cfg.orgId}`);
@@ -1330,14 +2362,20 @@ program
     console.log(`Config location: ${config.getConfigPath()}`);
   });
 
-program
+auth
   .command("remove-key")
   .description("remove API key")
   .action(async () => {
     // Check both new config and legacy config
     const newConfigPath = config.getConfigPath();
     const hasNewConfig = fs.existsSync(newConfigPath);
-    const legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    let legacyPath: string;
+    try {
+      const { projectDir } = await resolveOrInitPaths();
+      legacyPath = path.resolve(projectDir, ".pgwatch-config");
+    } catch {
+      legacyPath = path.resolve(process.cwd(), ".pgwatch-config");
+    }
     const hasLegacyConfig = fs.existsSync(legacyPath) && fs.statSync(legacyPath).isFile();
 
     if (!hasNewConfig && !hasLegacyConfig) {
@@ -1373,7 +2411,8 @@ mon
   .command("generate-grafana-password")
   .description("generate Grafana password for monitoring services")
   .action(async () => {
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const { projectDir } = await resolveOrInitPaths();
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
 
     try {
       // Generate secure password using openssl
@@ -1424,9 +2463,10 @@ mon
   .command("show-grafana-credentials")
   .description("show Grafana credentials for monitoring services")
   .action(async () => {
-    const cfgPath = path.resolve(process.cwd(), ".pgwatch-config");
+    const { projectDir } = await resolveOrInitPaths();
+    const cfgPath = path.resolve(projectDir, ".pgwatch-config");
     if (!fs.existsSync(cfgPath)) {
-      console.error("Configuration file not found. Run 'postgres-ai mon quickstart' first.");
+      console.error("Configuration file not found. Run 'postgres-ai mon local-install' first.");
       process.exitCode = 1;
       return;
     }
@@ -1552,7 +2592,7 @@ issues
   });
 
 issues
-  .command("post_comment <issueId> <content>")
+  .command("post-comment <issueId> <content>")
   .description("post a new comment to an issue")
   .option("--parent <uuid>", "parent comment id")
   .option("--debug", "enable debug output")
@@ -1597,6 +2637,194 @@ issues
     }
   });
 
+issues
+  .command("create <title>")
+  .description("create a new issue")
+  .option("--org-id <id>", "organization id (defaults to config orgId)", (v) => parseInt(v, 10))
+  .option("--project-id <id>", "project id", (v) => parseInt(v, 10))
+  .option("--description <text>", "issue description (supports \\\\n)")
+  .option(
+    "--label <label>",
+    "issue label (repeatable)",
+    (value: string, previous: string[]) => {
+      previous.push(value);
+      return previous;
+    },
+    [] as string[]
+  )
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (rawTitle: string, opts: { orgId?: number; projectId?: number; description?: string; label?: string[]; debug?: boolean; json?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const title = interpretEscapes(String(rawTitle || "").trim());
+      if (!title) {
+        console.error("title is required");
+        process.exitCode = 1;
+        return;
+      }
+
+      const orgId = typeof opts.orgId === "number" && !Number.isNaN(opts.orgId) ? opts.orgId : cfg.orgId;
+      if (typeof orgId !== "number") {
+        console.error("org_id is required. Either pass --org-id or run 'pgai auth' to store it in config.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+      const labels = Array.isArray(opts.label) && opts.label.length > 0 ? opts.label.map(String) : undefined;
+      const projectId = typeof opts.projectId === "number" && !Number.isNaN(opts.projectId) ? opts.projectId : undefined;
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+      const result = await createIssue({
+        apiKey,
+        apiBaseUrl,
+        title,
+        orgId,
+        description,
+        projectId,
+        labels,
+        debug: !!opts.debug,
+      });
+      printResult(result, opts.json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("update <issueId>")
+  .description("update an existing issue (title/description/status/labels)")
+  .option("--title <text>", "new title (supports \\\\n)")
+  .option("--description <text>", "new description (supports \\\\n)")
+  .option("--status <value>", "status: open|closed|0|1")
+  .option(
+    "--label <label>",
+    "set labels (repeatable). If provided, replaces existing labels.",
+    (value: string, previous: string[]) => {
+      previous.push(value);
+      return previous;
+    },
+    [] as string[]
+  )
+  .option("--clear-labels", "set labels to an empty list")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (issueId: string, opts: { title?: string; description?: string; status?: string; label?: string[]; clearLabels?: boolean; debug?: boolean; json?: boolean }) => {
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const title = opts.title !== undefined ? interpretEscapes(String(opts.title)) : undefined;
+      const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+
+      let status: number | undefined = undefined;
+      if (opts.status !== undefined) {
+        const raw = String(opts.status).trim().toLowerCase();
+        if (raw === "open") status = 0;
+        else if (raw === "closed") status = 1;
+        else {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) {
+            console.error("status must be open|closed|0|1");
+            process.exitCode = 1;
+            return;
+          }
+          status = n;
+        }
+        if (status !== 0 && status !== 1) {
+          console.error("status must be 0 (open) or 1 (closed)");
+          process.exitCode = 1;
+          return;
+        }
+      }
+
+      let labels: string[] | undefined = undefined;
+      if (opts.clearLabels) {
+        labels = [];
+      } else if (Array.isArray(opts.label) && opts.label.length > 0) {
+        labels = opts.label.map(String);
+      }
+
+      const result = await updateIssue({
+        apiKey,
+        apiBaseUrl,
+        issueId,
+        title,
+        description,
+        status,
+        labels,
+        debug: !!opts.debug,
+      });
+      printResult(result, opts.json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("update-comment <commentId> <content>")
+  .description("update an existing issue comment")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (commentId: string, content: string, opts: { debug?: boolean; json?: boolean }) => {
+    try {
+      if (opts.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+      }
+      content = interpretEscapes(content);
+      if (opts.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+      }
+
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await updateIssueComment({
+        apiKey,
+        apiBaseUrl,
+        commentId,
+        content,
+        debug: !!opts.debug,
+      });
+      printResult(result, opts.json);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
 // MCP server
 const mcp = program.command("mcp").description("MCP server integration");
 
@@ -1624,15 +2852,7 @@ mcp
       console.log("  4. Codex");
       console.log("");
 
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-
-      const answer = await new Promise<string>((resolve) => {
-        rl.question("Select your AI coding tool (1-4): ", resolve);
-      });
-      rl.close();
+      const answer = await question("Select your AI coding tool (1-4): ");
 
       const choices: Record<string, string> = {
         "1": "cursor",
@@ -1767,5 +2987,7 @@ mcp
     }
   });
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).finally(() => {
+  closeReadline();
+});
 

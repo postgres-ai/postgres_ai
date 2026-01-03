@@ -10,10 +10,12 @@ Command-line interface for PostgresAI monitoring and database management.
 npm install -g postgresai
 ```
 
-Or install the latest alpha release explicitly:
+Or install the latest beta release explicitly:
 ```bash
-npm install -g postgresai@alpha
+npm install -g postgresai@beta
 ```
+
+Note: in this repository, `cli/package.json` uses a placeholder version (`0.0.0-dev.0`). The real published version is set by the git tag in CI when publishing to npm.
 
 ### From Homebrew (macOS)
 
@@ -27,11 +29,82 @@ brew install postgresai
 
 ## Usage
 
-The CLI provides three command aliases:
+The `postgresai` package provides two command aliases:
 ```bash
-postgres-ai --help
-postgresai --help
-pgai --help  # short alias
+postgresai --help   # Canonical, discoverable
+pgai --help         # Short and convenient
+```
+
+You can also run it without installing via `npx`:
+
+```bash
+npx postgresai --help
+```
+
+### Optional shorthand: `pgai`
+
+If you want `npx pgai ...` as a shorthand for `npx postgresai ...`, install the separate `pgai` wrapper package:
+
+```bash
+npx pgai --help
+```
+
+## prepare-db (create monitoring user in Postgres)
+
+This command creates (or updates) the `postgres_ai_mon` user, creates the required view(s), and grants the permissions described in the root `README.md` (it is idempotent). Where supported, it also enables observability extensions described there.
+
+Run without installing (positional connection string):
+
+```bash
+npx postgresai prepare-db postgresql://admin@host:5432/dbname
+```
+
+It also accepts libpq "conninfo" syntax:
+
+```bash
+npx postgresai prepare-db "dbname=dbname host=host user=admin"
+```
+
+And psql-like options:
+
+```bash
+npx postgresai prepare-db -h host -p 5432 -U admin -d dbname
+```
+
+Password input options (in priority order):
+- `--password <password>`
+- `PGAI_MON_PASSWORD` environment variable
+- if not provided: a strong password is generated automatically
+
+By default, the generated password is printed **only in interactive (TTY) mode**. In non-interactive mode, you must either provide the password explicitly, or opt-in to printing it:
+- `--print-password` (dangerous in CI logs)
+
+Optional permissions (RDS/self-managed extras from the root `README.md`) are enabled by default. To skip them:
+
+```bash
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --skip-optional-permissions
+```
+
+### Print SQL / dry run
+
+To see what SQL would be executed (passwords redacted by default):
+
+```bash
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --print-sql
+```
+
+### Verify and password reset
+
+Verify that everything is configured as expected (no changes):
+
+```bash
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --verify
+```
+
+Reset monitoring user password only (no other changes):
+
+```bash
+npx postgresai prepare-db postgresql://admin@host:5432/dbname --reset-password --password 'new_password'
 ```
 
 ## Quick start
@@ -40,7 +113,7 @@ pgai --help  # short alias
 
 Authenticate via browser to obtain API key:
 ```bash
-pgai auth
+postgresai auth
 ```
 
 This will:
@@ -52,17 +125,17 @@ This will:
 
 Start monitoring with demo database:
 ```bash
-postgres-ai mon quickstart --demo
+postgresai mon local-install --demo
 ```
 
 Start monitoring with your own database:
 ```bash
-postgres-ai mon quickstart --db-url postgresql://user:pass@host:5432/db
+postgresai mon local-install --db-url postgresql://user:pass@host:5432/db
 ```
 
 Complete automated setup with API key and database:
 ```bash
-postgres-ai mon quickstart --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
+postgresai mon local-install --api-key your_key --db-url postgresql://user:pass@host:5432/db -y
 ```
 
 This will:
@@ -79,22 +152,22 @@ This will:
 #### Service lifecycle
 ```bash
 # Complete setup with various options
-postgres-ai mon quickstart                                  # Interactive setup for production
-postgres-ai mon quickstart --demo                           # Demo mode with sample database
-postgres-ai mon quickstart --api-key <key>                  # Setup with API key
-postgres-ai mon quickstart --db-url <url>                   # Setup with database URL
-postgres-ai mon quickstart --api-key <key> --db-url <url>   # Complete automated setup
-postgres-ai mon quickstart -y                               # Auto-accept all defaults
+postgresai mon local-install                                  # Interactive setup for production
+postgresai mon local-install --demo                           # Demo mode with sample database
+postgresai mon local-install --api-key <key>                  # Setup with API key
+postgresai mon local-install --db-url <url>                   # Setup with database URL
+postgresai mon local-install --api-key <key> --db-url <url>   # Complete automated setup
+postgresai mon local-install -y                               # Auto-accept all defaults
 
 # Service management
-postgres-ai mon start                  # Start monitoring services
-postgres-ai mon stop                   # Stop monitoring services
-postgres-ai mon restart [service]      # Restart all or specific monitoring service
-postgres-ai mon status                 # Show monitoring services status
-postgres-ai mon health [--wait <sec>]  # Check monitoring services health
+postgresai mon start                  # Start monitoring services
+postgresai mon stop                   # Stop monitoring services
+postgresai mon restart [service]      # Restart all or specific monitoring service
+postgresai mon status                 # Show monitoring services status
+postgresai mon health [--wait <sec>]  # Check monitoring services health
 ```
 
-##### Quickstart options
+##### local-install options
 - `--demo` - Demo mode with sample database (testing only, cannot use with --api-key)
 - `--api-key <key>` - Postgres AI API key for automated report uploads
 - `--db-url <url>` - PostgreSQL connection URL to monitor (format: `postgresql://user:pass@host:port/db`)
@@ -102,27 +175,27 @@ postgres-ai mon health [--wait <sec>]  # Check monitoring services health
 
 #### Monitoring target databases (`mon targets` subgroup)
 ```bash
-postgres-ai mon targets list                       # List databases to monitor
-postgres-ai mon targets add <conn-string> <name>   # Add database to monitor
-postgres-ai mon targets remove <name>              # Remove monitoring target
-postgres-ai mon targets test <name>                # Test target connectivity
+postgresai mon targets list                       # List databases to monitor
+postgresai mon targets add <conn-string> <name>   # Add database to monitor
+postgresai mon targets remove <name>              # Remove monitoring target
+postgresai mon targets test <name>                # Test target connectivity
 ```
 
 #### Configuration and maintenance
 ```bash
-postgres-ai mon config                         # Show monitoring configuration
-postgres-ai mon update-config                  # Apply configuration changes
-postgres-ai mon update                         # Update monitoring stack
-postgres-ai mon reset [service]                # Reset service data
-postgres-ai mon clean                          # Cleanup artifacts
-postgres-ai mon check                          # System readiness check
-postgres-ai mon shell <service>                # Open shell to monitoring service
+postgresai mon config                         # Show monitoring configuration
+postgresai mon update-config                  # Apply configuration changes
+postgresai mon update                         # Update monitoring stack
+postgresai mon reset [service]                # Reset service data
+postgresai mon clean                          # Cleanup artifacts
+postgresai mon check                          # System readiness check
+postgresai mon shell <service>                # Open shell to monitoring service
 ```
 
 ### MCP server (`mcp` group)
 
 ```bash
-pgai mcp start                 # Start MCP stdio server exposing tools
+postgresai mcp start                 # Start MCP stdio server exposing tools
 ```
 
 Cursor configuration example (Settings → MCP):
@@ -131,7 +204,7 @@ Cursor configuration example (Settings → MCP):
 {
   "mcpServers": {
     "PostgresAI": {
-      "command": "pgai",
+      "command": "postgresai",
       "args": ["mcp", "start"],
       "env": {
         "PGAI_API_BASE_URL": "https://postgres.ai/api/general/"
@@ -142,16 +215,16 @@ Cursor configuration example (Settings → MCP):
 ```
 
 Tools exposed:
-- list_issues: returns the same JSON as `pgai issues list`.
+- list_issues: returns the same JSON as `postgresai issues list`.
 - view_issue: view a single issue with its comments (args: { issue_id, debug? })
 - post_issue_comment: post a comment (args: { issue_id, content, parent_comment_id?, debug? })
 
 ### Issues management (`issues` group)
 
 ```bash
-pgai issues list                                  # List issues (shows: id, title, status, created_at)
-pgai issues view <issueId>                        # View issue details and comments
-pgai issues post_comment <issueId> <content>      # Post a comment to an issue
+postgresai issues list                                  # List issues (shows: id, title, status, created_at)
+postgresai issues view <issueId>                        # View issue details and comments
+postgresai issues post_comment <issueId> <content>      # Post a comment to an issue
 # Options:
 #   --parent <uuid>  Parent comment ID (for replies)
 #   --debug          Enable debug output
@@ -165,27 +238,27 @@ By default, issues commands print human-friendly YAML when writing to a terminal
 - Use `--json` to force JSON output:
 
 ```bash
-pgai issues list --json | jq '.[] | {id, title}'
+postgresai issues list --json | jq '.[] | {id, title}'
 ```
 
 - Rely on auto-detection: when stdout is not a TTY (e.g., piped or redirected), output is JSON automatically:
 
 ```bash
-pgai issues view <issueId> > issue.json
+postgresai issues view <issueId> > issue.json
 ```
 
 #### Grafana management
 ```bash
-postgres-ai mon generate-grafana-password      # Generate new Grafana password
-postgres-ai mon show-grafana-credentials       # Show Grafana credentials
+postgresai mon generate-grafana-password      # Generate new Grafana password
+postgresai mon show-grafana-credentials       # Show Grafana credentials
 ```
 
 ### Authentication and API key management
 ```bash
-postgres-ai auth               # Authenticate via browser (recommended)
-postgres-ai add-key <key>      # Manually store API key
-postgres-ai show-key           # Show stored key (masked)
-postgres-ai remove-key         # Remove stored key
+postgresai auth                    # Authenticate via browser (OAuth)
+postgresai auth --set-key <key>    # Store API key directly
+postgresai show-key                # Show stored key (masked)
+postgresai remove-key              # Remove stored key
 ```
 
 ## Configuration
@@ -230,32 +303,60 @@ Normalization:
 
 ### Examples
 
-Linux/macOS (bash/zsh):
+For production (uses default URLs):
 
 ```bash
-export PGAI_API_BASE_URL=https://v2.postgres.ai/api/general/
-export PGAI_UI_BASE_URL=https://console-dev.postgres.ai
-pgai auth --debug
+# Production auth - uses console.postgres.ai by default
+postgresai auth --debug
 ```
 
-Windows PowerShell:
+For staging/development environments:
+
+```bash
+# Linux/macOS (bash/zsh)
+export PGAI_API_BASE_URL=https://v2.postgres.ai/api/general/
+export PGAI_UI_BASE_URL=https://console-dev.postgres.ai
+postgresai auth --debug
+```
 
 ```powershell
+# Windows PowerShell
 $env:PGAI_API_BASE_URL = "https://v2.postgres.ai/api/general/"
 $env:PGAI_UI_BASE_URL = "https://console-dev.postgres.ai"
-pgai auth --debug
+postgresai auth --debug
 ```
 
 Via CLI options (overrides env):
 
 ```bash
-pgai auth --debug \
+postgresai auth --debug \
   --api-base-url https://v2.postgres.ai/api/general/ \
   --ui-base-url https://console-dev.postgres.ai
 ```
 
 Notes:
 - If `PGAI_UI_BASE_URL` is not set, the default is `https://console.postgres.ai`.
+
+## Development
+
+### Testing
+
+The CLI uses [Bun](https://bun.sh/) as the test runner with built-in coverage reporting.
+
+```bash
+# Run tests with coverage (default)
+bun run test
+
+# Run tests without coverage (faster iteration during development)
+bun run test:fast
+
+# Run tests with coverage and show report location
+bun run test:coverage
+```
+
+Coverage configuration is in `bunfig.toml`. Reports are generated in `coverage/` directory:
+- `coverage/lcov-report/index.html` - HTML coverage report
+- `coverage/lcov.info` - LCOV format for CI integration
 
 ## Requirements
 

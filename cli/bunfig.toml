@@ -1,0 +1,20 @@
+# Bun configuration for postgres_ai CLI
+# https://bun.sh/docs/runtime/bunfig
+
+[test]
+# Default timeout for all tests (60 seconds)
+# Integration tests that connect to databases need longer timeouts
+# PostgreSQL startup can take up to 30s in slow CI environments
+timeout = 60000
+
+# Coverage settings - enabled by default for test runs
+coverage = true
+coverageDir = "coverage"
+
+# Skip coverage for test files and node_modules
+coverageSkipTestFiles = true
+
+# Reporter format for CI integration
+# - text: console output with summary table
+# - lcov: standard format for coverage tools
+coverageReporter = ["text", "lcov"]

@@ -1,64 +1,99 @@
+include:
+  - local: 'components/index_pilot/.gitlab-ci.yml'
+
 stages:
+  - build
   - test
+  - publish
 
-cli:smoke:test:
-  stage: test
-  image: alpine:3.20
-  variables:
-    GIT_STRATEGY: fetch
-  before_script:
-    - apk add --no-cache bash curl git docker-cli docker-compose
-  script:
-    - bash -n ./postgres_ai
-    - |
-      set -euo pipefail
-      out=$(./postgres_ai help | tr -d "\r")
-      echo "$out" | grep -q "Postgres AI CLI"
-      echo "$out" | grep -q "COMMANDS:"
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
-
-cli:e2e:dind:
-  stage: test
-  image: alpine:3.20
+# Build images from current code for e2e tests
+# Images are pushed to GitLab Container Registry and pulled by test jobs
+build:test:images:
+  stage: build
+  image: docker:27.3
   services:
-    - name: docker:24-dind
+    - name: docker:27.3-dind
       command: ["--tls=false"]
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.45"
     GIT_STRATEGY: fetch
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
-    - apk add --no-cache bash curl git coreutils docker-cli docker-compose openssl
     - docker version
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
   script:
-    - set -euo pipefail
-    - bash -n ./postgres_ai
-    - ./postgres_ai check || true
-    - ./postgres_ai quickstart --demo -y
-    - timeout 60 ./postgres_ai status
-    - timeout 10 ./postgres_ai logs grafana || true
-    - ./postgres_ai config
-    - ./postgres_ai update-config
-    - ./postgres_ai list-instances || true
-    - ./postgres_ai add-key "test_key_123"
-    - ./postgres_ai show-key
-    - ./postgres_ai remove-key
-    - ./postgres_ai generate-grafana-password || true
-    - ./postgres_ai show-grafana-credentials || true
-    - ./postgres_ai add-instance "postgresql://postgres:postgres@target-db:5432/target_database" "ci-demo"
-    - ./postgres_ai test-instance "ci-demo" || true
-    - printf "y\n" | ./postgres_ai reset sink-postgres
-    - ./postgres_ai restart
-    - ./postgres_ai stop
-    - ./postgres_ai start
-    - printf "y\n" | ./postgres_ai reset
-    - ./postgres_ai clean
-  after_script:
-    - docker ps -a || true
-    - docker system prune -af || true
+    - |
+      set -euo pipefail
+      BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      echo "Building images with tag: $PGAI_TAG"
+      echo "Registry: $CI_REGISTRY_IMAGE"
+
+      # Build and push postgres-ai-configs
+      docker build \
+        --build-arg "VERSION=$PGAI_TAG" \
+        --build-arg "BUILD_TS=$BUILD_TS" \
+        -f config/Dockerfile \
+        -t "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG" \
+        config
+      docker push "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
+
+      # Build and push reporter
+      docker build \
+        --build-arg "VERSION=$PGAI_TAG" \
+        --build-arg "BUILD_TS=$BUILD_TS" \
+        -f reporter/Dockerfile \
+        -t "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG" \
+        reporter
+      docker push "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+
+      # Build and push monitoring-flask-backend
+      docker build \
+        --build-arg "VERSION=$PGAI_TAG" \
+        --build-arg "BUILD_TS=$BUILD_TS" \
+        -f monitoring_flask_backend/Dockerfile \
+        -t "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG" \
+        monitoring_flask_backend
+      docker push "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
+
+      echo ""
+      echo "Images pushed to GitLab Container Registry:"
+      echo "  $CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
+      echo "  $CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      echo "  $CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
+
+reporter:tests:
+  stage: test
+  image: python:3.11-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    PIP_NO_CACHE_DIR: "1"
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - apt-get update
+    - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
+    - pip install -r reporter/requirements-dev.txt
+  script:
+    - chown -R postgres:postgres "$CI_PROJECT_DIR"
+    - su - postgres -c "cd \"$CI_PROJECT_DIR\" && python -m pytest --run-integration --cov=reporter --cov-report=term --cov-report=xml:coverage/reporter-coverage.xml tests/reporter"
+    # Fix ownership for artifact collection
+    - chown -R root:root "$CI_PROJECT_DIR/coverage" || true
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+)%/'
+  artifacts:
+    when: always
+    paths:
+      - coverage/
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
 cli:node:smoke:
   stage: test
   image: node:20-alpine
@@ -66,28 +101,268 @@ cli:node:smoke:
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true
+    - apk add --no-cache bash curl unzip openssl
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
   script:
-    - node -v && npm -v
-    - npm --prefix cli install --no-audit --no-fund
+    - node -v && npm -v && bun --version
+    - cd cli && bun install && bun run build && cd ..
     - node ./cli/dist/bin/postgres-ai.js --help
     - node ./cli/dist/bin/postgres-ai.js mon status --help
     - node ./cli/dist/bin/postgres-ai.js mon targets list --help
+    # Verify prepare-db --print-sql works (SQL templates are bundled correctly)
+    - node ./cli/dist/bin/postgres-ai.js prepare-db --print-sql 2>&1 | grep -q "CREATE" || (echo "prepare-db --print-sql failed to output SQL" && exit 1)
     - npm install -g ./cli
     - echo "prefix=$(npm config get prefix)" && echo "PATH=$PATH"
     - command -v postgres-ai && postgres-ai --help
-    - command -v pgai && pgai --help
+    - command -v postgresai && postgresai --help
     - rm -f .pgwatch-config
-    - node ./cli/dist/bin/postgres-ai.js add-key "test_key_1234567890"
-    - node ./cli/dist/bin/postgres-ai.js show-key | grep -E "\*{2,}|[0-9]{4}$"
+    - node ./cli/dist/bin/postgres-ai.js auth login --set-key "test_key_1234567890"
+    - node ./cli/dist/bin/postgres-ai.js auth show-key | grep -E "\*{2,}|[0-9]{4}$"
     - test -f ~/.config/postgresai/config.json
     - grep -q 'test_key' ~/.config/postgresai/config.json
-    - node ./cli/dist/bin/postgres-ai.js remove-key
+    - node ./cli/dist/bin/postgres-ai.js auth remove-key
     - if grep -q 'apiKey' ~/.config/postgresai/config.json; then echo 'key not removed' && exit 1; fi
     - node ./cli/dist/bin/postgres-ai.js mon targets list | head -n 1 || true
     - node ./cli/dist/bin/postgres-ai.js mon targets add 'postgresql://user:pass@host:5432/db' ci-test || true
     - node ./cli/dist/bin/postgres-ai.js mon targets remove ci-test || true
+    # Verify production OAuth endpoint is reachable (smoke test for auth flow)
+    - |
+      echo "Testing OAuth endpoint reachability..."
+      # Generate random state and code_challenge for smoke test (these are throwaway values)
+      CI_STATE=$(openssl rand -base64 16 | tr -d '/+=')
+      CI_CHALLENGE=$(openssl rand -base64 32 | tr -d '/+=')
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"client_type\":\"cli\",\"state\":\"${CI_STATE}\",\"code_challenge\":\"${CI_CHALLENGE}\",\"code_challenge_method\":\"S256\",\"redirect_uri\":\"http://localhost:0/callback\"}" \
+        "https://postgres.ai/api/general/rpc/oauth_init" || echo "000")
+      echo "OAuth init endpoint returned HTTP $HTTP_CODE"
+      if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+        echo "WARNING: OAuth endpoint returned unexpected status (expected 200/201, got $HTTP_CODE)"
+        echo "This may indicate the OAuth endpoint is misconfigured or unreachable"
+      fi
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+cli:node:tests:
+  stage: test
+  image: node:20-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    - apt-get update
+    - apt-get install -y --no-install-recommends postgresql postgresql-client unzip && rm -rf /var/lib/apt/lists/*
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    # initdb refuses to run as root; run CLI tests as an unprivileged user
+    - useradd -m -s /bin/bash pgtest || true
+    - chown -R pgtest:pgtest "$CI_PROJECT_DIR"
+    # Install Bun for pgtest user
+    - su - pgtest -c "curl -fsSL https://bun.sh/install | bash"
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun install"
+  script:
+    # Use 'bun run test' (not 'bun test') to invoke the npm script which generates metrics-embedded.ts first
+    # Coverage is enabled via bunfig.toml and outputs text + lcov reports
+    - su - pgtest -c "cd \"$CI_PROJECT_DIR/cli\" && export PATH=\"\$HOME/.bun/bin:\$PATH\" && bun run test"
+    # Fix ownership of coverage directory for artifact collection
+    - chown -R root:root "$CI_PROJECT_DIR/cli/coverage" || true
+  # Regex matches Bun coverage table: "All files | % Funcs | % Lines |" - captures % Lines
+  coverage: '/All files[^|]*\|[^|]*\|\s*([\d.]+)/'
+  artifacts:
+    when: always
+    paths:
+      - cli/coverage/
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+cli:npm:publish:
+  stage: publish
+  image: node:20-bullseye
+  variables:
+    GIT_STRATEGY: fetch
+    NPM_CONFIG_AUDIT: "false"
+    NPM_CONFIG_FUND: "false"
+  before_script:
+    - corepack enable || true
+    # Install Bun for build step
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version
+  script:
+    - |
+      set -euo pipefail
+      : "${NPM_TOKEN:?NPM_TOKEN is required to publish}"
+
+      RAW_TAG="${CI_COMMIT_TAG:-}"
+      if [ -z "$RAW_TAG" ]; then
+        echo "CI_COMMIT_TAG is empty"
+        exit 1
+      fi
+
+      # npm requires SemVer. We accept an optional leading 'v' in git tags for npm publishing,
+      # but the raw git tag is still treated as the canonical version string elsewhere (e.g. in container /VERSION).
+      TAG_VERSION="$RAW_TAG"
+      NPM_VERSION="${RAW_TAG#v}"
+      if ! printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][-0-9A-Za-z.]+)?$'; then
+        echo "Invalid npm version derived from git tag: RAW_TAG='$RAW_TAG' -> NPM_VERSION='$NPM_VERSION' (must be SemVer)"
+        exit 1
+      fi
+
+      DIST_TAG=""
+      if printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
+        DIST_TAG="$(printf '%s' "$NPM_VERSION" | sed -E 's/^.*-(dev|beta|rc)\.[0-9]+$/\1/')"
+      elif printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        DIST_TAG="latest"
+      fi
+
+      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ] && [ "$DIST_TAG" != "rc" ] && [ "$DIST_TAG" != "latest" ]; then
+        echo "Unsupported version: $NPM_VERSION (expected X.Y.Z, X.Y.Z-dev.N, X.Y.Z-beta.N, or X.Y.Z-rc.N)"
+        exit 1
+      fi
+
+      # Configure npm auth without committing credentials
+      printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
+
+      echo "Publishing postgresai@${NPM_VERSION} to dist-tag ${DIST_TAG}"
+      cd cli
+      # Use bun for faster install and build
+      export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+      bun install
+      # Make the git tag the source of truth without committing version bumps.
+      npm version --no-git-tag-version "$NPM_VERSION"
+      bun run build
+      npm publish --dry-run --tag "$DIST_TAG" --access public
+      npm publish --tag "$DIST_TAG" --access public
+
+      # Wait until the registry sees the new postgresai version. This prevents the pgai step from
+      # failing due to eventual consistency when verifying/pinning dependencies.
+      for i in $(seq 1 30); do
+        if npm view "postgresai@${NPM_VERSION}" version >/dev/null 2>&1; then
+          break
+        fi
+        echo "Waiting for npm to recognize postgresai@${NPM_VERSION} (attempt $i/30)..."
+        sleep 2
+      done
+      npm view "postgresai@${NPM_VERSION}" version >/dev/null
+
+      echo "Publishing pgai@${NPM_VERSION} (wrapper) to dist-tag ${DIST_TAG}"
+      cd ../pgai
+      # Update version + dependency so `npx pgai@<tag>` pulls the matching postgresai version.
+      npm pkg set "dependencies.postgresai=$NPM_VERSION"
+      npm version --no-git-tag-version "$NPM_VERSION"
+      npm publish --dry-run --tag "$DIST_TAG" --access public
+      npm publish --tag "$DIST_TAG" --access public
+
+      for i in $(seq 1 30); do
+        if npm view "pgai@${NPM_VERSION}" version >/dev/null 2>&1; then
+          break
+        fi
+        echo "Waiting for npm to recognize pgai@${NPM_VERSION} (attempt $i/30)..."
+        sleep 2
+      done
+
+      # Verify both packages are visible as published versions.
+      npm view "postgresai@${NPM_VERSION}" version >/dev/null
+      npm view "pgai@${NPM_VERSION}" version >/dev/null
+  after_script:
+    - rm -f ~/.npmrc
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+.docker-publish-base: &docker-publish-base
+  stage: publish
+  image: docker:27.3
+  services:
+    - name: docker:27.3-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.45"
+    GIT_STRATEGY: fetch
+
+.docker-build-script: &docker-build-script |
+  echo "Logging into container registry..."
+  echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+
+  echo "Enabling binfmt (QEMU) for arm64 builds..."
+  docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+  echo "Creating/using buildx builder..."
+  docker buildx create --name postgres-ai-builder --use 2>/dev/null || docker buildx use postgres-ai-builder
+  docker buildx inspect --bootstrap
+
+  echo "Building and pushing images: $VERSION"
+  echo "  Platforms: $PLATFORMS"
+  echo "  BUILD_TS: $BUILD_TS"
+
+  docker buildx build \
+    --platform "$PLATFORMS" \
+    --build-arg "VERSION=$VERSION" \
+    --build-arg "BUILD_TS=$BUILD_TS" \
+    -f reporter/Dockerfile \
+    -t "postgresai/reporter:$VERSION" \
+    --push \
+    reporter
+
+  docker buildx build \
+    --platform "$PLATFORMS" \
+    --build-arg "VERSION=$VERSION" \
+    --build-arg "BUILD_TS=$BUILD_TS" \
+    -f monitoring_flask_backend/Dockerfile \
+    -t "postgresai/monitoring-flask-backend:$VERSION" \
+    --push \
+    monitoring_flask_backend
+
+  docker buildx build \
+    --platform "$PLATFORMS" \
+    --build-arg "VERSION=$VERSION" \
+    --build-arg "BUILD_TS=$BUILD_TS" \
+    -f config/Dockerfile \
+    -t "postgresai/postgres-ai-configs:$VERSION" \
+    --push \
+    config
+
+  echo ""
+  echo "Published images:"
+  echo "  postgresai/reporter:$VERSION"
+  echo "  postgresai/monitoring-flask-backend:$VERSION"
+  echo "  postgresai/postgres-ai-configs:$VERSION"
+
+docker:publish:images:
+  <<: *docker-publish-base
+  script:
+    - |
+      set -euo pipefail
+      REGISTRY="${DH_CI_REGISTRY:-${DOCKERHUB_REGISTRY:-docker.io}}"
+      REGISTRY_USER="${DH_CI_REGISTRY_USER:-${DOCKERHUB_USERNAME:-}}"
+      REGISTRY_PASSWORD="${DH_CI_REGISTRY_PASSWORD:-${DOCKERHUB_TOKEN:-}}"
+      : "${REGISTRY_USER:?DH_CI_REGISTRY_USER (or DOCKERHUB_USERNAME) is required}"
+      : "${REGISTRY_PASSWORD:?DH_CI_REGISTRY_PASSWORD (or DOCKERHUB_TOKEN) is required}"
+
+      RAW_TAG="${CI_COMMIT_TAG:-}"
+      if [ -z "$RAW_TAG" ]; then
+        echo "CI_COMMIT_TAG is empty"
+        exit 1
+      fi
+
+      if ! printf '%s' "$RAW_TAG" | grep -Eq '^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$'; then
+        echo "Invalid Docker tag: '$RAW_TAG' (must match ^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$)"
+        exit 1
+      fi
+
+      VERSION="$RAW_TAG"
+      BUILD_TS="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      PLATFORMS="linux/amd64,linux/arm64"
+    - *docker-build-script
+  rules:
+    - if: '$CI_COMMIT_TAG'
 
 cli:node:e2e:dind:
   stage: test
@@ -95,21 +370,40 @@ cli:node:e2e:dind:
   services:
     - name: docker:24-dind
       command: ["--tls=false"]
+  needs:
+    - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
-    - apk add --no-cache bash docker-cli docker-compose openssl postgresql-client
-    - node -v && npm -v && docker version
-    - npm --prefix cli install --no-audit --no-fund
+    - apk add --no-cache bash curl unzip docker-cli docker-compose openssl postgresql-client
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version && docker version
+    - cd cli && bun install && bun run build && cd ..
+    # Pull images from GitLab Container Registry
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - |
+      echo "Pulling images from GitLab Container Registry..."
+      docker pull "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
+      echo "Images ready:"
+      docker images | grep "$CI_REGISTRY_IMAGE"
+    # Create .env file with registry and tag
+    - |
+      printf "%s\n" "PGAI_REGISTRY=$CI_REGISTRY_IMAGE" "PGAI_TAG=$PGAI_TAG" > .env
   script:
     - ./tests/e2e.cli.sh
   after_script:
     - docker ps -a || true
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 cli:node:full:dind:
   stage: test
@@ -117,18 +411,37 @@ cli:node:full:dind:
   services:
     - name: docker:24-dind
       command: ["--tls=false"]
+  needs:
+    - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_API_VERSION: "1.43"
     GIT_STRATEGY: fetch
+    PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
     - corepack enable || true
-    - apk add --no-cache bash git docker-cli docker-compose openssl postgresql-client
-    - node -v && npm -v && docker version
-    - npm --prefix cli install --no-audit --no-fund
+    - apk add --no-cache bash curl unzip git docker-cli docker-compose openssl postgresql-client
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version && docker version
+    - cd cli && bun install && bun run build && cd ..
+    # Pull images from GitLab Container Registry
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - |
+      echo "Pulling images from GitLab Container Registry..."
+      docker pull "$CI_REGISTRY_IMAGE/postgres-ai-configs:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/reporter:$PGAI_TAG"
+      docker pull "$CI_REGISTRY_IMAGE/monitoring-flask-backend:$PGAI_TAG"
+      echo "Images ready:"
+      docker images | grep "$CI_REGISTRY_IMAGE"
+    # Create .env file with registry and tag
+    - |
+      printf "%s\n" "PGAI_REGISTRY=$CI_REGISTRY_IMAGE" "PGAI_TAG=$PGAI_TAG" > .env
   script:
-    - echo "=== Testing quickstart (demo mode) ==="
-    - node ./cli/dist/bin/postgres-ai.js mon quickstart --demo
+    - echo "=== Testing local-install (demo mode) ==="
+    - node ./cli/dist/bin/postgres-ai.js mon local-install --demo
     - sleep 10
     - node ./cli/dist/bin/postgres-ai.js mon status
     - echo ""
@@ -148,6 +461,7 @@ cli:node:full:dind:
   after_script:
     - docker ps -a || true
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /^feature\//'
   allow_failure: false
 
@@ -158,8 +472,12 @@ cli:node:integration:
     GIT_STRATEGY: fetch
   before_script:
     - corepack enable || true
-    - node -v && npm -v
-    - npm --prefix cli install --no-audit --no-fund
+    - apk add --no-cache bash curl unzip
+    # Install Bun
+    - curl -fsSL https://bun.sh/install | bash
+    - export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
+    - node -v && npm -v && bun --version
+    - cd cli && bun install && bun run build && cd ..
   script:
     - |
       set -euo pipefail
@@ -170,5 +488,3 @@ cli:node:integration:
       node ./cli/dist/bin/postgres-ai.js --help
   rules:
     - if: '$PGAI_API_KEY'
-
-
