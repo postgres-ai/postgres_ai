@@ -4,6 +4,7 @@ import { resolve } from "path";
 // Import from source directly since we're using Bun
 import * as checkup from "../lib/checkup";
 import * as api from "../lib/checkup-api";
+import * as metricsLoader from "../lib/metrics-loader";
 import { createMockClient } from "./test-utils";
 
 
@@ -38,6 +39,24 @@ describe("parseVersionNum", () => {
     const result = checkup.parseVersionNum("140012");
     expect(result.major).toBe("14");
     expect(result.minor).toBe("12");
+  });
+
+  test("parses PG 13.16 version number", () => {
+    const result = checkup.parseVersionNum("130016");
+    expect(result.major).toBe("13");
+    expect(result.minor).toBe("16");
+  });
+
+  test("parses PG 17.2 version number", () => {
+    const result = checkup.parseVersionNum("170002");
+    expect(result.major).toBe("17");
+    expect(result.minor).toBe("2");
+  });
+
+  test("parses PG 18.0 version number", () => {
+    const result = checkup.parseVersionNum("180000");
+    expect(result.major).toBe("18");
+    expect(result.minor).toBe("0");
   });
 
   test("handles empty string", () => {
@@ -885,6 +904,294 @@ describe("checkup-api", () => {
       expect(err).toBeInstanceOf(Error);
     }
     expect(attempts).toBe(2); // Should retry on ECONNRESET
+  });
+});
+
+// PostgreSQL version compatibility tests (PG13-PG18)
+describe("PostgreSQL version compatibility (PG13-PG18)", () => {
+  // Helper to create version-specific mock data
+  const createVersionMockData = (major: number, minor: number) => ({
+    versionRows: [
+      { name: "server_version", setting: `${major}.${minor}` },
+      { name: "server_version_num", setting: `${major}${String(minor).padStart(4, "0")}` },
+    ],
+    settingsRows: [
+      {
+        tag_setting_name: "shared_buffers",
+        tag_setting_value: "16384",
+        tag_unit: "8kB",
+        tag_category: "Resource Usage / Memory",
+        tag_vartype: "integer",
+        is_default: 0,
+        setting_normalized: "134217728",
+        unit_normalized: "bytes",
+      },
+    ],
+    databaseSizesRows: [{ datname: "postgres", size_bytes: "1073741824" }],
+    dbStatsRows: [{
+      numbackends: 5,
+      xact_commit: 100,
+      xact_rollback: 1,
+      blks_read: 100,
+      blks_hit: 900,
+      tup_returned: 500,
+      tup_fetched: 400,
+      tup_inserted: 50,
+      tup_updated: 30,
+      tup_deleted: 10,
+      deadlocks: 0,
+      temp_files: 0,
+      temp_bytes: 0,
+      postmaster_uptime_s: 864000,
+    }],
+    connectionStatesRows: [{ state: "active", count: 2 }, { state: "idle", count: 3 }],
+    uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
+    invalidIndexesRows: [],
+    unusedIndexesRows: [],
+    redundantIndexesRows: [],
+  });
+
+  // Test matrix for all supported PostgreSQL versions
+  const pgVersions = [
+    { major: 13, minor: 16, versionNum: "130016" },
+    { major: 14, minor: 12, versionNum: "140012" },
+    { major: 15, minor: 7, versionNum: "150007" },
+    { major: 16, minor: 3, versionNum: "160003" },
+    { major: 17, minor: 2, versionNum: "170002" },
+    { major: 18, minor: 0, versionNum: "180000" },
+  ];
+
+  describe("getPostgresVersion extracts correct version for each PG version", () => {
+    for (const { major, minor, versionNum } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const version = await checkup.getPostgresVersion(mockClient as any);
+
+        expect(version.version).toBe(`${major}.${minor}`);
+        expect(version.server_version_num).toBe(versionNum);
+        expect(version.server_major_ver).toBe(String(major));
+        expect(version.server_minor_ver).toBe(String(minor));
+      });
+    }
+  });
+
+  describe("generateA002 (major version) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateA002(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("A002");
+        expect(report.checkTitle).toBe("Postgres major version");
+        expect(report.results["test-node"].data.version.version).toBe(`${major}.${minor}`);
+        expect(report.results["test-node"].data.version.server_major_ver).toBe(String(major));
+        expect(report.results["test-node"].data.version.server_minor_ver).toBe(String(minor));
+      });
+    }
+  });
+
+  describe("generateA013 (minor version) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateA013(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("A013");
+        expect(report.checkTitle).toBe("Postgres minor version");
+        expect(report.results["test-node"].data.version.server_minor_ver).toBe(String(minor));
+        expect(report.results["test-node"].data.version.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateA003 (settings) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateA003(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("A003");
+        expect(report.checkTitle).toBe("Postgres settings");
+        expect("shared_buffers" in report.results["test-node"].data).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+        expect(report.results["test-node"].postgres_version?.server_major_ver).toBe(String(major));
+      });
+    }
+  });
+
+  describe("generateA007 (altered settings) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateA007(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("A007");
+        expect(report.checkTitle).toBe("Altered settings");
+        expect("shared_buffers" in report.results["test-node"].data).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateA004 (cluster info) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateA004(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("A004");
+        expect(report.checkTitle).toBe("Cluster information");
+        expect("general_info" in report.results["test-node"].data).toBe(true);
+        expect("database_sizes" in report.results["test-node"].data).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateH001 (invalid indexes) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateH001(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("H001");
+        expect(report.checkTitle).toBe("Invalid indexes");
+        expect("test-node" in report.results).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateH002 (unused indexes) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateH002(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("H002");
+        expect(report.checkTitle).toBe("Unused indexes");
+        expect("test-node" in report.results).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateH004 (redundant indexes) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.generateH004(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("H004");
+        expect(report.checkTitle).toBe("Redundant indexes");
+        expect("test-node" in report.results).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateAllReports works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const reports = await checkup.generateAllReports(mockClient as any, "test-node");
+
+        // Verify all expected checks are generated
+        const expectedChecks = ["A002", "A003", "A004", "A007", "A013", "H001", "H002", "H004"];
+        for (const checkId of expectedChecks) {
+          expect(checkId in reports).toBe(true);
+          expect(reports[checkId].checkId).toBe(checkId);
+        }
+
+        // Verify postgres version is correctly set in A002 report (via data.version)
+        expect(reports.A002.results["test-node"].data.version.version).toBe(`${major}.${minor}`);
+        expect(reports.A002.results["test-node"].data.version.server_major_ver).toBe(String(major));
+
+        // Verify postgres_version is set in reports that include it (A003, A004, H001, etc.)
+        expect(reports.A003.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+        expect(reports.A004.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+});
+
+// Tests for version-aware SQL query selection
+describe("Version-aware SQL query selection (PG13-PG18)", () => {
+  const pgVersions = [13, 14, 15, 16, 17, 18];
+
+  // Core metrics that should be available for all versions
+  const coreMetrics = [
+    "settings",
+    "db_stats",
+    "db_size",
+    "stats_reset",
+    "pg_invalid_indexes",
+    "unused_indexes",
+    "redundant_indexes",
+  ];
+
+  describe("getMetricSql returns SQL for all PG versions", () => {
+    for (const pgVersion of pgVersions) {
+      for (const metric of coreMetrics) {
+        test(`${metric} for PG${pgVersion}`, () => {
+          const sql = metricsLoader.getMetricSql(metric, pgVersion);
+          expect(typeof sql).toBe("string");
+          expect(sql.length).toBeGreaterThan(0);
+          // Verify it's actually SQL
+          expect(sql.toLowerCase()).toMatch(/select/);
+        });
+      }
+    }
+  });
+
+  describe("getMetricSql selects appropriate version for each PG major version", () => {
+    for (const pgVersion of pgVersions) {
+      test(`PG${pgVersion} gets compatible SQL version`, () => {
+        // Settings metric should return SQL for all supported versions
+        const sql = metricsLoader.getMetricSql("settings", pgVersion);
+        expect(sql).toBeTruthy();
+        // SQL should be valid (not throw an error)
+        expect(() => metricsLoader.getMetricSql("settings", pgVersion)).not.toThrow();
+      });
+    }
+  });
+
+  describe("getMetricDefinition returns metadata for all metrics", () => {
+    for (const metric of coreMetrics) {
+      test(`${metric} has definition`, () => {
+        const definition = metricsLoader.getMetricDefinition(metric);
+        expect(definition).toBeTruthy();
+        expect(definition?.sqls).toBeTruthy();
+        expect(typeof definition?.sqls).toBe("object");
+      });
+    }
+  });
+
+  test("listMetricNames returns all expected metrics", () => {
+    const names = metricsLoader.listMetricNames();
+    expect(Array.isArray(names)).toBe(true);
+    // Should include core metrics
+    for (const metric of coreMetrics) {
+      expect(names).toContain(metric);
+    }
+  });
+
+  describe("METRIC_NAMES maps check IDs correctly", () => {
+    test("H001 maps to pg_invalid_indexes", () => {
+      expect(metricsLoader.METRIC_NAMES.H001).toBe("pg_invalid_indexes");
+    });
+
+    test("H002 maps to unused_indexes", () => {
+      expect(metricsLoader.METRIC_NAMES.H002).toBe("unused_indexes");
+    });
+
+    test("H004 maps to redundant_indexes", () => {
+      expect(metricsLoader.METRIC_NAMES.H004).toBe("redundant_indexes");
+    });
+
+    test("settings metric exists", () => {
+      expect(metricsLoader.METRIC_NAMES.settings).toBe("settings");
+    });
   });
 });
 
