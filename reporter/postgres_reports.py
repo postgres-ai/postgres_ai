@@ -114,22 +114,26 @@ class PostgresReportGenerator:
         'max_stack_depth'
     ]
 
-    def __init__(self, prometheus_url: str = "http://sink-prometheus:9090", 
+    def __init__(self, prometheus_url: str = "http://sink-prometheus:9090",
                  postgres_sink_url: str = "postgresql://pgwatch@sink-postgres:5432/measurements",
-                 excluded_databases: Optional[List[str]] = None):
+                 excluded_databases: Optional[List[str]] = None,
+                 use_current_time: bool = False):
         """
         Initialize the PostgreSQL report generator.
-        
+
         Args:
             prometheus_url: URL of the Prometheus instance (default: http://sink-prometheus:9090)
-            postgres_sink_url: Connection string for the Postgres sink database 
+            postgres_sink_url: Connection string for the Postgres sink database
                               (default: postgresql://pgwatch@sink-postgres:5432/measurements)
             excluded_databases: Additional databases to exclude from reports
+            use_current_time: If True, use current time instead of flooring to hour boundary.
+                             Useful for testing with recently collected data.
         """
         self.prometheus_url = prometheus_url
         self.base_url = f"{prometheus_url}/api/v1"
         self.postgres_sink_url = postgres_sink_url
         self.pg_conn = None
+        self.use_current_time = use_current_time
         self._build_metadata = self._load_build_metadata()
         # Combine default exclusions with user-provided exclusions
         self.excluded_databases = self.DEFAULT_EXCLUDED_DATABASES.copy()
@@ -3179,14 +3183,16 @@ class PostgresReportGenerator:
 
     def _floor_hour(self, ts: int) -> int:
         """
-        Floor timestamp to the nearest hour.
-        
+        Floor timestamp to the nearest hour, unless use_current_time is enabled.
+
         Args:
             ts: Unix timestamp in seconds
-            
+
         Returns:
-            Floored timestamp
+            Floored timestamp (or original timestamp if use_current_time is True)
         """
+        if self.use_current_time:
+            return ts
         return (ts // 3600) * 3600
 
     def _build_timeline(self, end_s: int, hours: int = 24, step_s: int = 3600) -> Tuple[int, List[int]]:
@@ -4354,10 +4360,11 @@ class PostgresReportGenerator:
             nodes_to_process = [node_name]
             nodes = {"primary": node_name, "standbys": []}
         
-        # Get query texts from sink - only for databases found in reports (memory optimization)
+        # Get query texts from sink - fetch all since db names may differ between
+        # prometheus (datname like 'target_database') and sink (dbname like 'target-database')
         db_names_list = list(queryids_by_db.keys())
         logger.info(f"Fetching query texts for {len(db_names_list)} database(s): {db_names_list}")
-        query_texts = self.get_queryid_queries_from_sink(query_text_limit, db_names=db_names_list)
+        query_texts = self.get_queryid_queries_from_sink(query_text_limit, db_names=None)
         
         query_files = []
         # Invert {db: set(queryid)} -> {queryid: set(db)}
@@ -4378,12 +4385,21 @@ class PostgresReportGenerator:
             logger.info(f"Processing query {processed}/{total_queries}: {queryid[:20]}... (dbs={len(dbs_for_query)}, nodes={len(nodes_to_process)})")
 
             # Query text is expected to be identical across DBs; pick first non-empty.
+            # Note: db names may differ between prometheus (datname) and sink (dbname),
+            # so we search all databases in query_texts for the queryid.
             query_text = None
             for db_name in dbs_for_query:
                 qt = (query_texts.get(db_name, {}) or {}).get(queryid)
                 if qt:
                     query_text = qt
                     break
+            # If not found by exact db match, search all dbs in sink
+            if not query_text:
+                for sink_db, sink_queries in query_texts.items():
+                    qt = sink_queries.get(queryid)
+                    if qt:
+                        query_text = qt
+                        break
 
             # Build results: results[node_name][db_name] = {"metrics": {...}}
             results_by_node: Dict[str, Dict[str, Any]] = {}
@@ -4832,6 +4848,9 @@ def main():
     parser.add_argument('--exclude-databases', type=str, default=None,
                         help='Comma-separated list of additional databases to exclude from reports '
                              f'(default exclusions: {", ".join(sorted(PostgresReportGenerator.DEFAULT_EXCLUDED_DATABASES))})')
+    parser.add_argument('--use-current-time', action='store_true', default=False,
+                        help='Use current time instead of flooring to hour boundary. '
+                             'Useful for testing with recently collected data.')
 
     args = parser.parse_args()
     
@@ -4840,7 +4859,10 @@ def main():
     if args.exclude_databases:
         excluded_databases = [db.strip() for db in args.exclude_databases.split(',')]
 
-    generator = PostgresReportGenerator(args.prometheus_url, args.postgres_sink_url, excluded_databases)
+    generator = PostgresReportGenerator(
+        args.prometheus_url, args.postgres_sink_url, excluded_databases,
+        use_current_time=args.use_current_time
+    )
 
     # Test connection
     if not generator.test_connection():

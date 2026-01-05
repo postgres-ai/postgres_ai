@@ -1,11 +1,37 @@
 services:
-  # Local development override: build Flask backend from source instead of pulling an image.
+  # Local development override: build configs from source
+  config-init:
+    build:
+      context: ./config
+      args:
+        VERSION: local-dev
+        BUILD_TS: "${BUILD_TS:-local}"
+    image: local/configs:dev
+
+  # Local development override: build Flask backend from source
   monitoring_flask_backend:
     build:
       context: ./monitoring_flask_backend
       args:
         VERSION: local-dev
         BUILD_TS: "${BUILD_TS:-local}"
-    image: postgresai/monitoring_flask_backend:local
+    image: local/monitoring_flask_backend:dev
 
+  # Local development override: build reporter from source
+  postgres-reports:
+    build:
+      context: ./reporter
+      args:
+        VERSION: local-dev
+        BUILD_TS: "${BUILD_TS:-local}"
+    image: local/reporter:dev
 
+  # Expose sink-postgres to host for local reporter runs
+  sink-postgres:
+    ports:
+      - "127.0.0.1:55433:5432"
+
+  # Override Grafana port to avoid conflict with local dev server
+  grafana:
+    ports:
+      - "127.0.0.1:3001:3000"

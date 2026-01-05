@@ -7,6 +7,7 @@ interval_seconds="${REPORTER_INTERVAL_SECONDS:-86400}"
 
 prometheus_url="${PROMETHEUS_URL:-http://sink-prometheus:9090}"
 output_template="${REPORTER_OUTPUT_TEMPLATE:-/app/all_reports_%Y%m%d_%H%M%S.json}"
+use_current_time="${USE_CURRENT_TIME:-false}"
 
 pgwatch_config_path="${REPORTER_PGWATCH_CONFIG_PATH:-/app/.pgwatch-config}"
 api_url="${REPORTER_API_URL:-https://postgres.ai/api/general}"
@@ -46,6 +47,12 @@ sleep_seconds "$initial_delay_seconds"
 while true; do
   output_path="$(date -u +"${output_template}")"
 
+  # Build optional args
+  use_current_time_arg=""
+  if [[ "${use_current_time}" == "true" ]]; then
+    use_current_time_arg="--use-current-time"
+  fi
+
   if api_key="$(read_api_key)"; then
     echo "postgres-reports: generating reports (upload enabled) -> ${output_path}"
     python -m reporter.postgres_reports \
@@ -53,13 +60,15 @@ while true; do
       --output "${output_path}" \
       --api-url "${api_url}" \
       --project-name "${project_name}" \
-      --token "${api_key}"
+      --token "${api_key}" \
+      ${use_current_time_arg}
   else
     echo "postgres-reports: generating reports (no upload) -> ${output_path}"
     python -m reporter.postgres_reports \
       --prometheus-url "${prometheus_url}" \
       --output "${output_path}" \
-      --no-upload
+      --no-upload \
+      ${use_current_time_arg}
   fi
 
   echo "postgres-reports: sleeping ${interval_seconds}s"
