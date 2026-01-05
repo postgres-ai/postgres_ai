@@ -1090,14 +1090,60 @@ describe("PostgreSQL version compatibility (PG13-PG18)", () => {
     }
   });
 
+  describe("generateD004 (pg_stat_statements) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.REPORT_GENERATORS.D004(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("D004");
+        expect(report.checkTitle).toBe("pg_stat_statements and pg_stat_kcache settings");
+        expect("test-node" in report.results).toBe(true);
+        // D004 should include settings and extension info
+        expect("settings" in report.results["test-node"].data).toBe(true);
+      });
+    }
+  });
+
+  describe("generateF001 (autovacuum settings) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.REPORT_GENERATORS.F001(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("F001");
+        expect(report.checkTitle).toBe("Autovacuum: current settings");
+        expect("test-node" in report.results).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
+  describe("generateG001 (memory settings) works for each PG version", () => {
+    for (const { major, minor } of pgVersions) {
+      test(`PG ${major}.${minor}`, async () => {
+        const mockClient = createMockClient(createVersionMockData(major, minor));
+        const report = await checkup.REPORT_GENERATORS.G001(mockClient as any, "test-node");
+
+        expect(report.checkId).toBe("G001");
+        expect(report.checkTitle).toBe("Memory-related settings");
+        expect("test-node" in report.results).toBe(true);
+        // G001 should include settings and analysis sections
+        expect("settings" in report.results["test-node"].data).toBe(true);
+        expect("analysis" in report.results["test-node"].data).toBe(true);
+        expect(report.results["test-node"].postgres_version?.version).toBe(`${major}.${minor}`);
+      });
+    }
+  });
+
   describe("generateAllReports works for each PG version", () => {
     for (const { major, minor } of pgVersions) {
       test(`PG ${major}.${minor}`, async () => {
         const mockClient = createMockClient(createVersionMockData(major, minor));
         const reports = await checkup.generateAllReports(mockClient as any, "test-node");
 
-        // Verify all expected checks are generated
-        const expectedChecks = ["A002", "A003", "A004", "A007", "A013", "H001", "H002", "H004"];
+        // Verify all expected checks are generated (includes D004, F001, G001)
+        const expectedChecks = ["A002", "A003", "A004", "A007", "A013", "D004", "F001", "G001", "H001", "H002", "H004"];
         for (const checkId of expectedChecks) {
           expect(checkId in reports).toBe(true);
           expect(reports[checkId].checkId).toBe(checkId);
@@ -1119,58 +1165,54 @@ describe("PostgreSQL version compatibility (PG13-PG18)", () => {
 describe("Version-aware SQL query selection (PG13-PG18)", () => {
   const pgVersions = [13, 14, 15, 16, 17, 18];
 
-  // Core metrics that should be available for all versions
-  const coreMetrics = [
-    "settings",
-    "db_stats",
-    "db_size",
-    "stats_reset",
-    "pg_invalid_indexes",
-    "unused_indexes",
-    "redundant_indexes",
-  ];
+  // All metrics from metrics.yml that are used by checkup
+  const allMetrics = metricsLoader.listMetricNames();
 
-  describe("getMetricSql returns SQL for all PG versions", () => {
+  describe("All metrics from metrics.yml return valid SQL for each PG version", () => {
     for (const pgVersion of pgVersions) {
-      for (const metric of coreMetrics) {
-        test(`${metric} for PG${pgVersion}`, () => {
-          const sql = metricsLoader.getMetricSql(metric, pgVersion);
-          expect(typeof sql).toBe("string");
-          expect(sql.length).toBeGreaterThan(0);
-          // Verify it's actually SQL
-          expect(sql.toLowerCase()).toMatch(/select/);
-        });
-      }
-    }
-  });
+      describe(`PG${pgVersion}`, () => {
+        for (const metric of allMetrics) {
+          test(`${metric}`, () => {
+            // Should not throw an error
+            expect(() => metricsLoader.getMetricSql(metric, pgVersion)).not.toThrow();
 
-  describe("getMetricSql selects appropriate version for each PG major version", () => {
-    for (const pgVersion of pgVersions) {
-      test(`PG${pgVersion} gets compatible SQL version`, () => {
-        // Settings metric should return SQL for all supported versions
-        const sql = metricsLoader.getMetricSql("settings", pgVersion);
-        expect(sql).toBeTruthy();
-        // SQL should be valid (not throw an error)
-        expect(() => metricsLoader.getMetricSql("settings", pgVersion)).not.toThrow();
+            const sql = metricsLoader.getMetricSql(metric, pgVersion);
+            expect(typeof sql).toBe("string");
+            expect(sql.length).toBeGreaterThan(0);
+            // Verify it's actually SQL (contains SELECT)
+            expect(sql.toLowerCase()).toMatch(/select/);
+          });
+        }
       });
     }
   });
 
   describe("getMetricDefinition returns metadata for all metrics", () => {
-    for (const metric of coreMetrics) {
-      test(`${metric} has definition`, () => {
+    for (const metric of allMetrics) {
+      test(`${metric} has definition with versioned SQL`, () => {
         const definition = metricsLoader.getMetricDefinition(metric);
         expect(definition).toBeTruthy();
         expect(definition?.sqls).toBeTruthy();
         expect(typeof definition?.sqls).toBe("object");
+        // Should have at least one version defined
+        expect(Object.keys(definition!.sqls).length).toBeGreaterThan(0);
       });
     }
   });
 
-  test("listMetricNames returns all expected metrics", () => {
+  test("listMetricNames returns all expected core metrics", () => {
     const names = metricsLoader.listMetricNames();
     expect(Array.isArray(names)).toBe(true);
-    // Should include core metrics
+    // Core metrics used by checkup reports
+    const coreMetrics = [
+      "settings",
+      "db_stats",
+      "db_size",
+      "stats_reset",
+      "pg_invalid_indexes",
+      "unused_indexes",
+      "redundant_indexes",
+    ];
     for (const metric of coreMetrics) {
       expect(names).toContain(metric);
     }
@@ -1192,6 +1234,40 @@ describe("Version-aware SQL query selection (PG13-PG18)", () => {
     test("settings metric exists", () => {
       expect(metricsLoader.METRIC_NAMES.settings).toBe("settings");
     });
+
+    test("dbStats metric exists", () => {
+      expect(metricsLoader.METRIC_NAMES.dbStats).toBe("db_stats");
+    });
+
+    test("dbSize metric exists", () => {
+      expect(metricsLoader.METRIC_NAMES.dbSize).toBe("db_size");
+    });
+
+    test("statsReset metric exists", () => {
+      expect(metricsLoader.METRIC_NAMES.statsReset).toBe("stats_reset");
+    });
+  });
+
+  describe("SQL queries are syntactically valid for version edge cases", () => {
+    // Test boundary versions
+    const boundaryVersions = [
+      { version: 13, description: "minimum supported" },
+      { version: 18, description: "maximum supported" },
+    ];
+
+    for (const { version, description } of boundaryVersions) {
+      test(`PG${version} (${description}) returns valid SQL for all metrics`, () => {
+        for (const metric of allMetrics) {
+          const sql = metricsLoader.getMetricSql(metric, version);
+          // Basic SQL validation
+          expect(sql.toLowerCase()).toMatch(/select/);
+          expect(sql.toLowerCase()).toMatch(/from/);
+          // Should not contain unresolved template variables
+          expect(sql).not.toMatch(/\{\{.*\}\}/);
+          expect(sql).not.toMatch(/\$\{.*\}/);
+        }
+      });
+    }
   });
 });
 
