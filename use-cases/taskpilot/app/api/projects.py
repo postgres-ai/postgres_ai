@@ -2,7 +2,7 @@
 Projects API endpoints.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from uuid import UUID
 
@@ -49,7 +49,7 @@ async def list_projects(
             description=f"Description for project {i}",
             status="active",
             issue_count=i * 10,
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
         )
         for i in range(1, 6)
     ]
@@ -70,7 +70,7 @@ async def get_project(
         description="A sample project",
         status="active",
         issue_count=100,
-        created_at=datetime.now(),
+        created_at=datetime.now(timezone.utc),
     )
 
 

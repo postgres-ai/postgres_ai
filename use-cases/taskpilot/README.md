@@ -34,10 +34,11 @@ This playground enables testing of:
 │  └─────────────┘                        └─────────────┘                 │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │                    AI Engineer Simulator                         │    │
-│  │  • Automated schema changes (1-3 per day)                       │    │
-│  │  • Some good changes, some problematic (for testing detection)  │    │
-│  │  • Follows realistic development roadmap                        │    │
+│  │                 AI Engineering Team (Claude Code)                │    │
+│  │  • 3 engineer personas with different skill levels              │    │
+│  │  • 12-week schema roadmap (1-3 changes per day)                 │    │
+│  │  • Intentional issues for postgres_ai to detect                 │    │
+│  │  • See docs/AI_ENGINEERS.md for persona details                 │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘

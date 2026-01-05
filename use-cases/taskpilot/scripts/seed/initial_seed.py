@@ -64,6 +64,15 @@ except ImportError:
     os.system("pip install tqdm")
     from tqdm import tqdm
 
+try:
+    from passlib.context import CryptContext
+except ImportError:
+    print("Installing passlib...")
+    os.system("pip install passlib[bcrypt]")
+    from passlib.context import CryptContext
+
+# Password hashing context (bcrypt)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Configuration
 DATABASE_URL = os.getenv(
@@ -194,9 +203,14 @@ def generate_slug(name: str) -> str:
     return name.lower().replace(" ", "-").replace("'", "")[:50]
 
 
-def generate_password_hash(password: str = "password123") -> str:
-    # Simple hash for demo purposes (use bcrypt in production)
-    return hashlib.sha256(password.encode()).hexdigest()
+def generate_password_hash(password: str | None = None) -> str:
+    """Generate bcrypt password hash. Uses SEED_PASSWORD env var or generates random."""
+    if password is None:
+        password = os.getenv("SEED_PASSWORD", "")
+        if not password:
+            # Generate random password for each user if not specified
+            password = fake.password(length=16, special_chars=True)
+    return pwd_context.hash(password)
 
 
 def generate_issue_title() -> str:

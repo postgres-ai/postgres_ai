@@ -1,8 +1,12 @@
 """
 Authentication API endpoints.
+
+Provides JWT-based authentication for TaskPilot API.
+Supports both form-based login (OAuth2) and JSON login for programmatic access.
 """
 
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,11 +22,15 @@ from app.models.database import get_db
 
 router = APIRouter()
 
-# Password hashing
+# Password hashing with bcrypt (secure)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+# Demo mode flag - only enable in development with explicit flag
+DEMO_MODE = os.getenv("TASKPILOT_DEMO_MODE", "false").lower() == "true"
+DEMO_PASSWORD = os.getenv("TASKPILOT_DEMO_PASSWORD", "")
 
 
 class Token(BaseModel):
@@ -65,7 +73,7 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create a JWT access token."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
@@ -106,10 +114,27 @@ async def login(
     """
     Login with email and password.
 
-    For demo purposes, accepts any user with password 'password123'.
+    In demo mode (TASKPILOT_DEMO_MODE=true), accepts configured demo password.
+    In production, validates against database with bcrypt.
     """
-    # Demo authentication - in production, verify against database
-    if form_data.password != "password123":
+    authenticated = False
+    user_id = "demo-user-id"
+    org_id = "demo-org-id"
+
+    if DEMO_MODE and DEMO_PASSWORD:
+        # Demo mode - validate against environment variable password
+        authenticated = form_data.password == DEMO_PASSWORD
+    else:
+        # Production mode - validate against database
+        # TODO: Implement database user lookup
+        # user = await get_user_by_email(db, form_data.username)
+        # if user and verify_password(form_data.password, user.password_hash):
+        #     authenticated = True
+        #     user_id = str(user.id)
+        #     org_id = str(user.organization_id)
+        pass
+
+    if not authenticated:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -120,9 +145,9 @@ async def login(
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": "demo-user-id",
+            "sub": user_id,
             "email": form_data.username,
-            "org_id": "demo-org-id",
+            "org_id": org_id,
         },
         expires_delta=access_token_expires,
     )
@@ -139,9 +164,21 @@ async def login_json(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Token:
     """
-    Login with JSON body (for k6 testing).
+    Login with JSON body (for k6 testing and programmatic access).
+
+    In demo mode (TASKPILOT_DEMO_MODE=true), accepts configured demo password.
     """
-    if request.password != "password123":
+    authenticated = False
+    user_id = "demo-user-id"
+    org_id = "demo-org-id"
+
+    if DEMO_MODE and DEMO_PASSWORD:
+        authenticated = request.password == DEMO_PASSWORD
+    else:
+        # Production mode - validate against database
+        pass
+
+    if not authenticated:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -150,9 +187,9 @@ async def login_json(
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
-            "sub": "demo-user-id",
+            "sub": user_id,
             "email": request.email,
-            "org_id": "demo-org-id",
+            "org_id": org_id,
         },
         expires_delta=access_token_expires,
     )

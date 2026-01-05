@@ -5,10 +5,10 @@ A Linear/Jira clone designed as a playground for postgres_ai monitoring.
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 import orjson
@@ -44,23 +44,38 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS middleware
+    # CORS middleware - restrict origins even in development
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.DEBUG else settings.ALLOWED_ORIGINS,
+        allow_origins=settings.ALLOWED_ORIGINS,  # Always use explicit origins
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
 
     # Request timing middleware
     @app.middleware("http")
     async def add_process_time_header(request: Request, call_next):
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         response = await call_next(request)
-        process_time = (datetime.now() - start_time).total_seconds() * 1000
+        process_time = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         response.headers["X-Process-Time"] = f"{process_time:.2f}ms"
         return response
+
+    # Global exception handler - return generic errors in production
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        if settings.is_development:
+            # In development, include error details
+            return ORJSONResponse(
+                status_code=500,
+                content={"detail": str(exc), "type": type(exc).__name__},
+            )
+        # In production, return generic error
+        return ORJSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
 
     # Include API routes
     app.include_router(api_router, prefix="/api/v1")
@@ -71,7 +86,7 @@ def create_app() -> FastAPI:
         """Health check endpoint for monitoring."""
         return {
             "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": "0.1.0",
             "environment": settings.APP_ENV,
         }

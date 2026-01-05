@@ -19,8 +19,18 @@ class Settings(BaseSettings):
 
     # Application
     APP_ENV: str = "development"
-    DEBUG: bool = True
-    SECRET_KEY: str = "taskpilot-dev-secret-key-change-in-production"
+    DEBUG: bool = False  # Default to False for security
+    SECRET_KEY: str  # Required - no default for security
+
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development mode."""
+        return self.APP_ENV == "development"
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode."""
+        return self.APP_ENV == "production"
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://taskpilot:taskpilot@localhost:5433/taskpilot"

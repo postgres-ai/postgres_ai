@@ -2,7 +2,7 @@
 Issues API endpoints.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from uuid import UUID
 
@@ -102,8 +102,8 @@ async def list_issues(
             creator_id=UUID("00000000-0000-0000-0000-000000000001"),
             assignee_id=assignee_id,
             comment_count=i % 10,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         for i in range(1, min(limit + 1, 21))
     ]
@@ -146,8 +146,8 @@ async def create_issue(
         due_date=issue.due_date,
         creator_id=UUID("00000000-0000-0000-0000-000000000001"),
         comment_count=0,
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
 
@@ -170,8 +170,8 @@ async def get_issue(
         priority="high",
         creator_id=UUID("00000000-0000-0000-0000-000000000001"),
         comment_count=5,
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
 
@@ -201,8 +201,8 @@ async def update_issue(
         creator_id=UUID("00000000-0000-0000-0000-000000000001"),
         assignee_id=issue_update.assignee_id,
         comment_count=5,
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
 
@@ -239,7 +239,7 @@ async def get_issue_activity(
                 "action": "status_changed",
                 "changes": {"field": "status", "old": "todo", "new": "in_progress"},
                 "user_name": "Demo User",
-                "created_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
             }
         ],
         "total": 1,
