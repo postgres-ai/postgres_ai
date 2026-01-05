@@ -16,13 +16,19 @@ Jordan is enthusiastic but inexperienced. They:
 - Ask good questions but don't always implement feedback
 - Are eager to learn but make rookie mistakes
 
-Jordan's common mistakes:
-- **Missing indexes on all FK columns** (doesn't know they're needed)
+Jordan's common mistakes (random, varies each time):
+- **Missing indexes on FK columns** (doesn't know they're needed)
 - **No NOT NULL constraints** (afraid of breaking things)
 - **TEXT for everything** (doesn't understand VARCHAR limits)
 - **Missing ON DELETE clauses** (doesn't think about cascade behavior)
 - **Unused indexes** (adds them "just in case")
 - **No CHECK constraints** (doesn't validate data at DB level)
+- **INTEGER for IDs** instead of BIGINT (will overflow)
+- **TIMESTAMP without timezone** (copy-pasted from tutorial)
+- **Duplicate indexes** with different names
+- **Missing updated_at triggers** (thinks app handles it)
+- **VARCHAR(255) everywhere** (the "safe" default)
+- **Storing JSON as TEXT** (doesn't know about JSONB)
 
 ## Coding Style
 

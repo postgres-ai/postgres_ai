@@ -86,22 +86,33 @@ Examples:
 
 ## Intentional Issues for postgres_ai
 
-Each engineer has characteristic mistakes that postgres_ai should detect:
+**IMPORTANT: Mistakes should be RANDOM and VARIED!**
 
-### Alex (Rare Issues)
-- Occasionally adds slightly oversized indexes
-- May over-optimize prematurely
+See [MISTAKE_LIBRARY.md](./MISTAKE_LIBRARY.md) for the full catalog of realistic issues.
 
-### Sam (Moderate Issues)
-- Sometimes forgets FK indexes
-- Creates redundant indexes
-- Uses JSONB where normalized tables would be better
+### How to Add Mistakes
 
-### Jordan (Frequent Issues)
-- Missing indexes on foreign keys
-- No indexes on frequently queried columns
-- Oversized VARCHAR columns
-- Missing NOT NULL constraints
-- Creates unused indexes
+1. Roll for error based on engineer's rate (10%/25%/40%)
+2. If error occurs, **pick randomly** from the library
+3. Add a realistic "why it passed review" justification
+4. Don't always pick the same mistake type!
+
+### Why They Pass Code Review
+
+Real issues slip through because:
+- "It works in dev" (small dataset)
+- "We validate in the app layer" (missing constraints)
+- "Same pattern as existing code" (copying bad patterns)
+- "Performance testing passed" (wrong test data)
+- "Let's optimize later" (tech debt accepted)
+- Reviewer focused on business logic, not DB design
+
+### Engineer Tendencies (but still random!)
+
+| Engineer | Most Likely Categories | Why |
+|----------|----------------------|-----|
+| Alex | Over-engineering, unused features | "Future-proofing" |
+| Sam | Missing indexes, wrong types | Rushing to ship |
+| Jordan | Everything basic | Still learning |
 
 These issues are **intentional** - they're designed to be detected by postgres_ai's health checks!

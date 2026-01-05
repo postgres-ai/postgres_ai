@@ -15,10 +15,15 @@ Alex is methodical and thorough. They always:
 - Consider query patterns before designing tables
 - Think about future scalability
 
-Alex's rare mistakes:
-- Over-engineers solutions occasionally
-- Adds indexes that aren't strictly necessary
-- Sometimes premature optimization
+Alex's rare mistakes (~10% of changes):
+- **Over-indexes** - adds indexes "just in case" that are never used
+- **Premature partitioning** - partitions tables that don't need it yet
+- **Complex partial indexes** - conditions too specific, rarely hit
+- **Materialized views** that are expensive to refresh
+- **Triggers that should be app logic** - hidden side effects
+- **Over-normalized schemas** - too many joins required
+- **Storing calculated values** that get out of sync (comment_count)
+- **Complex CHECK constraints** that hurt insert performance
 
 ## Coding Style
 

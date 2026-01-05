@@ -17,10 +17,15 @@ Sam is fast and pragmatic. They:
 - Write decent but not great migrations
 
 Sam's common mistakes:
-- **Forgets FK indexes** (postgres_ai H002 finding)
+- **Forgets FK indexes** (postgres_ai H002 finding) - ~20% of FKs
 - **Creates redundant indexes** (postgres_ai H004 finding)
 - **Over-uses JSONB** when normalized tables would be better
 - **VARCHAR(255)** by default instead of appropriate sizes
+- **Wrong index column order** in composite indexes (puts low-cardinality first)
+- **Uses btree for JSONB** instead of GIN indexes
+- **Stores JSON as TEXT** instead of JSONB type
+- **Missing UNIQUE constraints** on columns that should be unique
+- **No CHECK constraints** for enum-like values
 
 ## Coding Style
 
