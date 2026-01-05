@@ -5,12 +5,17 @@ import io
 from datetime import datetime, timezone, timedelta
 import logging
 import os
+import psycopg2
+import psycopg2.extras
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# PostgreSQL sink connection for query text lookups
+POSTGRES_SINK_URL = os.environ.get('POSTGRES_SINK_URL', 'postgresql://pgwatch@sink-postgres:5432/measurements')
 
 # Prometheus connection - use environment variable with fallback
 PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', 'http://localhost:8428')
@@ -36,6 +41,64 @@ def get_prometheus_client():
     except Exception as e:
         logger.error(f"Failed to connect to Prometheus: {e}")
         raise
+
+
+def get_query_texts_from_sink(db_name: str = None) -> dict:
+    """
+    Fetch queryid-to-query text mappings from the PostgreSQL sink database.
+
+    Args:
+        db_name: Optional database name to filter results
+
+    Returns:
+        Dictionary mapping queryid to query text
+    """
+    query_texts = {}
+
+    try:
+        conn = psycopg2.connect(POSTGRES_SINK_URL)
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            if db_name:
+                query = """
+                    SELECT DISTINCT ON (data->>'queryid')
+                        data->>'queryid' as queryid,
+                        data->>'query' as query
+                    FROM public.pgss_queryid_queries
+                    WHERE
+                        dbname = %s
+                        AND data->>'queryid' IS NOT NULL
+                        AND data->>'query' IS NOT NULL
+                    ORDER BY data->>'queryid', time DESC
+                """
+                cursor.execute(query, (db_name,))
+            else:
+                query = """
+                    SELECT DISTINCT ON (data->>'queryid')
+                        data->>'queryid' as queryid,
+                        data->>'query' as query
+                    FROM public.pgss_queryid_queries
+                    WHERE
+                        data->>'queryid' IS NOT NULL
+                        AND data->>'query' IS NOT NULL
+                    ORDER BY data->>'queryid', time DESC
+                """
+                cursor.execute(query)
+
+            for row in cursor:
+                queryid = row['queryid']
+                query_text = row['query']
+                if queryid:
+                    # Truncate very long queries for display
+                    if query_text and len(query_text) > 500:
+                        query_text = query_text[:500] + '...'
+                    query_texts[queryid] = query_text or ''
+
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to fetch query texts from sink database: {e}")
+
+    return query_texts
+
 
 def read_version_file(filepath, default='unknown'):
     """Read version information from file"""
@@ -182,29 +245,33 @@ def get_pgss_metrics_csv():
                 logger.warning(f"Failed to query metric {metric}: {e}")
                 continue
 
+        # Fetch query texts from sink database
+        query_texts = get_query_texts_from_sink(db_name)
+        logger.info(f"Fetched {len(query_texts)} query texts from sink database")
+
         # Process the data to calculate differences
-        csv_data = process_pgss_data(start_data, end_data, start_dt, end_dt)
+        csv_data = process_pgss_data(start_data, end_data, start_dt, end_dt, query_texts)
 
         # Create CSV response
         output = io.StringIO()
         if csv_data:
-            # Define explicit field order with queryid first, then duration, then metrics with their rates
-            base_fields = ['queryid', 'duration_seconds']
+            # Define explicit field order with queryid first, query_text second, then duration, then metrics with their rates
+            base_fields = ['queryid', 'query_text', 'duration_seconds']
             all_metric_fields = []
-            
+
             # Get metric fields from the mapping in specific order with their rates
             desired_order = [
-                'calls', 'exec_time', 'plan_time', 'rows', 'shared_blks_hit', 
+                'calls', 'exec_time', 'plan_time', 'rows', 'shared_blks_hit',
                 'shared_blks_read', 'shared_blks_dirtied', 'shared_blks_written',
                 'blk_read_time', 'blk_write_time'
             ]
-            
+
             for display_name in desired_order:
                 if display_name in METRIC_NAME_MAPPING.values():
                     all_metric_fields.append(display_name)
                     all_metric_fields.append(f'{display_name}_per_sec')
                     all_metric_fields.append(f'{display_name}_per_call')
-            
+
             # Combine all fields in desired order
             all_fields = base_fields + all_metric_fields
             
@@ -226,10 +293,20 @@ def get_pgss_metrics_csv():
         logger.error(f"Error processing request: {e}")
         return jsonify({"error": str(e)}), 500
 
-def process_pgss_data(start_data, end_data, start_time, end_time):
+def process_pgss_data(start_data, end_data, start_time, end_time, query_texts=None):
     """
     Process pg_stat_statements data and calculate differences between start and end times
+
+    Args:
+        start_data: Prometheus data at start time
+        end_data: Prometheus data at end time
+        start_time: Start datetime
+        end_time: End datetime
+        query_texts: Optional dictionary mapping queryid to query text
     """
+    if query_texts is None:
+        query_texts = {}
+
     # Convert Prometheus data to dictionaries
     start_metrics = prometheus_to_dict(start_data, start_time)
     end_metrics = prometheus_to_dict(end_data, end_time)
@@ -264,9 +341,10 @@ def process_pgss_data(start_data, end_data, start_time, end_time):
             # Fallback to query parameter duration if timestamps are missing
             actual_duration = (end_time - start_time).total_seconds()
 
-        # Create result row
+        # Create result row with query text
         row = {
             'queryid': query_id,
+            'query_text': query_texts.get(query_id, ''),
             'duration_seconds': actual_duration
         }
 

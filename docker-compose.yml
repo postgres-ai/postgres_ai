@@ -175,8 +175,10 @@ services:
     environment:
       - FLASK_ENV=production
       - PROMETHEUS_URL=http://sink-prometheus:9090
+      - POSTGRES_SINK_URL=postgresql://pgwatch@sink-postgres:5432/measurements
     depends_on:
       - sink-prometheus
+      - sink-postgres
     restart: unless-stopped
 
   # PostgreSQL Reports Generator - Runs reports after 30 minutes

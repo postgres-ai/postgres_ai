@@ -163,6 +163,25 @@
                     ]
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Query Text"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 400
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "auto",
+                      "wrapText": true
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -198,6 +217,11 @@
                 {
                   "selector": "queryid",
                   "text": "Query ID",
+                  "type": "string"
+                },
+                {
+                  "selector": "query_text",
+                  "text": "Query Text",
                   "type": "string"
                 },
                 {
@@ -395,37 +419,38 @@
                 },
                 "includeByName": {},
                 "indexByName": {
-                  "Block read time (ms)": 27,
-                  "Block read time/call (ms)": 29,
-                  "Block read time/sec (ms)": 28,
-                  "Block write time (ms)": 24,
-                  "Block write time/call (ms)": 26,
-                  "Block write time/sec (ms)": 25,
-                  "Calls": 1,
-                  "Calls/sec": 2,
-                  "Duration (seconds)": 30,
-                  "Exec time (ms)": 3,
-                  "Exec time/call (ms)": 5,
-                  "Exec time/sec (ms/s)": 4,
-                  "Planning time (ms)": 6,
-                  "Planning time/call (ms)": 8,
-                  "Planning time/sec (ms/s)": 7,
+                  "Block read time (ms)": 28,
+                  "Block read time/call (ms)": 30,
+                  "Block read time/sec (ms)": 29,
+                  "Block write time (ms)": 25,
+                  "Block write time/call (ms)": 27,
+                  "Block write time/sec (ms)": 26,
+                  "Calls": 2,
+                  "Calls/sec": 3,
+                  "Duration (seconds)": 31,
+                  "Exec time (ms)": 4,
+                  "Exec time/call (ms)": 6,
+                  "Exec time/sec (ms/s)": 5,
+                  "Planning time (ms)": 7,
+                  "Planning time/call (ms)": 9,
+                  "Planning time/sec (ms/s)": 8,
                   "Query ID": 0,
-                  "Rows": 9,
-                  "Rows/call": 11,
-                  "Rows/sec": 10,
-                  "Shared blocks dirtied": 21,
-                  "Shared blocks dirtied/call": 23,
-                  "Shared blocks dirtied/sec": 22,
-                  "Shared blocks hit": 12,
-                  "Shared blocks hit/call": 14,
-                  "Shared blocks hit/sec": 13,
-                  "Shared blocks read": 15,
-                  "Shared blocks read/call": 17,
-                  "Shared blocks read/sec": 16,
-                  "Shared blocks written": 18,
-                  "Shared blocks written/call": 20,
-                  "Shared blocks written/sec": 19
+                  "Query Text": 1,
+                  "Rows": 10,
+                  "Rows/call": 12,
+                  "Rows/sec": 11,
+                  "Shared blocks dirtied": 22,
+                  "Shared blocks dirtied/call": 24,
+                  "Shared blocks dirtied/sec": 23,
+                  "Shared blocks hit": 13,
+                  "Shared blocks hit/call": 15,
+                  "Shared blocks hit/sec": 14,
+                  "Shared blocks read": 16,
+                  "Shared blocks read/call": 18,
+                  "Shared blocks read/sec": 17,
+                  "Shared blocks written": 19,
+                  "Shared blocks written/call": 21,
+                  "Shared blocks written/sec": 20
                 },
                 "renameByName": {}
               }
