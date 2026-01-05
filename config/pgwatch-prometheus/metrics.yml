@@ -1575,6 +1575,8 @@ metrics:
       This metric identifies invalid indexes in the database.
       It provides insights into the number of invalid indexes and their details.
       This metric helps administrators identify and fix invalid indexes to improve database performance.
+      Includes decision support data: whether a valid index exists on same columns, whether the index
+      backs a constraint (UNIQUE/PK), and table row count estimate for drop/recreate recommendations.
     sqls:
       11: |
         with fk_indexes as ( /* pgwatch_generated */
@@ -1612,7 +1614,34 @@ metrics:
               where
                 fi.tag_fk_table_ref = pct.relname
                 and fi.tag_opclasses like (array_to_string(pidx.indclass, ', ') || '%')
-            ) > 0)::int as supports_fk
+            ) > 0)::int as supports_fk,
+            -- Decision support: check if valid index exists on same columns (duplicate)
+            (exists (
+              select 1
+              from pg_index valid_idx
+              where valid_idx.indrelid = pidx.indrelid
+                and valid_idx.indisvalid = true
+                and valid_idx.indkey = pidx.indkey
+                and valid_idx.indclass = pidx.indclass
+                and valid_idx.indexrelid != pidx.indexrelid
+            ))::int as has_valid_index_on_same_columns,
+            -- Decision support: check if index backs a constraint (UNIQUE or PK)
+            (exists (
+              select 1
+              from pg_constraint con
+              where con.conindid = pidx.indexrelid
+                and con.contype in ('p', 'u')  -- primary key or unique
+            ))::int as backs_constraint,
+            -- Get the constraint name if it backs one
+            (
+              select con.conname
+              from pg_constraint con
+              where con.conindid = pidx.indexrelid
+                and con.contype in ('p', 'u')
+              limit 1
+            ) as constraint_name,
+            -- Decision support: estimated row count for the table
+            pct.reltuples::bigint as table_row_count_estimate
           from pg_index pidx
           join pg_class as pci on pci.oid = pidx.indexrelid
           join pg_class as pct on pct.oid = pidx.indrelid

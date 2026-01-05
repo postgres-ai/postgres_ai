@@ -39,6 +39,27 @@
         "server_minor_ver": { "type": "string" }
       }
     },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "reason", "sql_commands"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["drop", "recreate", "investigate"],
+          "description": "Recommended action: drop (safe to remove), recreate (REINDEX CONCURRENTLY), or investigate (needs RCA)"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Explanation of why this action is recommended"
+        },
+        "sql_commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "SQL commands to execute (always use CONCURRENTLY variants)"
+        }
+      }
+    },
     "invalidIndex": {
       "type": "object",
       "additionalProperties": false,
@@ -50,7 +71,12 @@
         "index_size_bytes",
         "index_size_pretty",
         "index_definition",
-        "supports_fk"
+        "supports_fk",
+        "has_valid_index_on_same_columns",
+        "backs_constraint",
+        "constraint_name",
+        "table_row_count_estimate",
+        "recommendation"
       ],
       "properties": {
         "schema_name": { "type": "string" },
@@ -60,7 +86,24 @@
         "index_size_bytes": { "type": "number" },
         "index_size_pretty": { "type": "string" },
         "index_definition": { "type": "string", "description": "Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations" },
-        "supports_fk": { "type": "boolean" }
+        "supports_fk": { "type": "boolean" },
+        "has_valid_index_on_same_columns": {
+          "type": "boolean",
+          "description": "True if a valid index exists on the same columns (duplicate invalid index)"
+        },
+        "backs_constraint": {
+          "type": "boolean",
+          "description": "True if this index backs a UNIQUE or PRIMARY KEY constraint"
+        },
+        "constraint_name": {
+          "type": ["string", "null"],
+          "description": "Name of the constraint this index backs, or null if none"
+        },
+        "table_row_count_estimate": {
+          "type": "integer",
+          "description": "Estimated row count for the table (from pg_class.reltuples)"
+        },
+        "recommendation": { "$ref": "#/$defs/recommendation" }
       }
     },
     "dbEntry": {

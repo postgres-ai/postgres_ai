@@ -477,10 +477,22 @@ describe("A004 - Cluster information", () => {
 
 // Tests for H001 (Invalid indexes)
 describe("H001 - Invalid indexes", () => {
-  test("getInvalidIndexes returns invalid indexes", async () => {
+  test("getInvalidIndexes returns invalid indexes with decision fields", async () => {
     const mockClient = createMockClient({
       invalidIndexesRows: [
-        { schema_name: "public", table_name: "users", index_name: "users_email_idx", relation_name: "users", index_size_bytes: "1048576", index_definition: "CREATE INDEX users_email_idx ON public.users USING btree (email)", supports_fk: false },
+        {
+          schema_name: "public",
+          table_name: "users",
+          index_name: "users_email_idx",
+          relation_name: "users",
+          index_size_bytes: "1048576",
+          index_definition: "CREATE INDEX users_email_idx ON public.users USING btree (email)",
+          supports_fk: false,
+          has_valid_index_on_same_columns: 0,
+          backs_constraint: 0,
+          constraint_name: null,
+          table_row_count_estimate: 5000,
+        },
       ],
     });
 
@@ -494,19 +506,117 @@ describe("H001 - Invalid indexes", () => {
     expect(indexes[0].index_definition).toMatch(/^CREATE INDEX/);
     expect(indexes[0].relation_name).toBe("users");
     expect(indexes[0].supports_fk).toBe(false);
+    // Verify decision support fields
+    expect(indexes[0].has_valid_index_on_same_columns).toBe(false);
+    expect(indexes[0].backs_constraint).toBe(false);
+    expect(indexes[0].constraint_name).toBe(null);
+    expect(indexes[0].table_row_count_estimate).toBe(5000);
+    // Verify recommendation (small table < 10K rows)
+    expect(indexes[0].recommendation.action).toBe("drop");
+    expect(indexes[0].recommendation.sql_commands[0]).toContain("DROP INDEX CONCURRENTLY");
   });
 
-  test("generateH001 creates report with invalid indexes", async () => {
+  test("getInvalidIndexes recommends drop for duplicate index", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "users",
+          index_name: "users_dup_idx",
+          relation_name: "users",
+          index_size_bytes: "1048576",
+          index_definition: "CREATE INDEX users_dup_idx ON public.users USING btree (email)",
+          supports_fk: false,
+          has_valid_index_on_same_columns: 1, // Has a valid duplicate
+          backs_constraint: 0,
+          constraint_name: null,
+          table_row_count_estimate: 100000,
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as any);
+    expect(indexes[0].has_valid_index_on_same_columns).toBe(true);
+    expect(indexes[0].recommendation.action).toBe("drop");
+    expect(indexes[0].recommendation.reason).toContain("duplicate");
+  });
+
+  test("getInvalidIndexes recommends recreate for constraint-backed index", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "users",
+          index_name: "users_pkey",
+          relation_name: "users",
+          index_size_bytes: "1048576",
+          index_definition: "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)",
+          supports_fk: true,
+          has_valid_index_on_same_columns: 0,
+          backs_constraint: 1, // Backs a constraint
+          constraint_name: "users_pkey",
+          table_row_count_estimate: 100000,
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as any);
+    expect(indexes[0].backs_constraint).toBe(true);
+    expect(indexes[0].constraint_name).toBe("users_pkey");
+    expect(indexes[0].recommendation.action).toBe("recreate");
+    expect(indexes[0].recommendation.sql_commands[0]).toContain("REINDEX INDEX CONCURRENTLY");
+  });
+
+  test("getInvalidIndexes recommends investigate for large table without constraint", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "orders",
+          index_name: "orders_status_idx",
+          relation_name: "orders",
+          index_size_bytes: "2097152",
+          index_definition: "CREATE INDEX orders_status_idx ON public.orders USING btree (status)",
+          supports_fk: false,
+          has_valid_index_on_same_columns: 0,
+          backs_constraint: 0,
+          constraint_name: null,
+          table_row_count_estimate: 50000, // Large table (>= 10K)
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as any);
+    expect(indexes[0].table_row_count_estimate).toBe(50000);
+    expect(indexes[0].recommendation.action).toBe("investigate");
+    expect(indexes[0].recommendation.reason).toContain("50,000 rows");
+    // Should have both REINDEX and DROP options
+    expect(indexes[0].recommendation.sql_commands.some(cmd => cmd.includes("REINDEX"))).toBe(true);
+    expect(indexes[0].recommendation.sql_commands.some(cmd => cmd.includes("DROP"))).toBe(true);
+  });
+
+  test("generateH001 creates report with invalid indexes and recommendations", async () => {
     const mockClient = createMockClient({
       versionRows: [
         { name: "server_version", setting: "16.3" },
         { name: "server_version_num", setting: "160003" },
       ],
-        invalidIndexesRows: [
-          { schema_name: "public", table_name: "orders", index_name: "orders_status_idx", relation_name: "orders", index_size_bytes: "2097152", index_definition: "CREATE INDEX orders_status_idx ON public.orders USING btree (status)", supports_fk: false },
-        ],
-      }
-    );
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "orders",
+          index_name: "orders_status_idx",
+          relation_name: "orders",
+          index_size_bytes: "2097152",
+          index_definition: "CREATE INDEX orders_status_idx ON public.orders USING btree (status)",
+          supports_fk: false,
+          has_valid_index_on_same_columns: 0,
+          backs_constraint: 0,
+          constraint_name: null,
+          table_row_count_estimate: 5000, // Small table
+        },
+      ],
+    });
 
     const report = await checkup.generateH001(mockClient as any, "test-node");
     expect(report.checkId).toBe("H001");
@@ -524,6 +634,12 @@ describe("H001 - Invalid indexes", () => {
     expect(dbData.database_size_bytes).toBeTruthy();
     expect(dbData.database_size_pretty).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
+
+    // Verify recommendation in report
+    const invalidIndex = dbData.invalid_indexes[0];
+    expect(invalidIndex.recommendation).toBeTruthy();
+    expect(invalidIndex.recommendation.action).toBe("drop");
+    expect(invalidIndex.recommendation.sql_commands).toBeTruthy();
   });
   // Top-level structure tests removed - covered by schema-validation.test.ts
 });

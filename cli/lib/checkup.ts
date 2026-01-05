@@ -108,6 +108,18 @@ export interface ClusterMetric {
 }
 
 /**
+ * Recommendation for handling an invalid index (H001)
+ */
+export interface InvalidIndexRecommendation {
+  /** Recommended action: drop (safe to remove), recreate (REINDEX CONCURRENTLY), or investigate (needs RCA) */
+  action: "drop" | "recreate" | "investigate";
+  /** Explanation of why this action is recommended */
+  reason: string;
+  /** SQL commands to execute (always use CONCURRENTLY variants) */
+  sql_commands: string[];
+}
+
+/**
  * Invalid index entry (H001) - matches H001.schema.json invalidIndex
  */
 export interface InvalidIndex {
@@ -120,6 +132,16 @@ export interface InvalidIndex {
   /** Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations */
   index_definition: string;
   supports_fk: boolean;
+  /** True if a valid index exists on the same columns (duplicate invalid index) */
+  has_valid_index_on_same_columns: boolean;
+  /** True if this index backs a UNIQUE or PRIMARY KEY constraint */
+  backs_constraint: boolean;
+  /** Name of the constraint this index backs, or null if none */
+  constraint_name: string | null;
+  /** Estimated row count for the table (from pg_class.reltuples) */
+  table_row_count_estimate: number;
+  /** Recommended action based on decision flowchart */
+  recommendation: InvalidIndexRecommendation;
 }
 
 /**
@@ -562,13 +584,77 @@ export async function getClusterInfo(client: Client, pgMajorVersion: number = 16
   return info;
 }
 
+/** Threshold for "small table" decision (tables below this are safe to drop index and monitor) */
+const SMALL_TABLE_ROW_THRESHOLD = 10000;
+
+/**
+ * Generate a recommendation for an invalid index based on decision flowchart.
+ *
+ * Decision logic:
+ * 1. If valid index exists on same columns → DROP (duplicate)
+ * 2. Else if backs a constraint (UNIQUE/PK) → RECREATE (REINDEX CONCURRENTLY)
+ * 3. Else if table < 10K rows → DROP and monitor
+ * 4. Else (large table, no constraint) → INVESTIGATE (needs query analysis RCA)
+ */
+function generateInvalidIndexRecommendation(
+  schemaName: string,
+  indexName: string,
+  hasValidIndexOnSameColumns: boolean,
+  backsConstraint: boolean,
+  tableRowCountEstimate: number
+): InvalidIndexRecommendation {
+  const qualifiedIndexName = schemaName === "public"
+    ? `"${indexName}"`
+    : `"${schemaName}"."${indexName}"`;
+
+  // Case 1: Valid index exists on same columns - this is a duplicate, safe to drop
+  if (hasValidIndexOnSameColumns) {
+    return {
+      action: "drop",
+      reason: "A valid index with the same columns already exists. This invalid index is a duplicate and can be safely dropped.",
+      sql_commands: [`DROP INDEX CONCURRENTLY ${qualifiedIndexName};`],
+    };
+  }
+
+  // Case 2: Backs a constraint (UNIQUE or PK) - must recreate
+  if (backsConstraint) {
+    return {
+      action: "recreate",
+      reason: "This index backs a UNIQUE or PRIMARY KEY constraint. Recreate it using REINDEX CONCURRENTLY to restore constraint enforcement.",
+      sql_commands: [`REINDEX INDEX CONCURRENTLY ${qualifiedIndexName};`],
+    };
+  }
+
+  // Case 3: Small table (< 10K rows) - safe to drop and monitor
+  if (tableRowCountEstimate < SMALL_TABLE_ROW_THRESHOLD) {
+    return {
+      action: "drop",
+      reason: `Table has ~${tableRowCountEstimate.toLocaleString()} rows (< 10K). Safe to drop and monitor query performance. Recreate if performance degrades.`,
+      sql_commands: [`DROP INDEX CONCURRENTLY ${qualifiedIndexName};`],
+    };
+  }
+
+  // Case 4: Large table, no constraint - needs investigation
+  // We cannot determine if queries filter on this column without query analysis
+  return {
+    action: "investigate",
+    reason: `Table has ~${tableRowCountEstimate.toLocaleString()} rows. Investigate whether queries filter on the indexed column(s). If yes, recreate with REINDEX CONCURRENTLY. If no, safe to drop and monitor.`,
+    sql_commands: [
+      `-- Option A: If queries use this index, recreate it:`,
+      `REINDEX INDEX CONCURRENTLY ${qualifiedIndexName};`,
+      `-- Option B: If queries don't use this index, drop it:`,
+      `DROP INDEX CONCURRENTLY ${qualifiedIndexName};`,
+    ],
+  };
+}
+
 /**
  * Get invalid indexes from the database (H001).
  * Invalid indexes are indexes that failed to build (e.g., due to CONCURRENTLY failure).
  *
  * @param client - Connected PostgreSQL client
  * @param pgMajorVersion - PostgreSQL major version (default: 16)
- * @returns Array of invalid index entries with size and FK support info
+ * @returns Array of invalid index entries with size, FK support info, and recommendations
  */
 export async function getInvalidIndexes(client: Client, pgMajorVersion: number = 16): Promise<InvalidIndex[]> {
   const sql = getMetricSql(METRIC_NAMES.H001, pgMajorVersion);
@@ -576,15 +662,33 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
     const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
+    const schemaName = String(transformed.schema_name || "");
+    const indexName = String(transformed.index_name || "");
+    const hasValidIndexOnSameColumns = toBool(transformed.has_valid_index_on_same_columns);
+    const backsConstraint = toBool(transformed.backs_constraint);
+    const constraintName = transformed.constraint_name ? String(transformed.constraint_name) : null;
+    const tableRowCountEstimate = parseInt(String(transformed.table_row_count_estimate || 0), 10);
+
     return {
-      schema_name: String(transformed.schema_name || ""),
+      schema_name: schemaName,
       table_name: String(transformed.table_name || ""),
-      index_name: String(transformed.index_name || ""),
+      index_name: indexName,
       relation_name: String(transformed.relation_name || ""),
       index_size_bytes: indexSizeBytes,
       index_size_pretty: formatBytes(indexSizeBytes),
       index_definition: String(transformed.index_definition || ""),
       supports_fk: toBool(transformed.supports_fk),
+      has_valid_index_on_same_columns: hasValidIndexOnSameColumns,
+      backs_constraint: backsConstraint,
+      constraint_name: constraintName,
+      table_row_count_estimate: tableRowCountEstimate,
+      recommendation: generateInvalidIndexRecommendation(
+        schemaName,
+        indexName,
+        hasValidIndexOnSameColumns,
+        backsConstraint,
+        tableRowCountEstimate
+      ),
     };
   });
 }

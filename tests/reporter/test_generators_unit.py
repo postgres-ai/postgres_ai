@@ -479,6 +479,10 @@ def test_generate_h001_invalid_indexes_report(
                         "index_name": "idx_invalid",
                         "relation_name": "public.tbl",
                         "supports_fk": "1",
+                        "has_valid_index_on_same_columns": "0",
+                        "backs_constraint": "0",
+                        "constraint_name": "",
+                        "table_row_count_estimate": "5000",
                     },
                     "value": [0, "2048"],
                 }
@@ -497,6 +501,140 @@ def test_generate_h001_invalid_indexes_report(
     assert entry["index_size_pretty"].endswith("KiB")
     assert entry["index_definition"].startswith("CREATE INDEX")
     assert entry["supports_fk"] is True
+    # Verify new decision support fields
+    assert entry["has_valid_index_on_same_columns"] is False
+    assert entry["backs_constraint"] is False
+    assert entry["constraint_name"] is None
+    assert entry["table_row_count_estimate"] == 5000
+    # Verify recommendation (small table < 10K rows, no constraint, no duplicate)
+    assert entry["recommendation"]["action"] == "drop"
+    assert "5,000 rows" in entry["recommendation"]["reason"]
+    assert len(entry["recommendation"]["sql_commands"]) == 1
+    assert "DROP INDEX CONCURRENTLY" in entry["recommendation"]["sql_commands"][0]
+
+
+@pytest.mark.unit
+def test_generate_h001_recommendation_duplicate_index(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    """Test H001 recommendation when valid index exists on same columns (duplicate)."""
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_dup": "CREATE INDEX idx_dup ON public.tbl USING btree (col)"})
+
+    responses = {
+        "pgwatch_pg_invalid_indexes": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "tbl",
+                        "index_name": "idx_dup",
+                        "relation_name": "public.tbl",
+                        "supports_fk": "0",
+                        "has_valid_index_on_same_columns": "1",
+                        "backs_constraint": "0",
+                        "constraint_name": "",
+                        "table_row_count_estimate": "50000",
+                    },
+                    "value": [0, "1024"],
+                }
+            ]
+        )
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_h001_invalid_indexes_report("local", "node-1")
+    entry = payload["results"]["node-1"]["data"]["maindb"]["invalid_indexes"][0]
+
+    assert entry["has_valid_index_on_same_columns"] is True
+    assert entry["recommendation"]["action"] == "drop"
+    assert "duplicate" in entry["recommendation"]["reason"].lower()
+
+
+@pytest.mark.unit
+def test_generate_h001_recommendation_backs_constraint(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    """Test H001 recommendation when index backs a UNIQUE/PK constraint."""
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_pk": "CREATE UNIQUE INDEX idx_pk ON public.tbl USING btree (id)"})
+
+    responses = {
+        "pgwatch_pg_invalid_indexes": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "tbl",
+                        "index_name": "idx_pk",
+                        "relation_name": "public.tbl",
+                        "supports_fk": "0",
+                        "has_valid_index_on_same_columns": "0",
+                        "backs_constraint": "1",
+                        "constraint_name": "tbl_pkey",
+                        "table_row_count_estimate": "100000",
+                    },
+                    "value": [0, "4096"],
+                }
+            ]
+        )
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_h001_invalid_indexes_report("local", "node-1")
+    entry = payload["results"]["node-1"]["data"]["maindb"]["invalid_indexes"][0]
+
+    assert entry["backs_constraint"] is True
+    assert entry["constraint_name"] == "tbl_pkey"
+    assert entry["recommendation"]["action"] == "recreate"
+    assert "REINDEX INDEX CONCURRENTLY" in entry["recommendation"]["sql_commands"][0]
+
+
+@pytest.mark.unit
+def test_generate_h001_recommendation_large_table_investigate(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    """Test H001 recommendation for large table without constraint (needs investigation)."""
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
+    monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_large": "CREATE INDEX idx_large ON public.tbl USING btree (col)"})
+
+    responses = {
+        "pgwatch_pg_invalid_indexes": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "tbl",
+                        "index_name": "idx_large",
+                        "relation_name": "public.tbl",
+                        "supports_fk": "0",
+                        "has_valid_index_on_same_columns": "0",
+                        "backs_constraint": "0",
+                        "constraint_name": "",
+                        "table_row_count_estimate": "50000",
+                    },
+                    "value": [0, "8192"],
+                }
+            ]
+        )
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    payload = generator.generate_h001_invalid_indexes_report("local", "node-1")
+    entry = payload["results"]["node-1"]["data"]["maindb"]["invalid_indexes"][0]
+
+    assert entry["table_row_count_estimate"] == 50000
+    assert entry["recommendation"]["action"] == "investigate"
+    assert "50,000 rows" in entry["recommendation"]["reason"]
+    # Should have both options in sql_commands
+    assert any("REINDEX INDEX CONCURRENTLY" in cmd for cmd in entry["recommendation"]["sql_commands"])
+    assert any("DROP INDEX CONCURRENTLY" in cmd for cmd in entry["recommendation"]["sql_commands"])
 
 
 @pytest.mark.unit
