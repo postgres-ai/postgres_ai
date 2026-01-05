@@ -88,9 +88,9 @@ def get_query_texts_from_sink(db_name: str = None) -> dict:
                 queryid = row['queryid']
                 query_text = row['query']
                 if queryid:
-                    # Truncate very long queries for display
-                    if query_text and len(query_text) > 500:
-                        query_text = query_text[:500] + '...'
+                    # Truncate long queries for display (150 chars)
+                    if query_text and len(query_text) > 150:
+                        query_text = query_text[:150] + '...'
                     query_texts[queryid] = query_text or ''
 
         conn.close()

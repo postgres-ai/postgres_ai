@@ -172,14 +172,7 @@
                 "properties": [
                   {
                     "id": "custom.width",
-                    "value": 400
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "auto",
-                      "wrapText": true
-                    }
+                    "value": 300
                   }
                 ]
               }
