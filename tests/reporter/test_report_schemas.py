@@ -128,6 +128,44 @@ def test_schema_a007(
 
 
 @pytest.mark.unit
+def test_schema_s002(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    fixed_pg_version,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
+    resp = prom_result(
+        [
+            {
+                "metric": {
+                    "setting_name": "ssl",
+                    "setting_value": "on",
+                    "unit": "",
+                    "category": "Connections and Authentication / SSL",
+                    "context": "sighup",
+                    "vartype": "bool",
+                }
+            },
+            {
+                "metric": {
+                    "setting_name": "ssl_min_protocol_version",
+                    "setting_value": "TLSv1.2",
+                    "unit": "",
+                    "category": "Connections and Authentication / SSL",
+                    "context": "sighup",
+                    "vartype": "enum",
+                }
+            },
+        ]
+    )
+    monkeypatch.setattr(generator, "query_instant", lambda query: resp)
+
+    report = generator.generate_s002_ssl_tls_report("local", "node-1")
+    validate_report(report)
+
+
+@pytest.mark.unit
 def test_schema_d004(
     monkeypatch: pytest.MonkeyPatch,
     generator: PostgresReportGenerator,

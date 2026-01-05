@@ -596,6 +596,73 @@ class PostgresReportGenerator:
 
         return self.format_report_data("A007", altered_settings, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
+    def generate_s002_ssl_tls_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[str, Any]:
+        """
+        Generate S002 SSL/TLS Settings report.
+
+        This report collects SSL/TLS related PostgreSQL settings to assess
+        the security posture of encrypted connections.
+
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+
+        Returns:
+            Dictionary containing SSL/TLS settings information
+        """
+        logger.info("Generating S002 SSL/TLS Settings report...")
+
+        # SSL-related settings to collect
+        ssl_settings = [
+            'ssl',
+            'ssl_ca_file',
+            'ssl_cert_file',
+            'ssl_ciphers',
+            'ssl_crl_dir',
+            'ssl_crl_file',
+            'ssl_dh_params_file',
+            'ssl_ecdh_curve',
+            'ssl_key_file',
+            'ssl_max_protocol_version',
+            'ssl_min_protocol_version',
+            'ssl_passphrase_command',
+            'ssl_passphrase_command_supports_reload',
+            'ssl_prefer_server_ciphers',
+        ]
+
+        # Query all PostgreSQL settings using the pgwatch_settings_configured metric
+        settings_query = f'last_over_time(pgwatch_settings_configured{{cluster="{cluster}", node_name="{node_name}"}}[3h])'
+        result = self.query_instant(settings_query)
+
+        settings_data = {}
+        if result.get('status') == 'success' and result.get('data', {}).get('result'):
+            for item in result['data']['result']:
+                setting_name = item['metric'].get('setting_name', '')
+
+                # Only include SSL-related settings
+                if setting_name not in ssl_settings:
+                    continue
+
+                setting_value = item['metric'].get('setting_value', '')
+                category = item['metric'].get('category', 'Other')
+                unit = item['metric'].get('unit', '')
+                context = item['metric'].get('context', '')
+                vartype = item['metric'].get('vartype', '')
+
+                settings_data[setting_name] = {
+                    "setting": setting_value,
+                    "unit": unit,
+                    "category": category,
+                    "context": context,
+                    "vartype": vartype,
+                    "pretty_value": self.format_setting_value(setting_name, setting_value, unit)
+                }
+        else:
+            logger.warning(f"S002 - No settings data returned for cluster={cluster}, node_name={node_name}")
+            logger.info(f"Query result status: {result.get('status')}")
+
+        return self.format_report_data("S002", settings_data, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
+
     def generate_h001_invalid_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
         """
@@ -3761,6 +3828,7 @@ class PostgresReportGenerator:
             "L002": "Data types being used",
             "L003": "Integer out-of-range risks in PKs",
             "L004": "Tables without PK/UK",
+            "S002": "SSL/TLS settings",
         }
         return check_titles.get(check_id, f"Check {check_id}")
 
@@ -3970,6 +4038,7 @@ class PostgresReportGenerator:
             ('A003', self.generate_a003_settings_report),
             ('A004', self.generate_a004_cluster_report),
             ('A007', self.generate_a007_altered_settings_report),
+            ('S002', self.generate_s002_ssl_tls_report),
             ('F004', self.generate_f004_heap_bloat_report),
             ('F005', self.generate_f005_btree_bloat_report),
             ('H001', self.generate_h001_invalid_indexes_report),
@@ -4834,7 +4903,8 @@ def main():
                         help='Disable combining primary and replica reports into single report')
     parser.add_argument('--check-id',
                         choices=['A002', 'A003', 'A004', 'A007', 'D004', 'F001', 'F004', 'F005', 'G001', 'H001', 'H002',
-                                 'H004', 'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008', 'M001', 'M002', 'M003', 'N001', 'ALL'],
+                                 'H004', 'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008', 'M001', 'M002', 'M003', 'N001',
+                                 'S002', 'ALL'],
                         help='Specific check ID to generate (default: ALL)')
     parser.add_argument('--output', default='-',
                         help='Output file (default: stdout)')
@@ -4960,6 +5030,8 @@ def main():
                     report = generator.generate_a004_cluster_report(cluster, args.node_name)
                 elif args.check_id == 'A007':
                     report = generator.generate_a007_altered_settings_report(cluster, args.node_name)
+                elif args.check_id == 'S002':
+                    report = generator.generate_s002_ssl_tls_report(cluster, args.node_name)
                 elif args.check_id == 'D004':
                     if a003_report:
                         report = generator.generate_d004_from_a003(a003_report, cluster, args.node_name)
