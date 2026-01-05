@@ -58,7 +58,9 @@ def get_query_texts_from_sink(db_name: str = None) -> dict:
     try:
         conn = psycopg2.connect(POSTGRES_SINK_URL)
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            if db_name:
+            # Skip db_name filter if it's empty, "All", or contains special chars
+            use_db_filter = db_name and db_name.lower() not in ('all', '') and not db_name.startswith('$')
+            if use_db_filter:
                 query = """
                     SELECT DISTINCT ON (data->>'queryid')
                         data->>'queryid' as queryid,
