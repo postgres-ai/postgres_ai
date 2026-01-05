@@ -370,6 +370,10 @@ def test_schema_h001(
                         "index_name": "idx_invalid",
                         "relation_name": "public.tbl",
                         "supports_fk": "1",
+                        "is_unique_constraint": "0",
+                        "is_primary_key": "0",
+                        "table_row_estimate": "5000",
+                        "has_valid_covering_index": "0",
                     },
                     "value": [0, "2048"],
                 }

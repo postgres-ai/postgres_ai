@@ -39,6 +39,26 @@
         "server_minor_ver": { "type": "string" }
       }
     },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "reason"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["drop", "recreate", "uncertain"],
+          "description": "Recommended action: drop (safe to remove), recreate (use REINDEX INDEX CONCURRENTLY), or uncertain (needs additional RCA)"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable explanation for the recommendation"
+        },
+        "sql": {
+          "type": "string",
+          "description": "SQL command to execute (DROP INDEX CONCURRENTLY or REINDEX INDEX CONCURRENTLY)"
+        }
+      }
+    },
     "invalidIndex": {
       "type": "object",
       "additionalProperties": false,
@@ -50,7 +70,12 @@
         "index_size_bytes",
         "index_size_pretty",
         "index_definition",
-        "supports_fk"
+        "supports_fk",
+        "is_unique_constraint",
+        "is_primary_key",
+        "table_row_estimate",
+        "has_valid_covering_index",
+        "recommendation"
       ],
       "properties": {
         "schema_name": { "type": "string" },
@@ -60,7 +85,12 @@
         "index_size_bytes": { "type": "number" },
         "index_size_pretty": { "type": "string" },
         "index_definition": { "type": "string", "description": "Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations" },
-        "supports_fk": { "type": "boolean" }
+        "supports_fk": { "type": "boolean" },
+        "is_unique_constraint": { "type": "boolean", "description": "True if index backs a UNIQUE constraint" },
+        "is_primary_key": { "type": "boolean", "description": "True if index backs a PRIMARY KEY constraint" },
+        "table_row_estimate": { "type": "number", "description": "Estimated number of rows in the table (from pg_class.reltuples)" },
+        "has_valid_covering_index": { "type": "boolean", "description": "True if a valid index exists on the same columns (duplicate)" },
+        "recommendation": { "$ref": "#/$defs/recommendation" }
       }
     },
     "dbEntry": {

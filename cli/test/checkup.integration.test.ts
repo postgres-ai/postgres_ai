@@ -255,7 +255,7 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     expect(typeof nodeResult.data).toBe("object");
   });
 
-  test("H001 returns index_definition with CREATE INDEX statement", async () => {
+  test("H001 returns index_definition with CREATE INDEX statement and recommendation", async () => {
     // Create a table and an index, then mark the index as invalid
     await client.query(`
       CREATE TABLE IF NOT EXISTS test_invalid_idx_table (id serial PRIMARY KEY, value text);
@@ -290,6 +290,21 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
       expect(testIndex.index_definition).toMatch(/^CREATE INDEX/);
       expect(testIndex.index_definition).toContain("test_invalid_idx");
       expect(testIndex.index_definition).toContain("test_invalid_idx_table");
+
+      // Verify new decision support fields
+      expect(typeof testIndex.is_unique_constraint).toBe("boolean");
+      expect(typeof testIndex.is_primary_key).toBe("boolean");
+      expect(typeof testIndex.table_row_estimate).toBe("number");
+      expect(typeof testIndex.has_valid_covering_index).toBe("boolean");
+
+      // Verify recommendation object
+      expect(testIndex.recommendation).toBeDefined();
+      expect(["drop", "recreate", "uncertain"]).toContain(testIndex.recommendation.action);
+      expect(typeof testIndex.recommendation.reason).toBe("string");
+      // SQL is present for drop/recreate actions, absent for uncertain
+      if (testIndex.recommendation.action !== "uncertain") {
+        expect(testIndex.recommendation.sql).toMatch(/CONCURRENTLY/);
+      }
     } finally {
       // Cleanup: restore the index and drop test objects
       await client.query(`

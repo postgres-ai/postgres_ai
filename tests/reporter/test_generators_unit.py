@@ -479,6 +479,10 @@ def test_generate_h001_invalid_indexes_report(
                         "index_name": "idx_invalid",
                         "relation_name": "public.tbl",
                         "supports_fk": "1",
+                        "is_unique_constraint": "0",
+                        "is_primary_key": "0",
+                        "table_row_estimate": "5000",
+                        "has_valid_covering_index": "0",
                     },
                     "value": [0, "2048"],
                 }
@@ -497,6 +501,15 @@ def test_generate_h001_invalid_indexes_report(
     assert entry["index_size_pretty"].endswith("KiB")
     assert entry["index_definition"].startswith("CREATE INDEX")
     assert entry["supports_fk"] is True
+    # Verify new decision support fields
+    assert entry["is_unique_constraint"] is False
+    assert entry["is_primary_key"] is False
+    assert entry["table_row_estimate"] == 5000
+    assert entry["has_valid_covering_index"] is False
+    # Verify recommendation (small table < 10K rows = drop)
+    assert entry["recommendation"]["action"] == "drop"
+    assert "sql" in entry["recommendation"]
+    assert "DROP INDEX CONCURRENTLY" in entry["recommendation"]["sql"]
 
 
 @pytest.mark.unit

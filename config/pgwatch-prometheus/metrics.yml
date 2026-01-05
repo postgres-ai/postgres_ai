@@ -1575,6 +1575,7 @@ metrics:
       This metric identifies invalid indexes in the database.
       It provides insights into the number of invalid indexes and their details.
       This metric helps administrators identify and fix invalid indexes to improve database performance.
+      Extended with decision-support fields: has_valid_covering_index, is_unique_constraint, is_primary_key, table_row_estimate.
     sqls:
       11: |
         with fk_indexes as ( /* pgwatch_generated */
@@ -1612,7 +1613,22 @@ metrics:
               where
                 fi.tag_fk_table_ref = pct.relname
                 and fi.tag_opclasses like (array_to_string(pidx.indclass, ', ') || '%')
-            ) > 0)::int as supports_fk
+            ) > 0)::int as supports_fk,
+            /* Decision support fields for invalid index remediation */
+            pidx.indisunique as is_unique_constraint,
+            pidx.indisprimary as is_primary_key,
+            pct.reltuples::bigint as table_row_estimate,
+            /* Check if there's a valid index covering the same columns */
+            exists(
+              select 1
+              from pg_index valid_idx
+              join pg_class valid_idx_class on valid_idx_class.oid = valid_idx.indexrelid
+              where valid_idx.indrelid = pidx.indrelid
+                and valid_idx.indisvalid = true
+                and valid_idx.indkey = pidx.indkey
+                and valid_idx.indclass = pidx.indclass
+                and valid_idx.indexrelid != pidx.indexrelid
+            )::int as has_valid_covering_index
           from pg_index pidx
           join pg_class as pci on pci.oid = pidx.indexrelid
           join pg_class as pct on pct.oid = pidx.indrelid

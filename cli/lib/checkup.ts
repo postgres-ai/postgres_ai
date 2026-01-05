@@ -108,6 +108,18 @@ export interface ClusterMetric {
 }
 
 /**
+ * Recommendation for invalid index remediation (H001)
+ */
+export interface InvalidIndexRecommendation {
+  /** Recommended action: drop (safe to remove), recreate (use REINDEX INDEX CONCURRENTLY), or uncertain (needs additional RCA) */
+  action: "drop" | "recreate" | "uncertain";
+  /** Human-readable explanation for the recommendation */
+  reason: string;
+  /** SQL command to execute (DROP INDEX CONCURRENTLY or REINDEX INDEX CONCURRENTLY) */
+  sql?: string;
+}
+
+/**
  * Invalid index entry (H001) - matches H001.schema.json invalidIndex
  */
 export interface InvalidIndex {
@@ -120,6 +132,16 @@ export interface InvalidIndex {
   /** Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations */
   index_definition: string;
   supports_fk: boolean;
+  /** True if index backs a UNIQUE constraint */
+  is_unique_constraint: boolean;
+  /** True if index backs a PRIMARY KEY constraint */
+  is_primary_key: boolean;
+  /** Estimated number of rows in the table (from pg_class.reltuples) */
+  table_row_estimate: number;
+  /** True if a valid index exists on the same columns (duplicate) */
+  has_valid_covering_index: boolean;
+  /** Recommendation for handling this invalid index */
+  recommendation: InvalidIndexRecommendation;
 }
 
 /**
@@ -563,12 +585,68 @@ export async function getClusterInfo(client: Client, pgMajorVersion: number = 16
 }
 
 /**
+ * Generate recommendation for an invalid index based on decision flowchart.
+ *
+ * Decision tree:
+ * 1. If valid index on same columns exists → DROP (it's a duplicate)
+ * 2. Else if backs UNIQUE or PK constraint → RECREATE
+ * 3. Else if table < 10K rows → DROP and monitor
+ * 4. Else → UNCERTAIN (need to investigate if queries filter on this column)
+ */
+function generateInvalidIndexRecommendation(
+  schemaName: string,
+  indexName: string,
+  hasValidCoveringIndex: boolean,
+  isUniqueConstraint: boolean,
+  isPrimaryKey: boolean,
+  tableRowEstimate: number
+): InvalidIndexRecommendation {
+  const qualifiedName = schemaName === "public"
+    ? `"${indexName}"`
+    : `"${schemaName}"."${indexName}"`;
+
+  // 1. Valid index on same columns exists → DROP (duplicate)
+  if (hasValidCoveringIndex) {
+    return {
+      action: "drop",
+      reason: "A valid index already exists on the same column(s). This invalid index is a duplicate and can be safely dropped.",
+      sql: `DROP INDEX CONCURRENTLY ${qualifiedName};`,
+    };
+  }
+
+  // 2. Backs UNIQUE or PK constraint → RECREATE
+  if (isUniqueConstraint || isPrimaryKey) {
+    const constraintType = isPrimaryKey ? "PRIMARY KEY" : "UNIQUE";
+    return {
+      action: "recreate",
+      reason: `This index backs a ${constraintType} constraint and must be recreated to restore constraint enforcement.`,
+      sql: `REINDEX INDEX CONCURRENTLY ${qualifiedName};`,
+    };
+  }
+
+  // 3. Small table (< 10K rows) → DROP and monitor
+  if (tableRowEstimate < 10000) {
+    return {
+      action: "drop",
+      reason: `The table has only ~${tableRowEstimate.toLocaleString()} rows. For small tables, it's safe to drop the invalid index and monitor query performance. If needed, recreate with REINDEX INDEX CONCURRENTLY.`,
+      sql: `DROP INDEX CONCURRENTLY ${qualifiedName};`,
+    };
+  }
+
+  // 4. Large table, no constraint → UNCERTAIN (need to investigate query patterns)
+  return {
+    action: "uncertain",
+    reason: `The table has ~${tableRowEstimate.toLocaleString()} rows. Additional investigation is needed to determine if queries filter on the indexed column(s). If queries depend on this index, use REINDEX INDEX CONCURRENTLY to recreate it. Otherwise, DROP INDEX CONCURRENTLY and monitor.`,
+  };
+}
+
+/**
  * Get invalid indexes from the database (H001).
  * Invalid indexes are indexes that failed to build (e.g., due to CONCURRENTLY failure).
  *
  * @param client - Connected PostgreSQL client
  * @param pgMajorVersion - PostgreSQL major version (default: 16)
- * @returns Array of invalid index entries with size and FK support info
+ * @returns Array of invalid index entries with size, FK support info, and remediation recommendation
  */
 export async function getInvalidIndexes(client: Client, pgMajorVersion: number = 16): Promise<InvalidIndex[]> {
   const sql = getMetricSql(METRIC_NAMES.H001, pgMajorVersion);
@@ -576,15 +654,34 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
     const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
+    const schemaName = String(transformed.schema_name || "");
+    const indexName = String(transformed.index_name || "");
+    const isUniqueConstraint = toBool(transformed.is_unique_constraint);
+    const isPrimaryKey = toBool(transformed.is_primary_key);
+    const tableRowEstimate = parseInt(String(transformed.table_row_estimate || 0), 10);
+    const hasValidCoveringIndex = toBool(transformed.has_valid_covering_index);
+
     return {
-      schema_name: String(transformed.schema_name || ""),
+      schema_name: schemaName,
       table_name: String(transformed.table_name || ""),
-      index_name: String(transformed.index_name || ""),
+      index_name: indexName,
       relation_name: String(transformed.relation_name || ""),
       index_size_bytes: indexSizeBytes,
       index_size_pretty: formatBytes(indexSizeBytes),
       index_definition: String(transformed.index_definition || ""),
       supports_fk: toBool(transformed.supports_fk),
+      is_unique_constraint: isUniqueConstraint,
+      is_primary_key: isPrimaryKey,
+      table_row_estimate: tableRowEstimate,
+      has_valid_covering_index: hasValidCoveringIndex,
+      recommendation: generateInvalidIndexRecommendation(
+        schemaName,
+        indexName,
+        hasValidCoveringIndex,
+        isUniqueConstraint,
+        isPrimaryKey,
+        tableRowEstimate
+      ),
     };
   });
 }

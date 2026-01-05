@@ -596,17 +596,68 @@ class PostgresReportGenerator:
 
         return self.format_report_data("A007", altered_settings, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
+    @staticmethod
+    def _generate_invalid_index_recommendation(
+        schema_name: str,
+        index_name: str,
+        has_valid_covering_index: bool,
+        is_unique_constraint: bool,
+        is_primary_key: bool,
+        table_row_estimate: int
+    ) -> Dict[str, Any]:
+        """
+        Generate recommendation for an invalid index based on decision flowchart.
+
+        Decision tree:
+        1. If valid index on same columns exists → DROP (it's a duplicate)
+        2. Else if backs UNIQUE or PK constraint → RECREATE
+        3. Else if table < 10K rows → DROP and monitor
+        4. Else → UNCERTAIN (need to investigate if queries filter on this column)
+        """
+        qualified_name = f'"{index_name}"' if schema_name == "public" else f'"{schema_name}"."{index_name}"'
+
+        # 1. Valid index on same columns exists → DROP (duplicate)
+        if has_valid_covering_index:
+            return {
+                "action": "drop",
+                "reason": "A valid index already exists on the same column(s). This invalid index is a duplicate and can be safely dropped.",
+                "sql": f"DROP INDEX CONCURRENTLY {qualified_name};"
+            }
+
+        # 2. Backs UNIQUE or PK constraint → RECREATE
+        if is_unique_constraint or is_primary_key:
+            constraint_type = "PRIMARY KEY" if is_primary_key else "UNIQUE"
+            return {
+                "action": "recreate",
+                "reason": f"This index backs a {constraint_type} constraint and must be recreated to restore constraint enforcement.",
+                "sql": f"REINDEX INDEX CONCURRENTLY {qualified_name};"
+            }
+
+        # 3. Small table (< 10K rows) → DROP and monitor
+        if table_row_estimate < 10000:
+            return {
+                "action": "drop",
+                "reason": f"The table has only ~{table_row_estimate:,} rows. For small tables, it's safe to drop the invalid index and monitor query performance. If needed, recreate with REINDEX INDEX CONCURRENTLY.",
+                "sql": f"DROP INDEX CONCURRENTLY {qualified_name};"
+            }
+
+        # 4. Large table, no constraint → UNCERTAIN (need to investigate query patterns)
+        return {
+            "action": "uncertain",
+            "reason": f"The table has ~{table_row_estimate:,} rows. Additional investigation is needed to determine if queries filter on the indexed column(s). If queries depend on this index, use REINDEX INDEX CONCURRENTLY to recreate it. Otherwise, DROP INDEX CONCURRENTLY and monitor."
+        }
+
     def generate_h001_invalid_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
         """
         Generate H001 Invalid Indexes report.
-        
+
         Args:
             cluster: Cluster name
             node_name: Node name
-            
+
         Returns:
-            Dictionary containing invalid indexes information
+            Dictionary containing invalid indexes information with remediation recommendations
         """
         logger.info("Generating H001 Invalid Indexes report...")
 
@@ -647,6 +698,12 @@ class PostgresReportGenerator:
                     index_size_bytes = float(item['value'][1]) if item.get('value') else 0
                     supports_fk = item['metric'].get('supports_fk', '0')
 
+                    # Decision support fields
+                    is_unique_constraint = bool(int(item['metric'].get('is_unique_constraint', '0')))
+                    is_primary_key = bool(int(item['metric'].get('is_primary_key', '0')))
+                    table_row_estimate = int(float(item['metric'].get('table_row_estimate', '0')))
+                    has_valid_covering_index = bool(int(item['metric'].get('has_valid_covering_index', '0')))
+
                     invalid_index = {
                         "schema_name": schema_name,
                         "table_name": table_name,
@@ -655,12 +712,24 @@ class PostgresReportGenerator:
                         "index_size_bytes": index_size_bytes,
                         "index_size_pretty": self.format_bytes(index_size_bytes),
                         "index_definition": index_definitions.get(index_name, "Definition not available"),
-                        "supports_fk": bool(int(supports_fk))
+                        "supports_fk": bool(int(supports_fk)),
+                        "is_unique_constraint": is_unique_constraint,
+                        "is_primary_key": is_primary_key,
+                        "table_row_estimate": table_row_estimate,
+                        "has_valid_covering_index": has_valid_covering_index,
+                        "recommendation": self._generate_invalid_index_recommendation(
+                            schema_name,
+                            index_name,
+                            has_valid_covering_index,
+                            is_unique_constraint,
+                            is_primary_key,
+                            table_row_estimate
+                        )
                     }
 
                     invalid_indexes.append(invalid_index)
                     total_size += index_size_bytes
-            
+
             # Skip databases with no invalid indexes
             if not invalid_indexes:
                 continue
