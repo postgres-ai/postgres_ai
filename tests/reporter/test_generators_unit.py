@@ -878,6 +878,127 @@ def test_get_pgss_metrics_data_by_db_invokes_all_metrics(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
+def test_generate_i001_io_statistics_report(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    prom_result,
+) -> None:
+    """Test I001 I/O Statistics report generation with pg_stat_io metrics."""
+    # Mock version info to return PostgreSQL 16+ (required for pg_stat_io)
+    monkeypatch.setattr(
+        generator,
+        "_get_postgres_version_info",
+        lambda *args, **kwargs: {
+            "version": "16.1",
+            "server_version_num": "160001",
+            "server_major_ver": "16",
+            "server_minor_ver": "1",
+        },
+    )
+
+    # Mock IO statistics metrics
+    io_responses = {
+        "pgwatch_pg_stat_io_reads": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "1000"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "1500"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_read_bytes_mb": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "100"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "150"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_read_time_ms": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "500"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "750"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_writes": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "200"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "300"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_write_bytes_mb": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "50"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "75"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_write_time_ms": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "100"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "150"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_hits": prom_result(
+            [
+                {"metric": {"backend_type": "client backend"}, "value": [0, "5000"]},
+                {"metric": {"backend_type": "total"}, "value": [0, "7500"]},
+            ]
+        ),
+        "pgwatch_pg_stat_io_writebacks": prom_result([]),
+        "pgwatch_pg_stat_io_writeback_bytes_mb": prom_result([]),
+        "pgwatch_pg_stat_io_writeback_time_ms": prom_result([]),
+        "pgwatch_pg_stat_io_fsyncs": prom_result([]),
+        "pgwatch_pg_stat_io_fsync_time_ms": prom_result([]),
+        "pgwatch_pg_stat_io_extends": prom_result([]),
+        "pgwatch_pg_stat_io_evictions": prom_result([]),
+        "pgwatch_pg_stat_io_reuses": prom_result([]),
+        "pgwatch_pg_stat_io_stats_reset_s": prom_result(
+            [{"metric": {"backend_type": "total"}, "value": [0, "86400"]}]
+        ),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, io_responses))
+
+    payload = generator.generate_i001_io_statistics_report("local", "node-1")
+
+    assert payload["checkId"] == "I001"
+    assert payload["checkTitle"] == "I/O statistics (pg_stat_io)"
+
+    data = payload["results"]["node-1"]["data"]
+    assert data["available"] is True
+    assert len(data["by_backend_type"]) > 0
+
+    # Check analysis
+    analysis = data["analysis"]
+    assert analysis["total_read_mb"] == 150
+    assert analysis["total_write_mb"] == 75
+    assert analysis["total_io_time_ms"] == 900  # 750 + 150
+    # Hit ratio: 7500 / (7500 + 1500) = 83.33%
+    assert analysis["read_hit_ratio_pct"] == pytest.approx(83.33, rel=0.01)
+
+
+@pytest.mark.unit
+def test_generate_i001_io_statistics_report_pg15_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    """Test I001 returns unavailable for PostgreSQL < 16."""
+    monkeypatch.setattr(
+        generator,
+        "_get_postgres_version_info",
+        lambda *args, **kwargs: {
+            "version": "15.4",
+            "server_version_num": "150004",
+            "server_major_ver": "15",
+            "server_minor_ver": "4",
+        },
+    )
+
+    payload = generator.generate_i001_io_statistics_report("local", "node-1")
+
+    assert payload["checkId"] == "I001"
+    data = payload["results"]["node-1"]["data"]
+    assert data["available"] is False
+    assert data["min_version_required"] == "16"
+    assert data["by_backend_type"] == []
+
+
+@pytest.mark.unit
 def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     generator = PostgresReportGenerator()
     called: list[str] = []
@@ -900,6 +1021,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_h001_invalid_indexes_report",
         "generate_h002_unused_indexes_report",
         "generate_h004_redundant_indexes_report",
+        "generate_i001_io_statistics_report",
         "generate_k001_query_calls_report",
         "generate_k003_top_queries_report",
         "generate_k004_temp_bytes_report",
@@ -934,6 +1056,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         'A002', 'A003', 'A004', 'A007',
         'D004', 'F001', 'F004', 'F005', 'G001',
         'H001', 'H002', 'H004',
+        'I001',
         'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008',
         'M001', 'M002', 'M003',
         'N001',

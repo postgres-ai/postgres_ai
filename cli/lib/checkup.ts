@@ -243,6 +243,41 @@ export interface RedundantIndex {
 }
 
 /**
+ * I/O statistics by backend type (I001) - matches I001.schema.json backendIOStats
+ */
+export interface BackendIOStats {
+  backend_type: string;
+  reads: number;
+  read_bytes_mb: number;
+  read_time_ms: number;
+  writes: number;
+  write_bytes_mb: number;
+  write_time_ms: number;
+  writebacks: number;
+  writeback_bytes_mb: number;
+  writeback_time_ms: number;
+  fsyncs: number;
+  fsync_time_ms: number;
+  extends?: number;
+  extend_bytes_mb?: number;
+  hits: number;
+  evictions: number;
+  reuses: number;
+}
+
+/**
+ * I/O statistics analysis summary (I001)
+ */
+export interface IOAnalysis {
+  total_read_mb: number;
+  total_write_mb: number;
+  total_io_time_ms: number;
+  read_hit_ratio_pct: number;
+  avg_read_time_ms: number | null;
+  avg_write_time_ms: number | null;
+}
+
+/**
  * Node result for reports
  */
 export interface NodeResult {
@@ -1327,6 +1362,173 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
 }
 
 /**
+ * Get I/O statistics from pg_stat_io (PostgreSQL 16+).
+ * Uses 'pg_stat_io' metric from metrics.yml.
+ *
+ * @param client - Connected PostgreSQL client
+ * @param pgMajorVersion - PostgreSQL major version
+ * @returns Array of I/O stats by backend type, or empty array if unavailable
+ */
+export async function getIOStatistics(client: Client, pgMajorVersion: number = 16): Promise<BackendIOStats[]> {
+  // pg_stat_io requires PostgreSQL 16+
+  if (pgMajorVersion < 16) {
+    return [];
+  }
+
+  try {
+    const sql = getMetricSql(METRIC_NAMES.I001, pgMajorVersion);
+    // Skip if metric returns empty/placeholder SQL
+    if (!sql || sql.trim().startsWith(";")) {
+      return [];
+    }
+
+    const result = await client.query(sql);
+    return result.rows.map((row) => {
+      const transformed = transformMetricRow(row);
+      return {
+        backend_type: String(transformed.backend_type || "unknown"),
+        reads: parseInt(String(transformed.reads || 0), 10),
+        read_bytes_mb: parseInt(String(transformed.read_bytes_mb || 0), 10),
+        read_time_ms: parseInt(String(transformed.read_time_ms || 0), 10),
+        writes: parseInt(String(transformed.writes || 0), 10),
+        write_bytes_mb: parseInt(String(transformed.write_bytes_mb || 0), 10),
+        write_time_ms: parseInt(String(transformed.write_time_ms || 0), 10),
+        writebacks: parseInt(String(transformed.writebacks || 0), 10),
+        writeback_bytes_mb: parseInt(String(transformed.writeback_bytes_mb || 0), 10),
+        writeback_time_ms: parseInt(String(transformed.writeback_time_ms || 0), 10),
+        fsyncs: parseInt(String(transformed.fsyncs || 0), 10),
+        fsync_time_ms: parseInt(String(transformed.fsync_time_ms || 0), 10),
+        extends: parseInt(String(transformed.extends || 0), 10),
+        extend_bytes_mb: parseInt(String(transformed.extend_bytes_mb || 0), 10),
+        hits: parseInt(String(transformed.hits || 0), 10),
+        evictions: parseInt(String(transformed.evictions || 0), 10),
+        reuses: parseInt(String(transformed.reuses || 0), 10),
+      };
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[I001] Error fetching I/O statistics: ${errorMsg}`);
+    return [];
+  }
+}
+
+/**
+ * Generate I001 report - I/O statistics (pg_stat_io)
+ *
+ * This report collects I/O statistics from pg_stat_io (PostgreSQL 16+),
+ * providing insights into read/write operations by backend type.
+ */
+async function generateI001(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("I001", "I/O statistics (pg_stat_io)", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+
+  // pg_stat_io requires PostgreSQL 16+
+  if (pgMajorVersion < 16) {
+    report.results[nodeName] = {
+      data: {
+        available: false,
+        min_version_required: "16",
+        by_backend_type: [],
+        analysis: {
+          total_read_mb: 0,
+          total_write_mb: 0,
+          total_io_time_ms: 0,
+          read_hit_ratio_pct: 0,
+          avg_read_time_ms: null,
+          avg_write_time_ms: null,
+        },
+        stats_reset_s: null,
+      },
+      postgres_version: postgresVersion,
+    };
+    return report;
+  }
+
+  const ioStats = await getIOStatistics(client, pgMajorVersion);
+
+  // Sort by backend_type, putting 'total' first if present
+  ioStats.sort((a, b) => {
+    if (a.backend_type === "total") return -1;
+    if (b.backend_type === "total") return 1;
+    return a.backend_type.localeCompare(b.backend_type);
+  });
+
+  // Find 'total' row for analysis, or sum all rows if not present
+  let totalStats = ioStats.find((s) => s.backend_type === "total");
+  if (!totalStats && ioStats.length > 0) {
+    totalStats = {
+      backend_type: "total",
+      reads: ioStats.reduce((sum, s) => sum + s.reads, 0),
+      read_bytes_mb: ioStats.reduce((sum, s) => sum + s.read_bytes_mb, 0),
+      read_time_ms: ioStats.reduce((sum, s) => sum + s.read_time_ms, 0),
+      writes: ioStats.reduce((sum, s) => sum + s.writes, 0),
+      write_bytes_mb: ioStats.reduce((sum, s) => sum + s.write_bytes_mb, 0),
+      write_time_ms: ioStats.reduce((sum, s) => sum + s.write_time_ms, 0),
+      writebacks: ioStats.reduce((sum, s) => sum + s.writebacks, 0),
+      writeback_bytes_mb: ioStats.reduce((sum, s) => sum + s.writeback_bytes_mb, 0),
+      writeback_time_ms: ioStats.reduce((sum, s) => sum + s.writeback_time_ms, 0),
+      fsyncs: ioStats.reduce((sum, s) => sum + s.fsyncs, 0),
+      fsync_time_ms: ioStats.reduce((sum, s) => sum + s.fsync_time_ms, 0),
+      hits: ioStats.reduce((sum, s) => sum + s.hits, 0),
+      evictions: ioStats.reduce((sum, s) => sum + s.evictions, 0),
+      reuses: ioStats.reduce((sum, s) => sum + s.reuses, 0),
+    };
+  }
+
+  // Calculate analysis
+  const totalReadMb = totalStats?.read_bytes_mb || 0;
+  const totalWriteMb = totalStats?.write_bytes_mb || 0;
+  const totalReadTime = totalStats?.read_time_ms || 0;
+  const totalWriteTime = totalStats?.write_time_ms || 0;
+  const totalIoTimeMs = totalReadTime + totalWriteTime;
+  const totalReads = totalStats?.reads || 0;
+  const totalWrites = totalStats?.writes || 0;
+  const totalHits = totalStats?.hits || 0;
+
+  // Hit ratio: hits / (hits + reads) * 100
+  const totalRequests = totalHits + totalReads;
+  const readHitRatioPct = totalRequests > 0 ? Math.round((totalHits / totalRequests) * 10000) / 100 : 0;
+
+  // Average times
+  const avgReadTimeMs = totalReads > 0 ? Math.round((totalReadTime / totalReads) * 1000) / 1000 : null;
+  const avgWriteTimeMs = totalWrites > 0 ? Math.round((totalWriteTime / totalWrites) * 1000) / 1000 : null;
+
+  // Get stats_reset from pg_stat_io (query separately for stats_reset time)
+  let statsResetS: number | null = null;
+  try {
+    const resetResult = await client.query(`
+      SELECT max(extract(epoch from now() - stats_reset)::int) as stats_reset_s
+      FROM pg_stat_io
+    `);
+    if (resetResult.rows.length > 0 && resetResult.rows[0].stats_reset_s !== null) {
+      statsResetS = parseInt(resetResult.rows[0].stats_reset_s, 10);
+    }
+  } catch (err) {
+    // Ignore errors getting stats_reset - not critical
+  }
+
+  report.results[nodeName] = {
+    data: {
+      available: ioStats.length > 0,
+      by_backend_type: ioStats,
+      analysis: {
+        total_read_mb: totalReadMb,
+        total_write_mb: totalWriteMb,
+        total_io_time_ms: totalIoTimeMs,
+        read_hit_ratio_pct: readHitRatioPct,
+        avg_read_time_ms: avgReadTimeMs,
+        avg_write_time_ms: avgWriteTimeMs,
+      },
+      stats_reset_s: statsResetS,
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Available report generators
  */
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
@@ -1341,6 +1543,7 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   H001: generateH001,
   H002: generateH002,
   H004: generateH004,
+  I001: generateI001,
 };
 
 /**
@@ -1358,6 +1561,7 @@ export const CHECK_INFO: Record<string, string> = {
   H001: "Invalid indexes",
   H002: "Unused indexes",
   H004: "Redundant indexes",
+  I001: "I/O statistics (pg_stat_io)",
 };
 
 /**
