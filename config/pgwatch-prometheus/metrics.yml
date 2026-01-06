@@ -1572,20 +1572,23 @@ metrics:
     statement_timeout_seconds: 15
   pg_invalid_indexes:
     description: >
-      This metric identifies invalid indexes in the database.
-      It provides insights into the number of invalid indexes and their details.
-      This metric helps administrators identify and fix invalid indexes to improve database performance.
+      This metric identifies invalid indexes in the database with decision tree data for remediation.
+      It provides insights into whether to DROP (if duplicate exists), RECREATE (if backs constraint),
+      or flag as UNCERTAIN (if additional RCA is needed to check query plans).
+      Decision tree: 1) Valid duplicate exists -> DROP, 2) Backs PK/UNIQUE constraint -> RECREATE,
+      3) Table < 10K rows -> RECREATE (small tables rebuild quickly, typically under 1 second),
+      4) Otherwise -> UNCERTAIN (need query plan analysis to assess impact).
     sqls:
       11: |
         with fk_indexes as ( /* pgwatch_generated */
           select
-            schemaname as tag_schema_name,
-            (indexrelid::regclass)::text as tag_index_name,
-            (relid::regclass)::text as tag_table_name,
-            (confrelid::regclass)::text as tag_fk_table_ref,
-            array_to_string(indclass, ', ') as tag_opclasses
-          from
-            pg_stat_all_indexes
+            schemaname as schema_name,
+            indexrelid,
+            (indexrelid::regclass)::text as index_name,
+            (relid::regclass)::text as table_name,
+            (confrelid::regclass)::text as fk_table_ref,
+            array_to_string(indclass, ', ') as opclasses
+          from pg_stat_all_indexes
           join pg_index using (indexrelid)
           left join pg_constraint
             on array_to_string(indkey, ',') = array_to_string(conkey, ',')
@@ -1594,37 +1597,58 @@ metrics:
               and contype = 'f'
           where idx_scan = 0
             and indisunique is false
-            and conkey is not null --conkey is not null then true else false end as is_fk_idx
-        ), data as (
+            and conkey is not null
+        ),
+        -- Find valid indexes that could be duplicates (same table, same columns)
+        valid_duplicates as (
+          select
+            inv.indexrelid as invalid_indexrelid,
+            val.indexrelid as valid_indexrelid,
+            (val.indexrelid::regclass)::text as valid_index_name,
+            pg_get_indexdef(val.indexrelid) as valid_index_definition
+          from pg_index inv
+          join pg_index val on inv.indrelid = val.indrelid  -- same table
+            and inv.indkey = val.indkey  -- same columns (in same order)
+            and inv.indexrelid != val.indexrelid  -- different index
+            and val.indisvalid = true  -- valid index
+          where inv.indisvalid = false
+        ),
+        data as (
           select
             pci.relname as tag_index_name,
             pn.nspname as tag_schema_name,
             pct.relname as tag_table_name,
-            quote_ident(pn.nspname) as tag_schema_name,
-            quote_ident(pci.relname) as tag_index_name,
-            quote_ident(pct.relname) as tag_table_name,
             coalesce(nullif(quote_ident(pn.nspname), 'public') || '.', '') || quote_ident(pct.relname) as tag_relation_name,
             pg_get_indexdef(pidx.indexrelid) as index_definition,
-            pg_relation_size(pidx.indexrelid) index_size_bytes,
+            pg_relation_size(pidx.indexrelid) as index_size_bytes,
+            -- Constraint info
+            pidx.indisprimary as is_pk,
+            pidx.indisunique as is_unique,
+            con.conname as constraint_name,
+            -- Table row estimate
+            pct.reltuples::bigint as table_row_estimate,
+            -- Valid duplicate check
+            (vd.valid_indexrelid is not null) as has_valid_duplicate,
+            vd.valid_index_name,
+            vd.valid_index_definition,
+            -- FK support check
             ((
               select count(1)
               from fk_indexes fi
-              where
-                fi.tag_fk_table_ref = pct.relname
-                and fi.tag_opclasses like (array_to_string(pidx.indclass, ', ') || '%')
+              where fi.fk_table_ref = pct.relname
+                and fi.opclasses like (array_to_string(pidx.indclass, ', ') || '%')
             ) > 0)::int as supports_fk
           from pg_index pidx
-          join pg_class as pci on pci.oid = pidx.indexrelid
-          join pg_class as pct on pct.oid = pidx.indrelid
+          join pg_class pci on pci.oid = pidx.indexrelid
+          join pg_class pct on pct.oid = pidx.indrelid
           left join pg_namespace pn on pn.oid = pct.relnamespace
+          left join pg_constraint con on con.conindid = pidx.indexrelid
+          left join valid_duplicates vd on vd.invalid_indexrelid = pidx.indexrelid
           where pidx.indisvalid = false
-        ), data_total as (
-            select
-              sum(index_size_bytes) as index_size_bytes_sum
-            from data
-        ), num_data as (
+        ),
+        num_data as (
           select
-            row_number() over () num,
+            row_number() over () as num,
             data.*
           from data
         )

@@ -1550,6 +1550,16 @@ const MONITORING_CONTAINERS = [
   "postgres-reports",
 ];
 
+/**
+ * Network cleanup constants.
+ * Docker Compose creates a default network named "{project}_default".
+ * In CI environments, network cleanup can fail if containers are slow to disconnect.
+ */
+const COMPOSE_PROJECT_NAME = "postgres_ai";
+const DOCKER_NETWORK_NAME = `${COMPOSE_PROJECT_NAME}_default`;
+/** Delay before retrying network cleanup (allows container network disconnections to complete) */
+const NETWORK_CLEANUP_DELAY_MS = 2000;
+
 /** Remove orphaned containers that docker compose down might miss */
 async function removeOrphanedContainers(): Promise<void> {
   for (const container of MONITORING_CONTAINERS) {
@@ -1565,7 +1575,33 @@ mon
   .command("stop")
   .description("stop monitoring services")
   .action(async () => {
-    const code = await runCompose(["down"]);
+    // Multi-stage cleanup strategy for reliable shutdown in CI environments:
+    // Stage 1: Standard compose down with orphan removal
+    // Stage 2: Force remove any orphaned containers, then retry compose down
+    // Stage 3: Force remove the Docker network directly
+    // This handles edge cases where containers are slow to disconnect from networks.
+    let code = await runCompose(["down", "--remove-orphans"]);
+
+    // Stage 2: If initial cleanup fails, try removing orphaned containers first
+    if (code !== 0) {
+      await removeOrphanedContainers();
+      // Wait a moment for container network disconnections to complete
+      await new Promise(resolve => setTimeout(resolve, NETWORK_CLEANUP_DELAY_MS));
+      // Retry compose down
+      code = await runCompose(["down", "--remove-orphans"]);
+    }
+
+    // Final cleanup: force remove the network if it still exists
+    if (code !== 0) {
+      try {
+        await execFilePromise("docker", ["network", "rm", DOCKER_NETWORK_NAME]);
+        // Network removal succeeded - cleanup is complete
+        code = 0;
+      } catch {
+        // Network doesn't exist or couldn't be removed, ignore
+      }
+    }
+
     if (code !== 0) process.exitCode = code;
   });
 

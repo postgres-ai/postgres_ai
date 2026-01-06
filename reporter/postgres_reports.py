@@ -596,17 +596,33 @@ class PostgresReportGenerator:
 
         return self.format_report_data("A007", altered_settings, node_name, postgres_version=self._get_postgres_version_info(cluster, node_name))
 
+    # ==================================================================================
+    # H001: Invalid Indexes - Observation Data for Decision Tree
+    # ==================================================================================
+    #
+    # This report collects observation data that enables decision tree analysis:
+    #   - has_valid_duplicate / valid_duplicate_name: Is there a valid index on same column(s)?
+    #   - is_pk / is_unique / constraint_name: Does it back a constraint (UNIQUE / PK)?
+    #   - table_row_estimate: Is the table small (< 10K rows)?
+    #
+    # The JSON report contains ONLY observations (raw data).
+    # Recommendations (DROP, RECREATE, UNCERTAIN) are computed at render time:
+    #   - CLI: cli/lib/checkup.ts -> getInvalidIndexRecommendation()
+    #   - UI: Grafana dashboard or web template applies the same logic
+    #
+    # ==================================================================================
+
     def generate_h001_invalid_indexes_report(self, cluster: str = "local", node_name: str = "node-01") -> Dict[
         str, Any]:
         """
-        Generate H001 Invalid Indexes report.
-        
+        Generate H001 Invalid Indexes report with observation data for decision tree.
+
         Args:
             cluster: Cluster name
             node_name: Node name
-            
+
         Returns:
-            Dictionary containing invalid indexes information
+            Dictionary containing invalid indexes observation data for decision tree analysis
         """
         logger.info("Generating H001 Invalid Indexes report...")
 
@@ -628,39 +644,76 @@ class PostgresReportGenerator:
         for db_name in databases:
             # Fetch index definitions from the sink for this database (used to aid remediation)
             index_definitions = self.get_index_definitions_from_sink(db_name)
-            # Query invalid indexes for each database
-            invalid_indexes_query = f'last_over_time(pgwatch_pg_invalid_indexes{{cluster="{cluster}", node_name="{node_name}", datname="{db_name}"}}[3h])'
-            result = self.query_instant(invalid_indexes_query)
 
-            invalid_indexes = []
-            total_size = 0
+            # Query all invalid indexes metrics and merge by index key
+            # Each field is a separate metric in pgwatch prometheus export
+            base_filter = f'cluster="{cluster}", node_name="{node_name}", datname="{db_name}"'
 
-            if result.get('status') == 'success' and result.get('data', {}).get('result'):
-                for item in result['data']['result']:
-                    # Extract index information from labels and values
+            # Query primary metric (index_size_bytes) - this determines which indexes exist
+            size_query = f'last_over_time(pgwatch_pg_invalid_indexes_index_size_bytes{{{base_filter}}}[3h])'
+            size_result = self.query_instant(size_query)
+
+            # Build index data keyed by (schema_name, table_name, index_name)
+            indexes_data: Dict[tuple, Dict[str, Any]] = {}
+
+            if size_result.get('status') == 'success' and size_result.get('data', {}).get('result'):
+                for item in size_result['data']['result']:
                     schema_name = item['metric'].get('schema_name', 'unknown')
                     table_name = item['metric'].get('table_name', 'unknown')
                     index_name = item['metric'].get('index_name', 'unknown')
-                    relation_name = item['metric'].get('relation_name', f"{schema_name}.{table_name}")
+                    key = (schema_name, table_name, index_name)
 
-                    # Get index size from the metric value
-                    index_size_bytes = float(item['value'][1]) if item.get('value') else 0
-                    supports_fk = item['metric'].get('supports_fk', '0')
-
-                    invalid_index = {
+                    indexes_data[key] = {
                         "schema_name": schema_name,
                         "table_name": table_name,
                         "index_name": index_name,
-                        "relation_name": relation_name,
-                        "index_size_bytes": index_size_bytes,
-                        "index_size_pretty": self.format_bytes(index_size_bytes),
+                        "relation_name": item['metric'].get('relation_name', f"{schema_name}.{table_name}"),
+                        "index_size_bytes": float(item['value'][1]) if item.get('value') else 0,
                         "index_definition": index_definitions.get(index_name, "Definition not available"),
-                        "supports_fk": bool(int(supports_fk))
+                        "valid_duplicate_name": item['metric'].get('valid_index_name') or None,
+                        "valid_duplicate_definition": item['metric'].get('valid_index_definition') or None,
+                        "constraint_name": item['metric'].get('constraint_name') or None,
+                        # Defaults for boolean/numeric fields (will be updated from separate metrics)
+                        "supports_fk": False,
+                        "is_pk": False,
+                        "is_unique": False,
+                        "has_valid_duplicate": False,
+                        "table_row_estimate": 0,
                     }
 
-                    invalid_indexes.append(invalid_index)
-                    total_size += index_size_bytes
-            
+            # Query additional metrics and merge values
+            additional_metrics = [
+                ('pgwatch_pg_invalid_indexes_supports_fk', 'supports_fk', lambda v: int(float(v)) == 1),
+                ('pgwatch_pg_invalid_indexes_is_pk', 'is_pk', lambda v: int(float(v)) == 1),
+                ('pgwatch_pg_invalid_indexes_is_unique', 'is_unique', lambda v: int(float(v)) == 1),
+                ('pgwatch_pg_invalid_indexes_has_valid_duplicate', 'has_valid_duplicate', lambda v: int(float(v)) == 1),
+                ('pgwatch_pg_invalid_indexes_table_row_estimate', 'table_row_estimate', lambda v: int(float(v))),
+            ]
+
+            for metric_name, field_name, converter in additional_metrics:
+                query = f'last_over_time({metric_name}{{{base_filter}}}[3h])'
+                result = self.query_instant(query)
+                if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                    for item in result['data']['result']:
+                        key = (
+                            item['metric'].get('schema_name', 'unknown'),
+                            item['metric'].get('table_name', 'unknown'),
+                            item['metric'].get('index_name', 'unknown'),
+                        )
+                        if key in indexes_data and item.get('value'):
+                            try:
+                                indexes_data[key][field_name] = converter(item['value'][1])
+                            except (ValueError, TypeError):
+                                pass  # Keep default value
+
+            # Convert to list and calculate totals
+            invalid_indexes = []
+            total_size = 0
+            for data in indexes_data.values():
+                data["index_size_pretty"] = self.format_bytes(data["index_size_bytes"])
+                invalid_indexes.append(data)
+                total_size += data["index_size_bytes"]
+
             # Skip databases with no invalid indexes
             if not invalid_indexes:
                 continue

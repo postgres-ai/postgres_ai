@@ -109,6 +109,12 @@ export interface ClusterMetric {
 
 /**
  * Invalid index entry (H001) - matches H001.schema.json invalidIndex
+ *
+ * Decision tree for remediation recommendations:
+ * 1. has_valid_duplicate=true → DROP (valid duplicate exists, safe to remove)
+ * 2. is_pk=true or is_unique=true → RECREATE (backs a constraint, must restore)
+ * 3. table_row_estimate < 10000 → RECREATE (small table, quick rebuild)
+ * 4. Otherwise → UNCERTAIN (needs manual analysis of query plans)
  */
 export interface InvalidIndex {
   schema_name: string;
@@ -117,9 +123,61 @@ export interface InvalidIndex {
   relation_name: string;
   index_size_bytes: number;
   index_size_pretty: string;
-  /** Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations */
+  /** Full CREATE INDEX statement from pg_get_indexdef() - useful for DROP/RECREATE migrations */
   index_definition: string;
   supports_fk: boolean;
+  /** True if this index backs a PRIMARY KEY constraint */
+  is_pk: boolean;
+  /** True if this is a UNIQUE index (includes PK indexes) */
+  is_unique: boolean;
+  /** Name of the constraint this index backs, or null if none */
+  constraint_name: string | null;
+  /** Estimated row count of the table from pg_class.reltuples */
+  table_row_estimate: number;
+  /** True if there is a valid index on the same column(s) */
+  has_valid_duplicate: boolean;
+  /** Name of the valid duplicate index if one exists */
+  valid_duplicate_name: string | null;
+  /** Full CREATE INDEX statement of the valid duplicate index */
+  valid_duplicate_definition: string | null;
+}
+
+/** Recommendation for handling an invalid index */
+export type InvalidIndexRecommendation = "DROP" | "RECREATE" | "UNCERTAIN";
+
+/** Threshold for considering a table "small" (quick to rebuild) */
+const SMALL_TABLE_ROW_THRESHOLD = 10000;
+
+/**
+ * Compute remediation recommendation for an invalid index using decision tree.
+ *
+ * Decision tree logic:
+ * 1. If has_valid_duplicate is true → DROP (valid duplicate exists, safe to remove)
+ * 2. If is_pk or is_unique is true → RECREATE (backs a constraint, must restore)
+ * 3. If table_row_estimate < 10000 → RECREATE (small table, quick rebuild)
+ * 4. Otherwise → UNCERTAIN (needs manual analysis of query plans)
+ *
+ * @param index - Invalid index with observation data
+ * @returns Recommendation: "DROP", "RECREATE", or "UNCERTAIN"
+ */
+export function getInvalidIndexRecommendation(index: InvalidIndex): InvalidIndexRecommendation {
+  // 1. Valid duplicate exists - safe to drop
+  if (index.has_valid_duplicate) {
+    return "DROP";
+  }
+
+  // 2. Backs a constraint - must recreate
+  if (index.is_pk || index.is_unique) {
+    return "RECREATE";
+  }
+
+  // 3. Small table - quick to recreate
+  if (index.table_row_estimate < SMALL_TABLE_ROW_THRESHOLD) {
+    return "RECREATE";
+  }
+
+  // 4. Large table without clear path - needs manual analysis
+  return "UNCERTAIN";
 }
 
 /**
@@ -564,11 +622,11 @@ export async function getClusterInfo(client: Client, pgMajorVersion: number = 16
 
 /**
  * Get invalid indexes from the database (H001).
- * Invalid indexes are indexes that failed to build (e.g., due to CONCURRENTLY failure).
+ * Invalid indexes have indisvalid = false, typically from failed CREATE INDEX CONCURRENTLY.
  *
  * @param client - Connected PostgreSQL client
  * @param pgMajorVersion - PostgreSQL major version (default: 16)
- * @returns Array of invalid index entries with size and FK support info
+ * @returns Array of invalid index entries with observation data for decision tree analysis
  */
 export async function getInvalidIndexes(client: Client, pgMajorVersion: number = 16): Promise<InvalidIndex[]> {
   const sql = getMetricSql(METRIC_NAMES.H001, pgMajorVersion);
@@ -576,6 +634,7 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
     const indexSizeBytes = parseInt(String(transformed.index_size_bytes || 0), 10);
+
     return {
       schema_name: String(transformed.schema_name || ""),
       table_name: String(transformed.table_name || ""),
@@ -585,6 +644,13 @@ export async function getInvalidIndexes(client: Client, pgMajorVersion: number =
       index_size_pretty: formatBytes(indexSizeBytes),
       index_definition: String(transformed.index_definition || ""),
       supports_fk: toBool(transformed.supports_fk),
+      is_pk: toBool(transformed.is_pk),
+      is_unique: toBool(transformed.is_unique),
+      constraint_name: transformed.constraint_name ? String(transformed.constraint_name) : null,
+      table_row_estimate: parseInt(String(transformed.table_row_estimate || 0), 10),
+      has_valid_duplicate: toBool(transformed.has_valid_duplicate),
+      valid_duplicate_name: transformed.valid_index_name ? String(transformed.valid_index_name) : null,
+      valid_duplicate_definition: transformed.valid_index_definition ? String(transformed.valid_index_definition) : null,
     };
   });
 }
