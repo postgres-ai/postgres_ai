@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "H001 report schema",
+  "description": "Invalid indexes report with remediation decision tree recommendations",
   "type": "object",
   "additionalProperties": false,
   "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
@@ -50,7 +51,14 @@
         "index_size_bytes",
         "index_size_pretty",
         "index_definition",
-        "supports_fk"
+        "supports_fk",
+        "is_pk",
+        "is_unique",
+        "constraint_name",
+        "table_row_estimate",
+        "has_valid_duplicate",
+        "valid_duplicate_name",
+        "valid_duplicate_definition"
       ],
       "properties": {
         "schema_name": { "type": "string" },
@@ -59,8 +67,39 @@
         "relation_name": { "type": "string" },
         "index_size_bytes": { "type": "number" },
         "index_size_pretty": { "type": "string" },
-        "index_definition": { "type": "string", "description": "Full CREATE INDEX statement from pg_get_indexdef(), useful for DROP/CREATE migrations" },
-        "supports_fk": { "type": "boolean" }
+        "index_definition": {
+          "type": "string",
+          "description": "Full CREATE INDEX statement from pg_get_indexdef()"
+        },
+        "supports_fk": { "type": "boolean" },
+        "is_pk": {
+          "type": "boolean",
+          "description": "True if this index backs a PRIMARY KEY constraint"
+        },
+        "is_unique": {
+          "type": "boolean",
+          "description": "True if this is a UNIQUE index (includes PK indexes)"
+        },
+        "constraint_name": {
+          "type": ["string", "null"],
+          "description": "Name of the constraint this index backs, or null if none"
+        },
+        "table_row_estimate": {
+          "type": "integer",
+          "description": "Estimated row count of the table from pg_class.reltuples"
+        },
+        "has_valid_duplicate": {
+          "type": "boolean",
+          "description": "True if there is a valid index on the same column(s)"
+        },
+        "valid_duplicate_name": {
+          "type": ["string", "null"],
+          "description": "Name of the valid duplicate index if one exists"
+        },
+        "valid_duplicate_definition": {
+          "type": ["string", "null"],
+          "description": "Full CREATE INDEX statement of the valid duplicate index from pg_get_indexdef()"
+        }
       }
     },
     "dbEntry": {
@@ -98,5 +137,3 @@
     }
   }
 }
-
-

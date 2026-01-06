@@ -15,6 +15,7 @@ export interface MockClientOptions {
   invalidIndexesRows?: any[];
   unusedIndexesRows?: any[];
   redundantIndexesRows?: any[];
+  sensitiveColumnsRows?: any[];
 }
 
 const DEFAULT_VERSION_ROWS = [
@@ -45,6 +46,7 @@ export function createMockClient(options: MockClientOptions = {}) {
     invalidIndexesRows = [],
     unusedIndexesRows = [],
     redundantIndexesRows = [],
+    sensitiveColumnsRows = [],
   } = options;
 
   return {
@@ -115,6 +117,10 @@ export function createMockClient(options: MockClientOptions = {}) {
           effective_cache_size_bytes: "4294967296",
           max_connections: 100,
         }] };
+      }
+      // S001: Sensitive columns query (from metrics.yml)
+      if (sql.includes("information_schema.columns") && sql.includes("tag_schema_name") && sql.includes("tag_column_name")) {
+        return { rows: sensitiveColumnsRows };
       }
       throw new Error(`Unexpected query: ${sql}`);
     },

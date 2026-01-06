@@ -287,27 +287,28 @@ describe("Report generators with mock client", () => {
           },
         ],
         databaseSizesRows: [{ datname: "postgres", size_bytes: "1073741824" }],
-        dbStatsRows: [{ 
-          numbackends: 5, 
-          xact_commit: 100, 
-          xact_rollback: 1, 
-          blks_read: 1000, 
-          blks_hit: 9000, 
-          tup_returned: 500, 
-          tup_fetched: 400, 
-          tup_inserted: 50, 
-          tup_updated: 30, 
-          tup_deleted: 10, 
-          deadlocks: 0, 
-          temp_files: 0, 
+        dbStatsRows: [{
+          numbackends: 5,
+          xact_commit: 100,
+          xact_rollback: 1,
+          blks_read: 1000,
+          blks_hit: 9000,
+          tup_returned: 500,
+          tup_fetched: 400,
+          tup_inserted: 50,
+          tup_updated: 30,
+          tup_deleted: 10,
+          deadlocks: 0,
+          temp_files: 0,
           temp_bytes: 0,
-          postmaster_uptime_s: 864000 
+          postmaster_uptime_s: 864000
         }],
         connectionStatesRows: [{ state: "active", count: 2 }, { state: "idle", count: 3 }],
         uptimeRows: [{ start_time: new Date("2024-01-01T00:00:00Z"), uptime: "10 days" }],
         invalidIndexesRows: [],
         unusedIndexesRows: [],
         redundantIndexesRows: [],
+        sensitiveColumnsRows: [],
       }
     );
 
@@ -320,6 +321,7 @@ describe("Report generators with mock client", () => {
     expect("H001" in reports).toBe(true);
     expect("H002" in reports).toBe(true);
     expect("H004" in reports).toBe(true);
+    // S001 is only available in Python reporter, not in CLI express mode
     expect(reports.A002.checkId).toBe("A002");
     expect(reports.A003.checkId).toBe("A003");
     expect(reports.A004.checkId).toBe("A004");
@@ -525,7 +527,231 @@ describe("H001 - Invalid indexes", () => {
     expect(dbData.database_size_pretty).toBeTruthy();
     expect(report.results["test-node"].postgres_version).toBeTruthy();
   });
+
+  test("getInvalidIndexes returns decision tree fields including valid_duplicate_definition", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "users",
+          index_name: "users_email_idx_invalid",
+          relation_name: "users",
+          index_size_bytes: "1048576",
+          index_definition: "CREATE INDEX users_email_idx_invalid ON public.users USING btree (email)",
+          supports_fk: false,
+          is_pk: false,
+          is_unique: false,
+          constraint_name: null,
+          table_row_estimate: "5000",
+          has_valid_duplicate: true,
+          valid_index_name: "users_email_idx",
+          valid_index_definition: "CREATE INDEX users_email_idx ON public.users USING btree (email)",
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as any);
+    expect(indexes.length).toBe(1);
+    expect(indexes[0].is_pk).toBe(false);
+    expect(indexes[0].is_unique).toBe(false);
+    expect(indexes[0].constraint_name).toBeNull();
+    expect(indexes[0].table_row_estimate).toBe(5000);
+    expect(indexes[0].has_valid_duplicate).toBe(true);
+    expect(indexes[0].valid_duplicate_name).toBe("users_email_idx");
+    expect(indexes[0].valid_duplicate_definition).toBe("CREATE INDEX users_email_idx ON public.users USING btree (email)");
+  });
+
+  test("getInvalidIndexes handles has_valid_duplicate: false with null values", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "orders",
+          index_name: "orders_status_idx_invalid",
+          relation_name: "orders",
+          index_size_bytes: "524288",
+          index_definition: "CREATE INDEX orders_status_idx_invalid ON public.orders USING btree (status)",
+          supports_fk: false,
+          is_pk: false,
+          is_unique: false,
+          constraint_name: null,
+          table_row_estimate: "100000",
+          has_valid_duplicate: false,
+          valid_index_name: null,
+          valid_index_definition: null,
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as Client);
+    expect(indexes.length).toBe(1);
+    expect(indexes[0].has_valid_duplicate).toBe(false);
+    expect(indexes[0].valid_duplicate_name).toBeNull();
+    expect(indexes[0].valid_duplicate_definition).toBeNull();
+  });
+
+  test("getInvalidIndexes handles is_pk: true with constraint", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "accounts",
+          index_name: "accounts_pkey_invalid",
+          relation_name: "accounts",
+          index_size_bytes: "262144",
+          index_definition: "CREATE UNIQUE INDEX accounts_pkey_invalid ON public.accounts USING btree (id)",
+          supports_fk: true,
+          is_pk: true,
+          is_unique: true,
+          constraint_name: "accounts_pkey",
+          table_row_estimate: "500",
+          has_valid_duplicate: false,
+          valid_index_name: null,
+          valid_index_definition: null,
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as Client);
+    expect(indexes.length).toBe(1);
+    expect(indexes[0].is_pk).toBe(true);
+    expect(indexes[0].is_unique).toBe(true);
+    expect(indexes[0].constraint_name).toBe("accounts_pkey");
+    expect(indexes[0].supports_fk).toBe(true);
+  });
+
+  test("getInvalidIndexes handles is_unique: true without PK", async () => {
+    const mockClient = createMockClient({
+      invalidIndexesRows: [
+        {
+          schema_name: "public",
+          table_name: "users",
+          index_name: "users_email_unique_invalid",
+          relation_name: "users",
+          index_size_bytes: "131072",
+          index_definition: "CREATE UNIQUE INDEX users_email_unique_invalid ON public.users USING btree (email)",
+          supports_fk: false,
+          is_pk: false,
+          is_unique: true,
+          constraint_name: "users_email_unique",
+          table_row_estimate: "25000",
+          has_valid_duplicate: true,
+          valid_index_name: "users_email_unique_idx",
+          valid_index_definition: "CREATE UNIQUE INDEX users_email_unique_idx ON public.users USING btree (email)",
+        },
+      ],
+    });
+
+    const indexes = await checkup.getInvalidIndexes(mockClient as Client);
+    expect(indexes.length).toBe(1);
+    expect(indexes[0].is_pk).toBe(false);
+    expect(indexes[0].is_unique).toBe(true);
+    expect(indexes[0].constraint_name).toBe("users_email_unique");
+    expect(indexes[0].has_valid_duplicate).toBe(true);
+  });
   // Top-level structure tests removed - covered by schema-validation.test.ts
+});
+
+// Tests for H001 decision tree recommendation logic
+describe("H001 - Decision tree recommendations", () => {
+  // Helper to create a minimal InvalidIndex for testing
+  const createTestIndex = (overrides: Partial<checkup.InvalidIndex> = {}): checkup.InvalidIndex => ({
+    schema_name: "public",
+    table_name: "test_table",
+    index_name: "test_idx",
+    relation_name: "public.test_table",
+    index_size_bytes: 1024,
+    index_size_pretty: "1 KiB",
+    index_definition: "CREATE INDEX test_idx ON public.test_table USING btree (col)",
+    supports_fk: false,
+    is_pk: false,
+    is_unique: false,
+    constraint_name: null,
+    table_row_estimate: 100000, // Large table by default
+    has_valid_duplicate: false,
+    valid_duplicate_name: null,
+    valid_duplicate_definition: null,
+    ...overrides,
+  });
+
+  test("returns DROP when has_valid_duplicate is true", () => {
+    const index = createTestIndex({ has_valid_duplicate: true, valid_duplicate_name: "existing_idx" });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("DROP");
+  });
+
+  test("returns DROP even when is_pk is true if has_valid_duplicate is true", () => {
+    // has_valid_duplicate takes precedence over is_pk
+    const index = createTestIndex({
+      has_valid_duplicate: true,
+      is_pk: true,
+      is_unique: true,
+    });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("DROP");
+  });
+
+  test("returns RECREATE when is_pk is true and no valid duplicate", () => {
+    const index = createTestIndex({
+      is_pk: true,
+      is_unique: true,
+      constraint_name: "test_pkey",
+    });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("RECREATE");
+  });
+
+  test("returns RECREATE when is_unique is true (non-PK) and no valid duplicate", () => {
+    const index = createTestIndex({
+      is_unique: true,
+      constraint_name: "test_unique",
+    });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("RECREATE");
+  });
+
+  test("returns RECREATE for small table (< 10K rows) without valid duplicate", () => {
+    const index = createTestIndex({ table_row_estimate: 5000 });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("RECREATE");
+  });
+
+  test("returns RECREATE for table at threshold boundary (9999 rows)", () => {
+    const index = createTestIndex({ table_row_estimate: 9999 });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("RECREATE");
+  });
+
+  test("returns UNCERTAIN for large table (>= 10K rows) at threshold boundary", () => {
+    const index = createTestIndex({ table_row_estimate: 10000 });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("UNCERTAIN");
+  });
+
+  test("returns UNCERTAIN for large table without valid duplicate or constraint", () => {
+    const index = createTestIndex({ table_row_estimate: 1000000 });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("UNCERTAIN");
+  });
+
+  test("returns UNCERTAIN for empty table (0 rows) with no valid duplicate - edge case", () => {
+    // Empty table should be RECREATE (< 10K threshold)
+    const index = createTestIndex({ table_row_estimate: 0 });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("RECREATE");
+  });
+
+  test("decision tree priority: has_valid_duplicate > is_pk > small_table", () => {
+    // Even with PK and small table, has_valid_duplicate should win
+    const index = createTestIndex({
+      has_valid_duplicate: true,
+      is_pk: true,
+      is_unique: true,
+      table_row_estimate: 100,
+    });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("DROP");
+  });
+
+  test("decision tree priority: is_pk > small_table", () => {
+    // is_pk should return RECREATE regardless of table size
+    const index = createTestIndex({
+      is_pk: true,
+      is_unique: true,
+      table_row_estimate: 1000000, // Large table
+    });
+    expect(checkup.getInvalidIndexRecommendation(index)).toBe("RECREATE");
+  });
 });
 
 // Tests for H002 (Unused indexes)

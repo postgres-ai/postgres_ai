@@ -469,21 +469,34 @@ def test_generate_h001_invalid_indexes_report(
     monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["maindb"])
     monkeypatch.setattr(generator, "get_index_definitions_from_sink", lambda db: {"idx_invalid": "CREATE INDEX idx_invalid ON public.tbl USING btree (col)"})
 
+    # H001 now queries multiple metrics and merges them by (schema_name, table_name, index_name)
+    base_metric = {
+        "schema_name": "public",
+        "table_name": "tbl",
+        "index_name": "idx_invalid",
+        "relation_name": "public.tbl",
+        "valid_index_name": "idx_valid_dup",
+        "valid_index_definition": "CREATE INDEX idx_valid_dup ON public.tbl USING btree (col)",
+    }
     responses = {
-        "pgwatch_pg_invalid_indexes": prom_result(
-            [
-                {
-                    "metric": {
-                        "schema_name": "public",
-                        "table_name": "tbl",
-                        "index_name": "idx_invalid",
-                        "relation_name": "public.tbl",
-                        "supports_fk": "1",
-                    },
-                    "value": [0, "2048"],
-                }
-            ]
-        )
+        "pgwatch_pg_invalid_indexes_index_size_bytes": prom_result(
+            [{"metric": base_metric, "value": [0, "2048"]}]
+        ),
+        "pgwatch_pg_invalid_indexes_supports_fk": prom_result(
+            [{"metric": base_metric, "value": [0, "1"]}]
+        ),
+        "pgwatch_pg_invalid_indexes_is_pk": prom_result(
+            [{"metric": base_metric, "value": [0, "0"]}]
+        ),
+        "pgwatch_pg_invalid_indexes_is_unique": prom_result(
+            [{"metric": base_metric, "value": [0, "0"]}]
+        ),
+        "pgwatch_pg_invalid_indexes_has_valid_duplicate": prom_result(
+            [{"metric": base_metric, "value": [0, "1"]}]
+        ),
+        "pgwatch_pg_invalid_indexes_table_row_estimate": prom_result(
+            [{"metric": base_metric, "value": [0, "1000"]}]
+        ),
     }
     monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
 
@@ -496,7 +509,16 @@ def test_generate_h001_invalid_indexes_report(
     assert entry["index_name"] == "idx_invalid"
     assert entry["index_size_pretty"].endswith("KiB")
     assert entry["index_definition"].startswith("CREATE INDEX")
+    # Decision tree fields - verify all are present and correctly parsed
     assert entry["supports_fk"] is True
+    assert entry["is_pk"] is False
+    assert entry["is_unique"] is False
+    assert entry["has_valid_duplicate"] is True
+    assert entry["valid_duplicate_name"] == "idx_valid_dup"
+    assert entry["valid_duplicate_definition"] == "CREATE INDEX idx_valid_dup ON public.tbl USING btree (col)"
+    assert entry["table_row_estimate"] == 1000
+    # constraint_name should be null when not backing a constraint
+    assert entry["constraint_name"] is None
 
 
 @pytest.mark.unit
@@ -896,6 +918,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_d004_from_a003",
         "generate_f001_from_a003",
         "generate_g001_from_a003",
+        # S001 is not implemented yet
     ]
 
     for name in independent_builders:
@@ -914,6 +937,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008',
         'M001', 'M002', 'M003',
         'N001',
+        # S001 is not implemented yet
     }
     assert set(reports.keys()) == expected_report_codes
 
