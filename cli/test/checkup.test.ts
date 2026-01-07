@@ -1114,4 +1114,32 @@ describe("checkup-api", () => {
   });
 });
 
+// Tests for markdown API types
+describe("Markdown API types", () => {
+  test("MarkdownStatus type includes expected values", () => {
+    // Type check - this is a compile-time test
+    const statuses: api.MarkdownStatus[] = ["pending", "processing", "completed", "failed"];
+    expect(statuses.length).toBe(4);
+  });
+
+  test("MarkdownStatusResponse interface structure", () => {
+    const response: api.MarkdownStatusResponse = {
+      status: "completed",
+      markdown: "# Report\n\nContent here",
+    };
+    expect(response.status).toBe("completed");
+    expect(response.markdown).toBeDefined();
+    expect(response.error).toBeUndefined();
+  });
+
+  test("MarkdownStatusResponse with error", () => {
+    const response: api.MarkdownStatusResponse = {
+      status: "failed",
+      error: "Generation failed",
+    };
+    expect(response.status).toBe("failed");
+    expect(response.error).toBe("Generation failed");
+    expect(response.markdown).toBeUndefined();
+  });
+});
 

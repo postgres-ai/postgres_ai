@@ -384,3 +384,150 @@ export async function uploadCheckupReportJson(params: {
   }
   return { reportChunkId: chunkId };
 }
+
+/**
+ * Status of markdown generation request
+ */
+export type MarkdownStatus = "pending" | "processing" | "completed" | "failed";
+
+/**
+ * Response from markdown status check
+ */
+export interface MarkdownStatusResponse {
+  status: MarkdownStatus;
+  markdown?: string;
+  error?: string;
+}
+
+/**
+ * Request markdown generation for an uploaded checkup report.
+ * This initiates async markdown generation on the server.
+ *
+ * @param params - Configuration for the request
+ * @param params.apiKey - PostgresAI API access token
+ * @param params.apiBaseUrl - Base URL of the PostgresAI API
+ * @param params.reportId - ID of the checkup report to generate markdown for
+ * @returns Promise resolving to a request ID for polling status
+ * @throws {RpcError} On API failures (402 for non-paid users, other 4xx/5xx)
+ */
+export async function requestMarkdownGeneration(params: {
+  apiKey: string;
+  apiBaseUrl: string;
+  reportId: number;
+}): Promise<{ requestId: string }> {
+  const { apiKey, apiBaseUrl, reportId } = params;
+
+  const resp = await postRpc<any>({
+    apiKey,
+    apiBaseUrl,
+    rpcName: "checkup_markdown_request",
+    bodyObj: {
+      access_token: apiKey,
+      checkup_report_id: reportId,
+    },
+  });
+
+  const requestId = resp?.request_id;
+  if (typeof requestId !== "string" || !requestId) {
+    throw new Error(`Unexpected checkup_markdown_request response: ${JSON.stringify(resp)}`);
+  }
+  return { requestId };
+}
+
+/**
+ * Check the status of a markdown generation request.
+ *
+ * @param params - Configuration for the status check
+ * @param params.apiKey - PostgresAI API access token
+ * @param params.apiBaseUrl - Base URL of the PostgresAI API
+ * @param params.requestId - Request ID from requestMarkdownGeneration
+ * @returns Promise resolving to the current status and markdown content if completed
+ * @throws {RpcError} On API failures
+ */
+export async function getMarkdownStatus(params: {
+  apiKey: string;
+  apiBaseUrl: string;
+  requestId: string;
+}): Promise<MarkdownStatusResponse> {
+  const { apiKey, apiBaseUrl, requestId } = params;
+
+  const resp = await postRpc<any>({
+    apiKey,
+    apiBaseUrl,
+    rpcName: "checkup_markdown_status",
+    bodyObj: {
+      access_token: apiKey,
+      request_id: requestId,
+    },
+  });
+
+  const status = resp?.status as MarkdownStatus;
+  if (!["pending", "processing", "completed", "failed"].includes(status)) {
+    throw new Error(`Unexpected checkup_markdown_status response: ${JSON.stringify(resp)}`);
+  }
+
+  return {
+    status,
+    markdown: typeof resp?.markdown === "string" ? resp.markdown : undefined,
+    error: typeof resp?.error === "string" ? resp.error : undefined,
+  };
+}
+
+/**
+ * Request markdown generation and poll until complete or timeout.
+ * This is a convenience function that combines requestMarkdownGeneration
+ * and getMarkdownStatus with polling logic.
+ *
+ * @param params - Configuration for fetching markdown
+ * @param params.apiKey - PostgresAI API access token
+ * @param params.apiBaseUrl - Base URL of the PostgresAI API
+ * @param params.reportId - ID of the checkup report
+ * @param params.timeoutMs - Maximum time to wait for generation (default: 120000ms)
+ * @param params.pollIntervalMs - Interval between status checks (default: 2000ms)
+ * @param params.onProgress - Optional callback for progress updates
+ * @returns Promise resolving to the generated markdown content
+ * @throws {RpcError} On API failures (402 for non-paid users)
+ * @throws {Error} On timeout or generation failure
+ */
+export async function fetchMarkdownReport(params: {
+  apiKey: string;
+  apiBaseUrl: string;
+  reportId: number;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  onProgress?: (message: string) => void;
+}): Promise<string> {
+  const {
+    apiKey,
+    apiBaseUrl,
+    reportId,
+    timeoutMs = 120_000,
+    pollIntervalMs = 2000,
+    onProgress,
+  } = params;
+
+  // Request markdown generation
+  const { requestId } = await requestMarkdownGeneration({ apiKey, apiBaseUrl, reportId });
+
+  const startTime = Date.now();
+
+  // Poll for completion
+  while (Date.now() - startTime < timeoutMs) {
+    const result = await getMarkdownStatus({ apiKey, apiBaseUrl, requestId });
+
+    if (result.status === "completed" && result.markdown) {
+      return result.markdown;
+    }
+
+    if (result.status === "failed") {
+      throw new Error(`Markdown generation failed: ${result.error || "Unknown error"}`);
+    }
+
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    onProgress?.(`Generating markdown report... (${elapsed}s)`);
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(`Markdown generation timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+}
