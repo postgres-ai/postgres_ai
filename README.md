@@ -3,6 +3,8 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![GitLab](https://img.shields.io/badge/GitLab-postgres--ai%2Fpostgres__ai-orange?logo=gitlab)](https://gitlab.com/postgres-ai/postgres_ai)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-blue?logo=postgresql)](https://www.postgresql.org/)
+[![CLI Coverage](https://img.shields.io/gitlab/pipeline-coverage/postgres-ai%2Fpostgres_ai?branch=main&job_name=cli%3Anode%3Atests&label=CLI%20coverage)](https://gitlab.com/postgres-ai/postgres_ai/-/pipelines)
+[![Reporter Coverage](https://img.shields.io/gitlab/pipeline-coverage/postgres-ai%2Fpostgres_ai?branch=main&job_name=reporter%3Atests&label=Reporter%20coverage)](https://gitlab.com/postgres-ai/postgres_ai/-/pipelines)
 
 **Expert-level Postgres monitoring for humans and AI systems**
 
