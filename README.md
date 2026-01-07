@@ -1,4 +1,4 @@
-# postgres_ai monitoring
+# postgres_ai monitoring & checkup
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![GitLab](https://img.shields.io/badge/GitLab-postgres--ai%2Fpostgres__ai-orange?logo=gitlab)](https://gitlab.com/postgres-ai/postgres_ai)
@@ -6,9 +6,9 @@
 [![CLI Coverage](https://img.shields.io/gitlab/pipeline-coverage/postgres-ai%2Fpostgres_ai?branch=main&job_name=cli%3Anode%3Atests&label=CLI%20coverage)](https://gitlab.com/postgres-ai/postgres_ai/-/pipelines)
 [![Reporter Coverage](https://img.shields.io/gitlab/pipeline-coverage/postgres-ai%2Fpostgres_ai?branch=main&job_name=reporter%3Atests&label=Reporter%20coverage)](https://gitlab.com/postgres-ai/postgres_ai/-/pipelines)
 
-**Expert-level Postgres monitoring for humans and AI systems**
+**Expert-level Postgres monitoring and checkup for humans and AI systems**
 
-Part of [PostgresAI](https://postgres.ai) — postgres_ai monitoring is an open-source component of the Self-Driving Postgres initiative, providing advanced monitoring and intelligent root cause analysis for PostgreSQL databases.
+Part of [PostgresAI](https://postgres.ai) — an open-source component of the Self-Driving Postgres initiative, providing advanced monitoring, automated health checks, and intelligent root cause analysis for PostgreSQL databases.
 
 ![postgres_ai monitoring](assets/postgres_ai_pic.png)
 
@@ -89,7 +89,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 ---
 
-**[PostgresAI](https://postgres.ai)** — Advanced Postgres monitoring, optimization, and automation for fast-growing companies.
+**[PostgresAI](https://postgres.ai)** — Advanced Postgres monitoring, checkup, optimization, and automation for fast-growing companies.
 
 - [Documentation](https://postgres.ai/docs)
 - [Enterprise Support](https://postgres.ai/consulting)
