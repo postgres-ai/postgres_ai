@@ -326,6 +326,91 @@ describe("init module", () => {
     expect(calls[calls.length - 1].toLowerCase()).toBe("rollback;");
   });
 
+  test("verifyInitSetup skips search_path check for supabase provider", async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (sql: string, params?: any) => {
+        calls.push(String(sql));
+
+        if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).toLowerCase() === "rollback;") {
+          return { rowCount: 1, rows: [] };
+        }
+        // Return empty rolconfig - would fail without provider=supabase
+        if (String(sql).includes("select rolconfig")) {
+          return { rowCount: 1, rows: [{ rolconfig: null }] };
+        }
+        if (String(sql).includes("from pg_catalog.pg_roles")) {
+          return { rowCount: 1, rows: [{ rolname: DEFAULT_MONITORING_USER }] };
+        }
+        if (String(sql).includes("has_database_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("pg_has_role")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_table_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("to_regclass")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_function_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_schema_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+
+        throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+      },
+    };
+
+    // With provider=supabase, should pass even without search_path
+    const r = await init.verifyInitSetup({
+      client: client as any,
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      includeOptionalPermissions: false,
+      provider: "supabase",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.missingRequired.length).toBe(0);
+    // Should not have queried for rolconfig since we skip search_path check
+    expect(calls.some((c) => c.includes("select rolconfig"))).toBe(false);
+  });
+
+  test("buildInitPlan preserves comments when filtering ALTER USER", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+      provider: "supabase",
+    });
+    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    expect(permStep).toBeDefined();
+    // Should have removed ALTER USER but kept comments
+    expect(permStep!.sql.toLowerCase()).not.toMatch(/^\s*alter\s+user/m);
+    // Should still have comment lines
+    expect(permStep!.sql).toMatch(/^--/m);
+  });
+
+  test("validateProvider returns null for known providers", () => {
+    expect(init.validateProvider(undefined)).toBe(null);
+    expect(init.validateProvider("self-managed")).toBe(null);
+    expect(init.validateProvider("supabase")).toBe(null);
+  });
+
+  test("validateProvider returns warning for unknown providers", () => {
+    const warning = init.validateProvider("unknown-provider");
+    expect(warning).not.toBe(null);
+    expect(warning).toMatch(/Unknown provider/);
+    expect(warning).toMatch(/unknown-provider/);
+  });
+
   test("redactPasswordsInSql redacts password literals with embedded quotes", async () => {
     const plan = await init.buildInitPlan({
       database: "mydb",
@@ -353,6 +438,23 @@ describe("CLI commands", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/SQL plan \(offline; not connected\)/);
     expect(r.stdout).toMatch(new RegExp(`grant connect on database "mydb" to "${DEFAULT_MONITORING_USER}"`, "i"));
+  });
+
+  test("cli: prepare-db --print-sql with --provider supabase skips role step", () => {
+    const r = runCli(["prepare-db", "--print-sql", "-d", "mydb", "--password", "monpw", "--provider", "supabase"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/provider: supabase/);
+    // Should not have 01.role step
+    expect(r.stdout).not.toMatch(/-- 01\.role/);
+    // Should have 02.permissions step
+    expect(r.stdout).toMatch(/-- 02\.permissions/);
+  });
+
+  test("cli: prepare-db warns about unknown provider", () => {
+    const r = runCli(["prepare-db", "--print-sql", "-d", "mydb", "--password", "monpw", "--provider", "unknown-cloud"]);
+    expect(r.status).toBe(0);
+    // Should warn about unknown provider
+    expect(r.stderr).toMatch(/Unknown provider.*unknown-cloud/);
   });
 
   test("pgai wrapper forwards to postgresai CLI", () => {

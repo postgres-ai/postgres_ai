@@ -15,6 +15,9 @@ export const DEFAULT_MONITORING_USER = "postgres_ai_mon";
  */
 export type DbProvider = string;
 
+/** Known providers with special handling. Unknown providers are treated as self-managed. */
+export const KNOWN_PROVIDERS = ["self-managed", "supabase"] as const;
+
 /** Providers where we skip role creation (users managed externally). */
 const SKIP_ROLE_CREATION_PROVIDERS = ["supabase"];
 
@@ -23,6 +26,12 @@ const SKIP_ALTER_USER_PROVIDERS = ["supabase"];
 
 /** Providers where we skip search_path verification (not set via ALTER USER). */
 const SKIP_SEARCH_PATH_CHECK_PROVIDERS = ["supabase"];
+
+/** Check if a provider is known and return a warning message if not. */
+export function validateProvider(provider: string | undefined): string | null {
+  if (!provider || KNOWN_PROVIDERS.includes(provider as any)) return null;
+  return `Unknown provider "${provider}". Known providers: ${KNOWN_PROVIDERS.join(", ")}. Treating as self-managed.`;
+}
 
 export type PgClientConfig = {
   connectionString?: string;
@@ -525,7 +534,13 @@ end $$;`;
   if (SKIP_ALTER_USER_PROVIDERS.includes(provider)) {
     permissionsSql = permissionsSql
       .split("\n")
-      .filter((line) => !line.toLowerCase().includes("alter user"))
+      .filter((line) => {
+        const trimmed = line.trim();
+        // Keep comments and empty lines
+        if (trimmed.startsWith("--") || trimmed === "") return true;
+        // Filter out ALTER USER statements (case-insensitive, flexible whitespace)
+        return !/^\s*alter\s+user\s+/i.test(line);
+      })
       .join("\n");
   }
 

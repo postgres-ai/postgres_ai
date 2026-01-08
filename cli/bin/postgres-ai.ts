@@ -12,7 +12,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
 import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, type PgCompatibleError } from "../lib/supabase";
 import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
@@ -565,7 +565,7 @@ program
   .option("--monitoring-user <name>", "Monitoring role name to create/update", DEFAULT_MONITORING_USER)
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
-  .option("--provider <provider>", "Database provider (e.g., supabase, rds, aurora). Affects which steps are executed.")
+  .option("--provider <provider>", "Database provider (e.g., supabase). Affects which steps are executed.")
   .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
   .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
   .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
@@ -686,6 +686,12 @@ program
 
     const shouldPrintSql = !!opts.printSql;
     const redactPasswords = (sql: string): string => redactPasswordsInSql(sql);
+
+    // Validate provider and warn if unknown
+    const providerWarning = validateProvider(opts.provider);
+    if (providerWarning) {
+      console.warn(`⚠ ${providerWarning}`);
+    }
 
     // Offline mode: allow printing SQL without providing/using an admin connection.
     // Useful for audits/reviews; caller can provide -d/PGDATABASE.
