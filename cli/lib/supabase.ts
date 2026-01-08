@@ -66,6 +66,15 @@ type SupabaseApiResponse = {
 } | Record<string, unknown>[];
 
 /**
+ * Validate Supabase project reference format.
+ * Project refs are typically 20 lowercase alphanumeric characters.
+ */
+function isValidProjectRef(ref: string): boolean {
+  // Supabase project refs are alphanumeric, typically 20 chars, lowercase
+  return /^[a-z0-9]{10,30}$/i.test(ref);
+}
+
+/**
  * Supabase Management API client for executing SQL queries.
  */
 export class SupabaseClient {
@@ -78,6 +87,10 @@ export class SupabaseClient {
     if (!config.accessToken) {
       throw new Error("Supabase access token is required");
     }
+    // Validate project ref format to prevent path traversal
+    if (!isValidProjectRef(config.projectRef)) {
+      throw new Error(`Invalid Supabase project reference format: "${config.projectRef}". Expected 10-30 alphanumeric characters.`);
+    }
     this.config = config;
   }
 
@@ -85,12 +98,13 @@ export class SupabaseClient {
    * Execute a SQL query via the Supabase Management API.
    *
    * @param sql The SQL query to execute
-   * @param readOnly Whether this is a read-only query (default: false for DDL/DML)
-   * @returns Query result with rows and rowCount
+   * @param readOnly If true, uses read_only flag in API request (default: false for DDL/DML operations)
+   * @returns Query result with rows and rowCount (rowCount is array length for SELECT queries)
    * @throws PgCompatibleError on failure
    */
   async query(sql: string, readOnly = false): Promise<SupabaseQueryResult> {
-    const url = `${SUPABASE_API_BASE}/v1/projects/${this.config.projectRef}/database/query`;
+    // URL-encode projectRef for safety (validated in constructor, but defense in depth)
+    const url = `${SUPABASE_API_BASE}/v1/projects/${encodeURIComponent(this.config.projectRef)}/database/query`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -356,7 +370,9 @@ export function resolveSupabaseConfig(opts: {
 /**
  * Extract project reference from a Supabase database URL.
  * Supabase database URLs typically look like:
- *   postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+ *   - Direct: postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+ *   - Pooler (modern): postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+ *   - Pooler (legacy): postgresql://postgres:[PASSWORD]@[PROJECT_REF].pooler.supabase.com:6543/postgres
  *
  * @param dbUrl PostgreSQL connection URL
  * @returns Project reference if found, undefined otherwise
@@ -366,15 +382,25 @@ export function extractProjectRefFromUrl(dbUrl: string): string | undefined {
     const url = new URL(dbUrl);
     const host = url.hostname;
 
-    // Match db.<ref>.supabase.co or <ref>.supabase.co patterns
+    // Match db.<ref>.supabase.co or <ref>.supabase.co patterns (direct connection)
     const match = host.match(/^(?:db\.)?([^.]+)\.supabase\.co$/i);
     if (match && match[1]) {
       return match[1];
     }
 
-    // Also check for pooler URLs: <project-ref>.pooler.supabase.com
-    const poolerMatch = host.match(/^([^.]+)\.pooler\.supabase\.com$/i);
-    if (poolerMatch && poolerMatch[1]) {
+    // Modern pooler URLs: project ref is in the username as postgres.<ref>
+    // Example: postgresql://postgres.abcdefghij:password@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+    if (host.includes("pooler.supabase.com")) {
+      const username = url.username;
+      const userMatch = username.match(/^postgres\.([a-z0-9]+)$/i);
+      if (userMatch && userMatch[1]) {
+        return userMatch[1];
+      }
+    }
+
+    // Legacy pooler URLs: <project-ref>.pooler.supabase.com (fallback)
+    const poolerMatch = host.match(/^([a-z0-9]+)\.pooler\.supabase\.com$/i);
+    if (poolerMatch && poolerMatch[1] && !poolerMatch[1].startsWith("aws-")) {
       return poolerMatch[1];
     }
 
@@ -411,21 +437,11 @@ export async function applyInitPlanViaSupabase(params: {
     sql: string;
     optional?: boolean;
   }): Promise<void> => {
-    // Supabase API handles transactions automatically for single statements
-    // For multi-statement SQL, we wrap in a transaction
+    // Wrap in explicit transaction for atomic execution.
+    // Note: Supabase API uses pooled connections, so if the transaction fails,
+    // PostgreSQL automatically rolls it back - no separate ROLLBACK needed.
     const wrappedSql = `BEGIN;\n${step.sql}\nCOMMIT;`;
-
-    try {
-      await params.client.query(wrappedSql, false);
-    } catch (e) {
-      // On error, attempt rollback (may already be rolled back by Supabase)
-      try {
-        await params.client.query("ROLLBACK;", false);
-      } catch {
-        // ignore rollback errors
-      }
-      throw e;
-    }
+    await params.client.query(wrappedSql, false);
   };
 
   // Apply non-optional steps first
@@ -498,6 +514,12 @@ export async function applyInitPlanViaSupabase(params: {
 /**
  * Verify init setup via Supabase Management API.
  * Mirrors the behavior of verifyInitSetup() in init.ts but uses Supabase API.
+ *
+ * @param params.client - Supabase client for API calls
+ * @param params.database - Database name to verify
+ * @param params.monitoringUser - Role name to check permissions for
+ * @param params.includeOptionalPermissions - Whether to check optional permissions
+ * @returns Object with ok status and arrays of missing required/optional items
  */
 export async function verifyInitSetupViaSupabase(params: {
   client: SupabaseClient;
@@ -514,6 +536,11 @@ export async function verifyInitSetupViaSupabase(params: {
 
   const role = params.monitoringUser;
   const db = params.database;
+
+  // Validate role name to prevent SQL injection
+  if (!isValidIdentifier(role)) {
+    throw new Error(`Invalid monitoring user name: "${role}". Must be a valid PostgreSQL identifier (letters, digits, underscores, max 63 chars, starting with letter or underscore).`);
+  }
 
   // Check if role exists
   const roleRes = await params.client.query(
@@ -554,13 +581,22 @@ export async function verifyInitSetupViaSupabase(params: {
     missingRequired.push("SELECT on pg_catalog.pg_index");
   }
 
-  // Check postgres_ai schema
+  // Check postgres_ai schema exists and has USAGE privilege
+  // First check if schema exists to avoid has_schema_privilege throwing error
   const schemaExistsRes = await params.client.query(
-    `SELECT has_schema_privilege('${escapeLiteral(role)}', 'postgres_ai', 'USAGE') as ok`,
+    "SELECT nspname FROM pg_namespace WHERE nspname = 'postgres_ai'",
     true
   );
-  if (!schemaExistsRes.rows?.[0]?.ok) {
-    missingRequired.push("USAGE on schema postgres_ai");
+  if (schemaExistsRes.rowCount === 0) {
+    missingRequired.push("schema postgres_ai exists");
+  } else {
+    const schemaPrivRes = await params.client.query(
+      `SELECT has_schema_privilege('${escapeLiteral(role)}', 'postgres_ai', 'USAGE') as ok`,
+      true
+    );
+    if (!schemaPrivRes.rows?.[0]?.ok) {
+      missingRequired.push("USAGE on schema postgres_ai");
+    }
   }
 
   // Check pg_statistic view
@@ -613,23 +649,39 @@ export async function verifyInitSetupViaSupabase(params: {
     }
   }
 
-  // Check helper functions
-  const explainFnRes = await params.client.query(
-    `SELECT has_function_privilege('${escapeLiteral(role)}', 'postgres_ai.explain_generic(text, text, text)', 'EXECUTE') as ok`,
+  // Check helper functions - first verify they exist to avoid has_function_privilege errors
+  const explainFnExistsRes = await params.client.query(
+    "SELECT oid FROM pg_proc WHERE proname = 'explain_generic' AND pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'postgres_ai')",
     true
   );
-  if (!explainFnRes.rows?.[0]?.ok) {
-    missingRequired.push(
-      "EXECUTE on postgres_ai.explain_generic(text, text, text)"
+  if (explainFnExistsRes.rowCount === 0) {
+    missingRequired.push("function postgres_ai.explain_generic exists");
+  } else {
+    const explainFnRes = await params.client.query(
+      `SELECT has_function_privilege('${escapeLiteral(role)}', 'postgres_ai.explain_generic(text, text, text)', 'EXECUTE') as ok`,
+      true
     );
+    if (!explainFnRes.rows?.[0]?.ok) {
+      missingRequired.push(
+        "EXECUTE on postgres_ai.explain_generic(text, text, text)"
+      );
+    }
   }
 
-  const tableDescribeFnRes = await params.client.query(
-    `SELECT has_function_privilege('${escapeLiteral(role)}', 'postgres_ai.table_describe(text)', 'EXECUTE') as ok`,
+  const tableDescribeFnExistsRes = await params.client.query(
+    "SELECT oid FROM pg_proc WHERE proname = 'table_describe' AND pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'postgres_ai')",
     true
   );
-  if (!tableDescribeFnRes.rows?.[0]?.ok) {
-    missingRequired.push("EXECUTE on postgres_ai.table_describe(text)");
+  if (tableDescribeFnExistsRes.rowCount === 0) {
+    missingRequired.push("function postgres_ai.table_describe exists");
+  } else {
+    const tableDescribeFnRes = await params.client.query(
+      `SELECT has_function_privilege('${escapeLiteral(role)}', 'postgres_ai.table_describe(text)', 'EXECUTE') as ok`,
+      true
+    );
+    if (!tableDescribeFnRes.rows?.[0]?.ok) {
+      missingRequired.push("EXECUTE on postgres_ai.table_describe(text)");
+    }
   }
 
   // Optional permissions
@@ -642,16 +694,20 @@ export async function verifyInitSetupViaSupabase(params: {
     if (extRes.rowCount === 0) {
       missingOptional.push("extension rds_tools");
     } else {
-      const fnRes = await params.client.query(
-        `SELECT has_function_privilege('${escapeLiteral(role)}', 'rds_tools.pg_ls_multixactdir()', 'EXECUTE') as ok`,
-        true
-      );
-      if (!fnRes.rows?.[0]?.ok) {
+      try {
+        const fnRes = await params.client.query(
+          `SELECT has_function_privilege('${escapeLiteral(role)}', 'rds_tools.pg_ls_multixactdir()', 'EXECUTE') as ok`,
+          true
+        );
+        if (!fnRes.rows?.[0]?.ok) {
+          missingOptional.push("EXECUTE on rds_tools.pg_ls_multixactdir()");
+        }
+      } catch {
         missingOptional.push("EXECUTE on rds_tools.pg_ls_multixactdir()");
       }
     }
 
-    // Self-managed extras
+    // Self-managed extras (these are hardcoded constants, safe to use directly)
     const optionalFns = [
       "pg_catalog.pg_stat_file(text)",
       "pg_catalog.pg_stat_file(text, boolean)",
@@ -659,11 +715,16 @@ export async function verifyInitSetupViaSupabase(params: {
       "pg_catalog.pg_ls_dir(text, boolean, boolean)",
     ];
     for (const fn of optionalFns) {
-      const fnRes = await params.client.query(
-        `SELECT has_function_privilege('${escapeLiteral(role)}', '${fn}', 'EXECUTE') as ok`,
-        true
-      );
-      if (!fnRes.rows?.[0]?.ok) {
+      try {
+        const fnRes = await params.client.query(
+          `SELECT has_function_privilege('${escapeLiteral(role)}', '${fn}', 'EXECUTE') as ok`,
+          true
+        );
+        if (!fnRes.rows?.[0]?.ok) {
+          missingOptional.push(`EXECUTE on ${fn}`);
+        }
+      } catch {
+        // Function may not exist on this PostgreSQL version
         missingOptional.push(`EXECUTE on ${fn}`);
       }
     }
@@ -677,10 +738,24 @@ export async function verifyInitSetupViaSupabase(params: {
 }
 
 /**
+ * Validate that a string is a valid PostgreSQL identifier.
+ * PostgreSQL identifiers can contain letters, digits, and underscores,
+ * must start with a letter or underscore, and are max 63 characters.
+ */
+function isValidIdentifier(name: string): boolean {
+  return /^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(name);
+}
+
+/**
  * Escape a string literal for use in SQL.
+ * Handles null bytes and single quotes for safe SQL interpolation.
  * Note: This is for dynamic query building where parameterized queries aren't possible.
  */
 function escapeLiteral(value: string): string {
+  // Reject null bytes which can cause string truncation
+  if (value.includes("\0")) {
+    throw new Error("SQL literal cannot contain null bytes");
+  }
   // Escape single quotes by doubling them
   return value.replace(/'/g, "''");
 }
