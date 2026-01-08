@@ -457,6 +457,23 @@ describe("CLI commands", () => {
     expect(r.stderr).toMatch(/Unknown provider.*unknown-cloud/);
   });
 
+  test("cli: prepare-db --reset-password with supabase provider would have no role step", async () => {
+    // When using supabase provider, the role creation step is skipped.
+    // This means --reset-password (which only runs 01.role) would have no steps.
+    // The CLI should error in this case. We test the underlying plan logic here.
+    const plan = await (await import("../lib/init")).buildInitPlan({
+      database: "mydb",
+      monitoringUser: "mon",
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+      provider: "supabase",
+    });
+    // Simulate what --reset-password does: filter to only 01.role step
+    const resetPasswordSteps = plan.steps.filter((s) => s.name === "01.role");
+    // For supabase, this should be empty (role creation is skipped)
+    expect(resetPasswordSteps.length).toBe(0);
+  });
+
   test("pgai wrapper forwards to postgresai CLI", () => {
     const r = runPgai(["--help"]);
     expect(r.status).toBe(0);
