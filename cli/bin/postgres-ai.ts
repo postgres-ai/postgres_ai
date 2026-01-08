@@ -804,6 +804,7 @@ program
         }
 
         let monPassword: string;
+        let passwordGenerated = false;
         try {
           const resolved = await resolveMonitoringPassword({
             passwordFlag: opts.password,
@@ -811,6 +812,7 @@ program
             monitoringUser: opts.monitoringUser,
           });
           monPassword = resolved.password;
+          passwordGenerated = resolved.generated;
           if (resolved.generated) {
             const canPrint = process.stdout.isTTY || !!opts.printPassword || jsonOutput;
             if (canPrint) {
@@ -822,7 +824,7 @@ program
                 console.error("");
                 console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
               }
-              // For JSON mode, password will be included in the success output
+              // For JSON mode, password will be included in the success output below
             } else {
               console.error(
                 [
@@ -873,7 +875,7 @@ program
         });
 
         if (jsonOutput) {
-          outputJson({
+          const result: Record<string, unknown> = {
             success: true,
             mode: "supabase",
             action: opts.resetPassword ? "reset-password" : "apply",
@@ -884,7 +886,11 @@ program
             warnings: skippedOptional.length > 0
               ? ["Some optional steps were skipped (not supported or insufficient privileges)"]
               : [],
-          });
+          };
+          if (passwordGenerated) {
+            result.generatedPassword = monPassword;
+          }
+          outputJson(result);
         } else {
           console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
           if (skippedOptional.length > 0) {
@@ -1093,6 +1099,7 @@ program
       }
 
       let monPassword: string;
+      let passwordGenerated = false;
       try {
         const resolved = await resolveMonitoringPassword({
           passwordFlag: opts.password,
@@ -1100,6 +1107,7 @@ program
           monitoringUser: opts.monitoringUser,
         });
         monPassword = resolved.password;
+        passwordGenerated = resolved.generated;
         if (resolved.generated) {
           const canPrint = process.stdout.isTTY || !!opts.printPassword || jsonOutput;
           if (canPrint) {
@@ -1113,7 +1121,7 @@ program
               console.error("");
               console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
             }
-            // For JSON mode, password will be included in the success output
+            // For JSON mode, password will be included in the success output below
           } else {
             console.error(
               [
@@ -1161,7 +1169,7 @@ program
       const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
 
       if (jsonOutput) {
-        outputJson({
+        const result: Record<string, unknown> = {
           success: true,
           mode: "direct",
           action: opts.resetPassword ? "reset-password" : "apply",
@@ -1172,7 +1180,11 @@ program
           warnings: skippedOptional.length > 0
             ? ["Some optional steps were skipped (not supported or insufficient privileges)"]
             : [],
-        });
+        };
+        if (passwordGenerated) {
+          result.generatedPassword = monPassword;
+        }
+        outputJson(result);
       } else {
         console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
         if (skippedOptional.length > 0) {
