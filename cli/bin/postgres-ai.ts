@@ -13,6 +13,7 @@ import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, type PgCompatibleError } from "../lib/supabase";
 import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
 import { maskSecret } from "../lib/util";
@@ -568,6 +569,10 @@ program
   .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
   .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
   .option("--print-password", "Print generated monitoring password (DANGEROUS in CI logs)", false)
+  .option("--supabase", "Use Supabase Management API instead of direct PostgreSQL connection", false)
+  .option("--supabase-access-token <token>", "Supabase Management API access token (or SUPABASE_ACCESS_TOKEN env)")
+  .option("--supabase-project-ref <ref>", "Supabase project reference (or SUPABASE_PROJECT_REF env)")
+  .option("--json", "Output result as JSON (machine-readable)", false)
   .addHelpText(
     "after",
     [
@@ -607,6 +612,13 @@ program
       "",
       "Offline SQL plan (no DB connection):",
       "  postgresai prepare-db --print-sql",
+      "",
+      "Supabase mode (use Management API instead of direct connection):",
+      "  postgresai prepare-db --supabase --supabase-project-ref <ref>",
+      "  SUPABASE_ACCESS_TOKEN=... postgresai prepare-db --supabase --supabase-project-ref <ref>",
+      "",
+      "  Generate a token at: https://supabase.com/dashboard/account/tokens",
+      "  Find your project ref in: https://supabase.com/dashboard/project/<ref>",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -623,15 +635,46 @@ program
     resetPassword?: boolean;
     printSql?: boolean;
     printPassword?: boolean;
+    supabase?: boolean;
+    supabaseAccessToken?: string;
+    supabaseProjectRef?: string;
+    json?: boolean;
   }, cmd: Command) => {
-    if (opts.verify && opts.resetPassword) {
-      console.error("✗ Provide only one of --verify or --reset-password");
+    // JSON output helper
+    const jsonOutput = opts.json;
+    const outputJson = (data: Record<string, unknown>) => {
+      console.log(JSON.stringify(data, null, 2));
+    };
+    const outputError = (error: {
+      message: string;
+      step?: string;
+      code?: string;
+      detail?: string;
+      hint?: string;
+      httpStatus?: number;
+    }) => {
+      if (jsonOutput) {
+        outputJson({
+          success: false,
+          mode: opts.supabase ? "supabase" : "direct",
+          error,
+        });
+      } else {
+        console.error(`Error: prepare-db${opts.supabase ? " (Supabase)" : ""}: ${error.message}`);
+        if (error.step) console.error(`  Step: ${error.step}`);
+        if (error.code) console.error(`  Code: ${error.code}`);
+        if (error.detail) console.error(`  Detail: ${error.detail}`);
+        if (error.hint) console.error(`  Hint: ${error.hint}`);
+        if (error.httpStatus) console.error(`  HTTP Status: ${error.httpStatus}`);
+      }
       process.exitCode = 1;
+    };
+    if (opts.verify && opts.resetPassword) {
+      outputError({ message: "Provide only one of --verify or --reset-password" });
       return;
     }
     if (opts.verify && opts.printSql) {
-      console.error("✗ --verify cannot be combined with --print-sql");
-      process.exitCode = 1;
+      outputError({ message: "--verify cannot be combined with --print-sql" });
       return;
     }
 
@@ -671,6 +714,296 @@ program
       }
     }
 
+    // Supabase mode: use Supabase Management API instead of direct PG connection
+    if (opts.supabase) {
+      let supabaseConfig;
+      try {
+        // Try to extract project ref from connection URL if provided
+        let projectRef = opts.supabaseProjectRef;
+        if (!projectRef && conn) {
+          projectRef = extractProjectRefFromUrl(conn);
+        }
+        supabaseConfig = resolveSupabaseConfig({
+          accessToken: opts.supabaseAccessToken,
+          projectRef,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        outputError({ message: msg });
+        return;
+      }
+
+      const includeOptionalPermissions = !opts.skipOptionalPermissions;
+
+      if (!jsonOutput) {
+        console.log(`Supabase mode: project ref ${supabaseConfig.projectRef}`);
+        console.log(`Monitoring user: ${opts.monitoringUser}`);
+        console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+      }
+
+      const supabaseClient = new SupabaseClient(supabaseConfig);
+
+      try {
+        // Get current database name
+        const database = await supabaseClient.getCurrentDatabase();
+        if (!database) {
+          throw new Error("Failed to resolve current database name");
+        }
+        if (!jsonOutput) {
+          console.log(`Database: ${database}`);
+        }
+
+        if (opts.verify) {
+          const v = await verifyInitSetupViaSupabase({
+            client: supabaseClient,
+            database,
+            monitoringUser: opts.monitoringUser,
+            includeOptionalPermissions,
+          });
+          if (v.ok) {
+            if (jsonOutput) {
+              outputJson({
+                success: true,
+                mode: "supabase",
+                action: "verify",
+                database,
+                monitoringUser: opts.monitoringUser,
+                verified: true,
+                missingOptional: v.missingOptional,
+              });
+            } else {
+              console.log("✓ prepare-db verify: OK");
+              if (v.missingOptional.length > 0) {
+                console.log("⚠ Optional items missing:");
+                for (const m of v.missingOptional) console.log(`- ${m}`);
+              }
+            }
+            return;
+          }
+          if (jsonOutput) {
+            outputJson({
+              success: false,
+              mode: "supabase",
+              action: "verify",
+              database,
+              monitoringUser: opts.monitoringUser,
+              verified: false,
+              missingRequired: v.missingRequired,
+              missingOptional: v.missingOptional,
+            });
+          } else {
+            console.error("✗ prepare-db verify failed: missing required items");
+            for (const m of v.missingRequired) console.error(`- ${m}`);
+            if (v.missingOptional.length > 0) {
+              console.error("Optional items missing:");
+              for (const m of v.missingOptional) console.error(`- ${m}`);
+            }
+          }
+          process.exitCode = 1;
+          return;
+        }
+
+        let monPassword: string;
+        let passwordGenerated = false;
+        try {
+          const resolved = await resolveMonitoringPassword({
+            passwordFlag: opts.password,
+            passwordEnv: process.env.PGAI_MON_PASSWORD,
+            monitoringUser: opts.monitoringUser,
+          });
+          monPassword = resolved.password;
+          passwordGenerated = resolved.generated;
+          if (resolved.generated) {
+            const canPrint = process.stdout.isTTY || !!opts.printPassword || jsonOutput;
+            if (canPrint) {
+              if (!jsonOutput) {
+                const shellSafe = monPassword.replace(/'/g, "'\\''");
+                console.error("");
+                console.error(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
+                console.error(`PGAI_MON_PASSWORD='${shellSafe}'`);
+                console.error("");
+                console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+              }
+              // For JSON mode, password will be included in the success output below
+            } else {
+              console.error(
+                [
+                  `✗ Monitoring password was auto-generated for ${opts.monitoringUser} but not printed in non-interactive mode.`,
+                  "",
+                  "Provide it explicitly:",
+                  "  --password <password>   or   PGAI_MON_PASSWORD=...",
+                  "",
+                  "Or (NOT recommended) print the generated password:",
+                  "  --print-password",
+                ].join("\n")
+              );
+              process.exitCode = 1;
+              return;
+            }
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          outputError({ message: msg });
+          return;
+        }
+
+        const plan = await buildInitPlan({
+          database,
+          monitoringUser: opts.monitoringUser,
+          monitoringPassword: monPassword,
+          includeOptionalPermissions,
+        });
+
+        // For Supabase mode, skip RDS and self-managed steps (they don't apply)
+        const supabaseApplicableSteps = plan.steps.filter(
+          (s) => s.name !== "03.optional_rds" && s.name !== "04.optional_self_managed"
+        );
+
+        const effectivePlan = opts.resetPassword
+          ? { ...plan, steps: supabaseApplicableSteps.filter((s) => s.name === "01.role") }
+          : { ...plan, steps: supabaseApplicableSteps };
+
+        if (shouldPrintSql) {
+          console.log("\n--- SQL plan ---");
+          for (const step of effectivePlan.steps) {
+            console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
+            console.log(redactPasswords(step.sql));
+          }
+          console.log("\n--- end SQL plan ---\n");
+          console.log("Note: passwords are redacted in the printed SQL output.");
+          return;
+        }
+
+        const { applied, skippedOptional } = await applyInitPlanViaSupabase({
+          client: supabaseClient,
+          plan: effectivePlan,
+        });
+
+        if (jsonOutput) {
+          const result: Record<string, unknown> = {
+            success: true,
+            mode: "supabase",
+            action: opts.resetPassword ? "reset-password" : "apply",
+            database,
+            monitoringUser: opts.monitoringUser,
+            applied,
+            skippedOptional,
+            warnings: skippedOptional.length > 0
+              ? ["Some optional steps were skipped (not supported or insufficient privileges)"]
+              : [],
+          };
+          if (passwordGenerated) {
+            result.generatedPassword = monPassword;
+          }
+          outputJson(result);
+        } else {
+          console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
+          if (skippedOptional.length > 0) {
+            console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+            for (const s of skippedOptional) console.log(`- ${s}`);
+          }
+          if (process.stdout.isTTY) {
+            console.log(`Applied ${applied.length} steps`);
+          }
+        }
+      } catch (error) {
+        const errAny = error as PgCompatibleError;
+        let message = "";
+        if (error instanceof Error && error.message) {
+          message = error.message;
+        } else if (errAny && typeof errAny === "object" && typeof errAny.message === "string" && errAny.message) {
+          message = errAny.message;
+        } else {
+          message = String(error);
+        }
+        if (!message || message === "[object Object]") {
+          message = "Unknown error";
+        }
+
+        // Surface step name if this was a plan step failure
+        const stepMatch = typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
+        const failedStep = stepMatch?.[1];
+
+        // Build error object for JSON output
+        const errorObj: {
+          message: string;
+          step?: string;
+          code?: string;
+          detail?: string;
+          hint?: string;
+          httpStatus?: number;
+        } = { message };
+
+        if (failedStep) errorObj.step = failedStep;
+        if (errAny && typeof errAny === "object") {
+          if (typeof errAny.code === "string" && errAny.code) errorObj.code = errAny.code;
+          if (typeof errAny.detail === "string" && errAny.detail) errorObj.detail = errAny.detail;
+          if (typeof errAny.hint === "string" && errAny.hint) errorObj.hint = errAny.hint;
+          if (typeof errAny.httpStatus === "number") errorObj.httpStatus = errAny.httpStatus;
+        }
+
+        if (jsonOutput) {
+          outputJson({
+            success: false,
+            mode: "supabase",
+            error: errorObj,
+          });
+          process.exitCode = 1;
+        } else {
+          console.error(`Error: prepare-db (Supabase): ${message}`);
+
+          if (failedStep) {
+            console.error(`  Step: ${failedStep}`);
+          }
+
+          // Surface PostgreSQL-compatible error details
+          if (errAny && typeof errAny === "object") {
+            if (typeof errAny.code === "string" && errAny.code) {
+              console.error(`  Code: ${errAny.code}`);
+            }
+            if (typeof errAny.detail === "string" && errAny.detail) {
+              console.error(`  Detail: ${errAny.detail}`);
+            }
+            if (typeof errAny.hint === "string" && errAny.hint) {
+              console.error(`  Hint: ${errAny.hint}`);
+            }
+            if (typeof errAny.httpStatus === "number") {
+              console.error(`  HTTP Status: ${errAny.httpStatus}`);
+            }
+          }
+
+          // Provide context hints for common errors
+          if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+            if (errAny.code === "42501") {
+              if (failedStep === "01.role") {
+                console.error("  Context: role creation/update requires CREATEROLE or superuser");
+              } else if (failedStep === "02.permissions") {
+                console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
+              }
+              console.error("  Fix: ensure your Supabase access token has sufficient permissions");
+              console.error("  Tip: run with --print-sql to review the exact SQL plan");
+            }
+          }
+          if (errAny && typeof errAny === "object" && typeof errAny.httpStatus === "number") {
+            if (errAny.httpStatus === 401) {
+              console.error("  Hint: invalid or expired access token; generate a new one at https://supabase.com/dashboard/account/tokens");
+            }
+            if (errAny.httpStatus === 403) {
+              console.error("  Hint: access denied; check your token permissions and project access");
+            }
+            if (errAny.httpStatus === 404) {
+              console.error("  Hint: project not found; verify the project reference is correct");
+            }
+            if (errAny.httpStatus === 429) {
+              console.error("  Hint: rate limited; wait a moment and try again");
+            }
+          }
+          process.exitCode = 1;
+        }
+      }
+      return;
+    }
+
     let adminConn;
     try {
       adminConn = resolveAdminConnection({
@@ -686,21 +1019,27 @@ program
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`Error: prepare-db: ${msg}`);
-      // When connection details are missing, show full init help (options + examples).
-      if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
-        console.error("");
-        cmd.outputHelp({ error: true });
+      if (jsonOutput) {
+        outputError({ message: msg });
+      } else {
+        console.error(`Error: prepare-db: ${msg}`);
+        // When connection details are missing, show full init help (options + examples).
+        if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
+          console.error("");
+          cmd.outputHelp({ error: true });
+        }
+        process.exitCode = 1;
       }
-      process.exitCode = 1;
       return;
     }
 
     const includeOptionalPermissions = !opts.skipOptionalPermissions;
 
-    console.log(`Connecting to: ${adminConn.display}`);
-    console.log(`Monitoring user: ${opts.monitoringUser}`);
-    console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+    if (!jsonOutput) {
+      console.log(`Connecting to: ${adminConn.display}`);
+      console.log(`Monitoring user: ${opts.monitoringUser}`);
+      console.log(`Optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
+    }
 
     // Use native pg client instead of requiring psql to be installed
     let client: Client | undefined;
@@ -722,24 +1061,50 @@ program
           includeOptionalPermissions,
         });
         if (v.ok) {
-          console.log("✓ prepare-db verify: OK");
-          if (v.missingOptional.length > 0) {
-            console.log("⚠ Optional items missing:");
-            for (const m of v.missingOptional) console.log(`- ${m}`);
+          if (jsonOutput) {
+            outputJson({
+              success: true,
+              mode: "direct",
+              action: "verify",
+              database,
+              monitoringUser: opts.monitoringUser,
+              verified: true,
+              missingOptional: v.missingOptional,
+            });
+          } else {
+            console.log("✓ prepare-db verify: OK");
+            if (v.missingOptional.length > 0) {
+              console.log("⚠ Optional items missing:");
+              for (const m of v.missingOptional) console.log(`- ${m}`);
+            }
           }
           return;
         }
-        console.error("✗ prepare-db verify failed: missing required items");
-        for (const m of v.missingRequired) console.error(`- ${m}`);
-        if (v.missingOptional.length > 0) {
-          console.error("Optional items missing:");
-          for (const m of v.missingOptional) console.error(`- ${m}`);
+        if (jsonOutput) {
+          outputJson({
+            success: false,
+            mode: "direct",
+            action: "verify",
+            database,
+            monitoringUser: opts.monitoringUser,
+            verified: false,
+            missingRequired: v.missingRequired,
+            missingOptional: v.missingOptional,
+          });
+        } else {
+          console.error("✗ prepare-db verify failed: missing required items");
+          for (const m of v.missingRequired) console.error(`- ${m}`);
+          if (v.missingOptional.length > 0) {
+            console.error("Optional items missing:");
+            for (const m of v.missingOptional) console.error(`- ${m}`);
+          }
         }
         process.exitCode = 1;
         return;
       }
 
       let monPassword: string;
+      let passwordGenerated = false;
       try {
         const resolved = await resolveMonitoringPassword({
           passwordFlag: opts.password,
@@ -747,17 +1112,21 @@ program
           monitoringUser: opts.monitoringUser,
         });
         monPassword = resolved.password;
+        passwordGenerated = resolved.generated;
         if (resolved.generated) {
-          const canPrint = process.stdout.isTTY || !!opts.printPassword;
+          const canPrint = process.stdout.isTTY || !!opts.printPassword || jsonOutput;
           if (canPrint) {
-            // Print secrets to stderr to reduce the chance they end up in piped stdout logs.
-            const shellSafe = monPassword.replace(/'/g, "'\\''");
-            console.error("");
-            console.error(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
-            // Quote for shell copy/paste safety.
-            console.error(`PGAI_MON_PASSWORD='${shellSafe}'`);
-            console.error("");
-            console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+            if (!jsonOutput) {
+              // Print secrets to stderr to reduce the chance they end up in piped stdout logs.
+              const shellSafe = monPassword.replace(/'/g, "'\\''");
+              console.error("");
+              console.error(`Generated monitoring password for ${opts.monitoringUser} (copy/paste):`);
+              // Quote for shell copy/paste safety.
+              console.error(`PGAI_MON_PASSWORD='${shellSafe}'`);
+              console.error("");
+              console.log("Store it securely (or rerun with --password / PGAI_MON_PASSWORD to set your own).");
+            }
+            // For JSON mode, password will be included in the success output below
           } else {
             console.error(
               [
@@ -776,8 +1145,7 @@ program
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error(`✗ ${msg}`);
-        process.exitCode = 1;
+        outputError({ message: msg });
         return;
       }
 
@@ -805,14 +1173,33 @@ program
 
       const { applied, skippedOptional } = await applyInitPlan({ client, plan: effectivePlan });
 
-      console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
-      if (skippedOptional.length > 0) {
-        console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
-        for (const s of skippedOptional) console.log(`- ${s}`);
-      }
-      // Keep output compact but still useful
-      if (process.stdout.isTTY) {
-        console.log(`Applied ${applied.length} steps`);
+      if (jsonOutput) {
+        const result: Record<string, unknown> = {
+          success: true,
+          mode: "direct",
+          action: opts.resetPassword ? "reset-password" : "apply",
+          database,
+          monitoringUser: opts.monitoringUser,
+          applied,
+          skippedOptional,
+          warnings: skippedOptional.length > 0
+            ? ["Some optional steps were skipped (not supported or insufficient privileges)"]
+            : [],
+        };
+        if (passwordGenerated) {
+          result.generatedPassword = monPassword;
+        }
+        outputJson(result);
+      } else {
+        console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
+        if (skippedOptional.length > 0) {
+          console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+          for (const s of skippedOptional) console.log(`- ${s}`);
+        }
+        // Keep output compact but still useful
+        if (process.stdout.isTTY) {
+          console.log(`Applied ${applied.length} steps`);
+        }
       }
     } catch (error) {
       const errAny = error as any;
@@ -827,47 +1214,74 @@ program
       if (!message || message === "[object Object]") {
         message = "Unknown error";
       }
-      console.error(`Error: prepare-db: ${message}`);
+
       // If this was a plan step failure, surface the step name explicitly to help users diagnose quickly.
       const stepMatch =
         typeof message === "string" ? message.match(/Failed at step "([^"]+)":/i) : null;
       const failedStep = stepMatch?.[1];
-      if (failedStep) {
-        console.error(`  Step: ${failedStep}`);
-      }
+
+      // Build error object for JSON output
+      const errorObj: {
+        message: string;
+        step?: string;
+        code?: string;
+        detail?: string;
+        hint?: string;
+      } = { message };
+
+      if (failedStep) errorObj.step = failedStep;
       if (errAny && typeof errAny === "object") {
-        if (typeof errAny.code === "string" && errAny.code) {
-          console.error(`  Code: ${errAny.code}`);
-        }
-        if (typeof errAny.detail === "string" && errAny.detail) {
-          console.error(`  Detail: ${errAny.detail}`);
-        }
-        if (typeof errAny.hint === "string" && errAny.hint) {
-          console.error(`  Hint: ${errAny.hint}`);
-        }
+        if (typeof errAny.code === "string" && errAny.code) errorObj.code = errAny.code;
+        if (typeof errAny.detail === "string" && errAny.detail) errorObj.detail = errAny.detail;
+        if (typeof errAny.hint === "string" && errAny.hint) errorObj.hint = errAny.hint;
       }
-      if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
-        if (errAny.code === "42501") {
-          if (failedStep === "01.role") {
-            console.error("  Context: role creation/update requires CREATEROLE or superuser");
-          } else if (failedStep === "02.permissions") {
-            console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
+
+      if (jsonOutput) {
+        outputJson({
+          success: false,
+          mode: "direct",
+          error: errorObj,
+        });
+        process.exitCode = 1;
+      } else {
+        console.error(`Error: prepare-db: ${message}`);
+        if (failedStep) {
+          console.error(`  Step: ${failedStep}`);
+        }
+        if (errAny && typeof errAny === "object") {
+          if (typeof errAny.code === "string" && errAny.code) {
+            console.error(`  Code: ${errAny.code}`);
           }
-          console.error("  Fix: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges)");
-          console.error("  Fix: on managed Postgres, use the provider's admin/master user");
-          console.error("  Tip: run with --print-sql to review the exact SQL plan");
+          if (typeof errAny.detail === "string" && errAny.detail) {
+            console.error(`  Detail: ${errAny.detail}`);
+          }
+          if (typeof errAny.hint === "string" && errAny.hint) {
+            console.error(`  Hint: ${errAny.hint}`);
+          }
         }
-        if (errAny.code === "ECONNREFUSED") {
-          console.error("  Hint: check host/port and ensure Postgres is reachable from this machine");
+        if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+          if (errAny.code === "42501") {
+            if (failedStep === "01.role") {
+              console.error("  Context: role creation/update requires CREATEROLE or superuser");
+            } else if (failedStep === "02.permissions") {
+              console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
+            }
+            console.error("  Fix: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges)");
+            console.error("  Fix: on managed Postgres, use the provider's admin/master user");
+            console.error("  Tip: run with --print-sql to review the exact SQL plan");
+          }
+          if (errAny.code === "ECONNREFUSED") {
+            console.error("  Hint: check host/port and ensure Postgres is reachable from this machine");
+          }
+          if (errAny.code === "ENOTFOUND") {
+            console.error("  Hint: DNS resolution failed; double-check the host name");
+          }
+          if (errAny.code === "ETIMEDOUT") {
+            console.error("  Hint: connection timed out; check network/firewall rules");
+          }
         }
-        if (errAny.code === "ENOTFOUND") {
-          console.error("  Hint: DNS resolution failed; double-check the host name");
-        }
-        if (errAny.code === "ETIMEDOUT") {
-          console.error("  Hint: connection timed out; check network/firewall rules");
-        }
+        process.exitCode = 1;
       }
-      process.exitCode = 1;
     } finally {
       if (client) {
         try {
