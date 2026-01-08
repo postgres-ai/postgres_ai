@@ -1114,32 +1114,29 @@ describe("checkup-api", () => {
   });
 });
 
-// Tests for markdown API types
-describe("Markdown API types", () => {
-  test("MarkdownStatus type includes expected values", () => {
-    // Type check - this is a compile-time test
-    const statuses: api.MarkdownStatus[] = ["pending", "processing", "completed", "failed"];
-    expect(statuses.length).toBe(4);
+// Tests for uploadCheckupReportJson response with markdown info
+describe("uploadCheckupReportJson response structure", () => {
+  test("response includes optional markdown fields", () => {
+    // Type check - the function returns optional markdown fields for paid users
+    const response: Awaited<ReturnType<typeof api.uploadCheckupReportJson>> = {
+      reportChunkId: 123,
+      markdownChunkId: 456,
+      markdownChunkIds: [456, 789],
+      skippedMarkdown: false,
+    };
+    expect(response.reportChunkId).toBe(123);
+    expect(response.markdownChunkId).toBe(456);
+    expect(response.markdownChunkIds).toEqual([456, 789]);
   });
 
-  test("MarkdownStatusResponse interface structure", () => {
-    const response: api.MarkdownStatusResponse = {
-      status: "completed",
-      markdown: "# Report\n\nContent here",
+  test("response without markdown for non-paid users", () => {
+    const response: Awaited<ReturnType<typeof api.uploadCheckupReportJson>> = {
+      reportChunkId: 123,
+      skippedMarkdown: true,
     };
-    expect(response.status).toBe("completed");
-    expect(response.markdown).toBeDefined();
-    expect(response.error).toBeUndefined();
-  });
-
-  test("MarkdownStatusResponse with error", () => {
-    const response: api.MarkdownStatusResponse = {
-      status: "failed",
-      error: "Generation failed",
-    };
-    expect(response.status).toBe("failed");
-    expect(response.error).toBe("Generation failed");
-    expect(response.markdown).toBeUndefined();
+    expect(response.reportChunkId).toBe(123);
+    expect(response.markdownChunkId).toBeUndefined();
+    expect(response.skippedMarkdown).toBe(true);
   });
 });
 

@@ -19,7 +19,7 @@ import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
-import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry, fetchMarkdownReport } from "../lib/checkup-api";
+import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry, fetchMarkdownByReportId } from "../lib/checkup-api";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -183,7 +183,6 @@ interface CheckupOptions {
   project?: string;
   json?: boolean;
   md?: boolean;
-  mdTimeout?: string;
 }
 
 interface UploadConfig {
@@ -894,7 +893,6 @@ program
   )
   .option("--json", "output JSON to stdout (implies --no-upload)")
   .option("--[no-]md", "fetch markdown report after upload (default: enabled; paid subscription only)")
-  .option("--md-timeout <seconds>", "timeout for markdown generation (default: 120)", "120")
   .addHelpText(
     "after",
     [
@@ -993,31 +991,32 @@ program
       }
 
       // Fetch markdown report (default when uploading, unless --no-md or --json)
+      // Markdown is auto-generated during upload for paid users
       const shouldFetchMarkdown = uploadSummary && opts.md !== false && !shouldPrintJson;
       if (shouldFetchMarkdown && uploadCfg) {
-        spinner.update("Generating markdown report...");
+        spinner.update("Fetching markdown report...");
         try {
-          const timeoutMs = parseInt(opts.mdTimeout || "120", 10) * 1000;
-          const markdown = await fetchMarkdownReport({
+          const markdown = await fetchMarkdownByReportId({
             apiKey: uploadCfg.apiKey,
             apiBaseUrl: uploadCfg.apiBaseUrl,
             reportId: uploadSummary.reportId,
-            timeoutMs,
-            onProgress: (msg) => spinner.update(msg),
           });
           spinner.stop();
           console.log(markdown);
         } catch (mdError) {
           spinner.stop();
-          if (mdError instanceof RpcError && mdError.statusCode === 402) {
-            // Non-paid user - fall back to regular summary
-            console.error("\nMarkdown reports require a paid subscription.");
+          const isNoMarkdown =
+            mdError instanceof Error && mdError.message.includes("No markdown content");
+          if (isNoMarkdown) {
+            // No markdown generated - likely non-paid user
+            console.error("\nNo markdown report available.");
+            console.error("Markdown reports require a paid subscription.");
             console.error("Upgrade at console.postgres.ai to access markdown output.\n");
             printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson);
           } else {
             // Other error - show it but still print summary
             const msg = mdError instanceof Error ? mdError.message : String(mdError);
-            console.error(`\nWarning: Could not generate markdown report: ${msg}\n`);
+            console.error(`\nWarning: Could not fetch markdown report: ${msg}\n`);
             printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson);
           }
         }

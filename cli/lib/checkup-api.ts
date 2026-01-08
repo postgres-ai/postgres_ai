@@ -340,6 +340,7 @@ export async function createCheckupReport(params: {
 /**
  * Upload a JSON check result to an existing checkup report.
  * Each check (e.g., H001, A003) is uploaded as a separate JSON file.
+ * For paid users, markdown is auto-generated and returned in the response.
  *
  * @param params - Configuration for the upload
  * @param params.apiKey - PostgresAI API access token
@@ -348,7 +349,7 @@ export async function createCheckupReport(params: {
  * @param params.filename - Filename for the uploaded JSON (e.g., "H001.json")
  * @param params.checkId - Check identifier (e.g., "H001", "A003")
  * @param params.jsonText - JSON content as a string
- * @returns Promise resolving to the created report chunk ID
+ * @returns Promise resolving to chunk ID and optional markdown info (for paid users)
  * @throws {RpcError} On API failures (4xx/5xx responses)
  * @throws {Error} On network errors or unexpected response format
  */
@@ -359,7 +360,12 @@ export async function uploadCheckupReportJson(params: {
   filename: string;
   checkId: string;
   jsonText: string;
-}): Promise<{ reportChunkId: number }> {
+}): Promise<{
+  reportChunkId: number;
+  markdownChunkId?: number;
+  markdownChunkIds?: number[];
+  skippedMarkdown?: boolean;
+}> {
   const { apiKey, apiBaseUrl, reportId, filename, checkId, jsonText } = params;
   const bodyObj: Record<string, unknown> = {
     access_token: apiKey,
@@ -382,152 +388,181 @@ export async function uploadCheckupReportJson(params: {
   if (!Number.isFinite(chunkId) || chunkId <= 0) {
     throw new Error(`Unexpected checkup_report_file_post response: ${JSON.stringify(resp)}`);
   }
-  return { reportChunkId: chunkId };
-}
 
-/**
- * Status of markdown generation request
- */
-export type MarkdownStatus = "pending" | "processing" | "completed" | "failed";
+  const result: {
+    reportChunkId: number;
+    markdownChunkId?: number;
+    markdownChunkIds?: number[];
+    skippedMarkdown?: boolean;
+  } = { reportChunkId: chunkId };
 
-/**
- * Response from markdown status check
- */
-export interface MarkdownStatusResponse {
-  status: MarkdownStatus;
-  markdown?: string;
-  error?: string;
-}
-
-/**
- * Request markdown generation for an uploaded checkup report.
- * This initiates async markdown generation on the server.
- *
- * @param params - Configuration for the request
- * @param params.apiKey - PostgresAI API access token
- * @param params.apiBaseUrl - Base URL of the PostgresAI API
- * @param params.reportId - ID of the checkup report to generate markdown for
- * @returns Promise resolving to a request ID for polling status
- * @throws {RpcError} On API failures (402 for non-paid users, other 4xx/5xx)
- */
-export async function requestMarkdownGeneration(params: {
-  apiKey: string;
-  apiBaseUrl: string;
-  reportId: number;
-}): Promise<{ requestId: string }> {
-  const { apiKey, apiBaseUrl, reportId } = params;
-
-  const resp = await postRpc<any>({
-    apiKey,
-    apiBaseUrl,
-    rpcName: "checkup_markdown_request",
-    bodyObj: {
-      access_token: apiKey,
-      checkup_report_id: reportId,
-    },
-  });
-
-  const requestId = resp?.request_id;
-  if (typeof requestId !== "string" || !requestId) {
-    throw new Error(`Unexpected checkup_markdown_request response: ${JSON.stringify(resp)}`);
+  // Extract markdown chunk info (for paid users)
+  if (resp?.markdown_chunk_id) {
+    result.markdownChunkId = Number(resp.markdown_chunk_id);
   }
-  return { requestId };
+  if (Array.isArray(resp?.markdown_chunk_ids)) {
+    result.markdownChunkIds = resp.markdown_chunk_ids.map(Number);
+  }
+  if (resp?.skipped_markdown) {
+    result.skippedMarkdown = true;
+  }
+
+  return result;
 }
 
 /**
- * Check the status of a markdown generation request.
+ * Fetch markdown content by chunk ID(s) from the checkup_report_file_data view.
+ * Markdown is auto-generated when JSON is uploaded (for paid users).
  *
- * @param params - Configuration for the status check
+ * @param params - Configuration for fetching markdown
  * @param params.apiKey - PostgresAI API access token
  * @param params.apiBaseUrl - Base URL of the PostgresAI API
- * @param params.requestId - Request ID from requestMarkdownGeneration
- * @returns Promise resolving to the current status and markdown content if completed
+ * @param params.markdownChunkIds - Array of markdown chunk IDs to fetch
+ * @returns Promise resolving to concatenated markdown content
  * @throws {RpcError} On API failures
+ * @throws {Error} If no markdown found
  */
-export async function getMarkdownStatus(params: {
+export async function fetchMarkdownContent(params: {
   apiKey: string;
   apiBaseUrl: string;
-  requestId: string;
-}): Promise<MarkdownStatusResponse> {
-  const { apiKey, apiBaseUrl, requestId } = params;
+  markdownChunkIds: number[];
+}): Promise<string> {
+  const { apiKey, apiBaseUrl, markdownChunkIds } = params;
 
-  const resp = await postRpc<any>({
-    apiKey,
-    apiBaseUrl,
-    rpcName: "checkup_markdown_status",
-    bodyObj: {
-      access_token: apiKey,
-      request_id: requestId,
-    },
-  });
-
-  const status = resp?.status as MarkdownStatus;
-  if (!["pending", "processing", "completed", "failed"].includes(status)) {
-    throw new Error(`Unexpected checkup_markdown_status response: ${JSON.stringify(resp)}`);
+  if (markdownChunkIds.length === 0) {
+    throw new Error("No markdown chunk IDs provided");
   }
 
-  return {
-    status,
-    markdown: typeof resp?.markdown === "string" ? resp.markdown : undefined,
-    error: typeof resp?.error === "string" ? resp.error : undefined,
-  };
+  const base = normalizeBaseUrl(apiBaseUrl);
+  // Query the view for markdown chunks by ID
+  const idsFilter = markdownChunkIds.map((id) => `id.eq.${id}`).join(",");
+  const url = new URL(`${base}/checkup_report_file_data?or=(${idsFilter})&type=eq.md&select=data,filename,check_id`);
+
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = {
+      "access-token": apiKey,
+      Accept: "application/json",
+    };
+
+    const req = https.request(
+      url,
+      { method: "GET", headers },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const rows = JSON.parse(data);
+              if (!Array.isArray(rows) || rows.length === 0) {
+                reject(new Error("No markdown content found for the specified chunk IDs"));
+                return;
+              }
+              // Concatenate all markdown content, separated by newlines
+              const markdown = rows
+                .map((row: { data: string; check_id?: string }) => row.data)
+                .join("\n\n---\n\n");
+              resolve(markdown);
+            } catch {
+              reject(new Error(`Failed to parse markdown response: ${data}`));
+            }
+          } else {
+            let payloadJson: any = null;
+            try {
+              payloadJson = JSON.parse(data);
+            } catch {
+              // ignore
+            }
+            reject(
+              new RpcError({
+                rpcName: "checkup_report_file_data",
+                statusCode: res.statusCode || 0,
+                payloadText: data,
+                payloadJson,
+              })
+            );
+          }
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 /**
- * Request markdown generation and poll until complete or timeout.
- * This is a convenience function that combines requestMarkdownGeneration
- * and getMarkdownStatus with polling logic.
+ * Fetch all markdown files for a checkup report by report ID.
  *
  * @param params - Configuration for fetching markdown
  * @param params.apiKey - PostgresAI API access token
  * @param params.apiBaseUrl - Base URL of the PostgresAI API
  * @param params.reportId - ID of the checkup report
- * @param params.timeoutMs - Maximum time to wait for generation (default: 120000ms)
- * @param params.pollIntervalMs - Interval between status checks (default: 2000ms)
- * @param params.onProgress - Optional callback for progress updates
- * @returns Promise resolving to the generated markdown content
- * @throws {RpcError} On API failures (402 for non-paid users)
- * @throws {Error} On timeout or generation failure
+ * @returns Promise resolving to markdown content
+ * @throws {RpcError} On API failures
+ * @throws {Error} If no markdown found
  */
-export async function fetchMarkdownReport(params: {
+export async function fetchMarkdownByReportId(params: {
   apiKey: string;
   apiBaseUrl: string;
   reportId: number;
-  timeoutMs?: number;
-  pollIntervalMs?: number;
-  onProgress?: (message: string) => void;
 }): Promise<string> {
-  const {
-    apiKey,
-    apiBaseUrl,
-    reportId,
-    timeoutMs = 120_000,
-    pollIntervalMs = 2000,
-    onProgress,
-  } = params;
+  const { apiKey, apiBaseUrl, reportId } = params;
 
-  // Request markdown generation
-  const { requestId } = await requestMarkdownGeneration({ apiKey, apiBaseUrl, reportId });
+  const base = normalizeBaseUrl(apiBaseUrl);
+  const url = new URL(
+    `${base}/checkup_report_file_data?checkup_report_id=eq.${reportId}&type=eq.md&select=data,filename,check_id&order=check_id`
+  );
 
-  const startTime = Date.now();
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = {
+      "access-token": apiKey,
+      Accept: "application/json",
+    };
 
-  // Poll for completion
-  while (Date.now() - startTime < timeoutMs) {
-    const result = await getMarkdownStatus({ apiKey, apiBaseUrl, requestId });
-
-    if (result.status === "completed" && result.markdown) {
-      return result.markdown;
-    }
-
-    if (result.status === "failed") {
-      throw new Error(`Markdown generation failed: ${result.error || "Unknown error"}`);
-    }
-
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    onProgress?.(`Generating markdown report... (${elapsed}s)`);
-
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-  }
-
-  throw new Error(`Markdown generation timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+    const req = https.request(
+      url,
+      { method: "GET", headers },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const rows = JSON.parse(data);
+              if (!Array.isArray(rows) || rows.length === 0) {
+                reject(new Error("No markdown content found for this report"));
+                return;
+              }
+              // Concatenate all markdown content, separated by newlines
+              const markdown = rows
+                .map((row: { data: string; check_id?: string }) => row.data)
+                .join("\n\n---\n\n");
+              resolve(markdown);
+            } catch {
+              reject(new Error(`Failed to parse markdown response: ${data}`));
+            }
+          } else {
+            let payloadJson: any = null;
+            try {
+              payloadJson = JSON.parse(data);
+            } catch {
+              // ignore
+            }
+            reject(
+              new RpcError({
+                rpcName: "checkup_report_file_data",
+                statusCode: res.statusCode || 0,
+                payloadText: data,
+                payloadJson,
+              })
+            );
+          }
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
 }
