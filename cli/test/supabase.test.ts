@@ -521,6 +521,29 @@ describe("Supabase module", () => {
       }
     });
 
+    test("throws error for database name with null bytes (SQL injection prevention)", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(new Response(JSON.stringify([{ rolname: "postgres_ai_mon" }]), { status: 200 }))
+      ) as unknown as typeof fetch;
+
+      const client = new SupabaseClient({
+        projectRef: VALID_PROJECT_REF,
+        accessToken: "mytoken",
+      });
+
+      try {
+        await verifyInitSetupViaSupabase({
+          client,
+          database: "test\0db", // null byte should be rejected
+          monitoringUser: "postgres_ai_mon",
+          includeOptionalPermissions: false,
+        });
+        throw new Error("Expected to throw");
+      } catch (e) {
+        expect((e as Error).message).toContain("null bytes");
+      }
+    });
+
     test("returns missing role when role does not exist", async () => {
       globalThis.fetch = mock(() =>
         Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))

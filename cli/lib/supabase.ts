@@ -616,13 +616,21 @@ export async function verifyInitSetupViaSupabase(params: {
     }
   }
 
-  // Check USAGE on public schema
-  const schemaUsageRes = await params.client.query(
-    `SELECT has_schema_privilege('${escapeLiteral(role)}', 'public', 'USAGE') as ok`,
+  // Check USAGE on public schema (check existence first to avoid has_schema_privilege throwing)
+  const publicSchemaExistsRes = await params.client.query(
+    "SELECT nspname FROM pg_namespace WHERE nspname = 'public'",
     true
   );
-  if (!schemaUsageRes.rows?.[0]?.ok) {
-    missingRequired.push("USAGE on schema public");
+  if (publicSchemaExistsRes.rowCount === 0) {
+    missingRequired.push("schema public exists");
+  } else {
+    const schemaUsageRes = await params.client.query(
+      `SELECT has_schema_privilege('${escapeLiteral(role)}', 'public', 'USAGE') as ok`,
+      true
+    );
+    if (!schemaUsageRes.rows?.[0]?.ok) {
+      missingRequired.push("USAGE on schema public");
+    }
   }
 
   // Check search_path
