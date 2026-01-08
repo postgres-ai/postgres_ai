@@ -854,9 +854,14 @@ program
           includeOptionalPermissions,
         });
 
+        // For Supabase mode, skip RDS and self-managed steps (they don't apply)
+        const supabaseApplicableSteps = plan.steps.filter(
+          (s) => s.name !== "03.optional_rds" && s.name !== "04.optional_self_managed"
+        );
+
         const effectivePlan = opts.resetPassword
-          ? { ...plan, steps: plan.steps.filter((s) => s.name === "01.role") }
-          : plan;
+          ? { ...plan, steps: supabaseApplicableSteps.filter((s) => s.name === "01.role") }
+          : { ...plan, steps: supabaseApplicableSteps };
 
         if (shouldPrintSql) {
           console.log("\n--- SQL plan ---");
