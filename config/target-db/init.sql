@@ -20,23 +20,26 @@ create user monitor with password 'monitor_pass';
 grant connect on database target_database to monitor;
 grant usage on schema public to monitor;
 
--- Create a public view for pg_statistic access
-create or replace view public.pg_statistic as
-select 
+-- Create postgres_ai schema and pg_statistic view (matches cli/sql/02.permissions.sql)
+create schema if not exists postgres_ai;
+grant usage on schema postgres_ai to pg_monitor;
+
+create or replace view postgres_ai.pg_statistic as
+select
     n.nspname as schemaname,
     c.relname as tablename,
     a.attname,
     s.stanullfrac as null_frac,
     s.stawidth as avg_width,
     false as inherited
-from pg_statistic s
-join pg_class c on c.oid = s.starelid
-join pg_namespace n on n.oid = c.relnamespace  
-join pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
+from pg_catalog.pg_statistic s
+join pg_catalog.pg_class c on c.oid = s.starelid
+join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+join pg_catalog.pg_attribute a on a.attrelid = s.starelid and a.attnum = s.staattnum
 where a.attnum > 0 and not a.attisdropped;
 
 -- Grant specific access instead of all tables
-grant select on public.pg_statistic to pg_monitor;
+grant select on postgres_ai.pg_statistic to pg_monitor;
 
 -- Grant access to monitoring views
 grant select on pg_stat_statements to monitor;
