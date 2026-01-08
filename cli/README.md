@@ -93,6 +93,38 @@ To see what SQL would be executed (passwords redacted by default):
 npx postgresai prepare-db postgresql://admin@host:5432/dbname --print-sql
 ```
 
+### Supabase mode
+
+For Supabase projects, you can use the Management API instead of direct PostgreSQL connections. This is useful when direct database access is restricted.
+
+```bash
+# Using environment variables
+export SUPABASE_ACCESS_TOKEN='your_management_api_token'
+export SUPABASE_PROJECT_REF='your_project_ref'
+npx postgresai prepare-db --supabase
+
+# Using command-line options
+npx postgresai prepare-db --supabase \
+  --supabase-access-token 'your_token' \
+  --supabase-project-ref 'your_project_ref'
+
+# Auto-detect project ref from a Supabase database URL
+npx postgresai prepare-db postgresql://postgres:password@db.abc123.supabase.co:5432/postgres \
+  --supabase --supabase-access-token 'your_token'
+```
+
+The Supabase access token can be created at https://supabase.com/dashboard/account/tokens.
+
+Options:
+- `--supabase` - Enable Supabase Management API mode
+- `--supabase-access-token <token>` - Supabase Management API access token (or use `SUPABASE_ACCESS_TOKEN` env var)
+- `--supabase-project-ref <ref>` - Supabase project reference (or use `SUPABASE_PROJECT_REF` env var)
+
+Notes:
+- The project reference can be auto-detected from Supabase database URLs
+- All standard options work with Supabase mode (`--verify`, `--print-sql`, `--skip-optional-permissions`, etc.)
+- When using `--verify`, the tool checks if all required setup is in place
+
 ### Verify and password reset
 
 Verify that everything is configured as expected (no changes):
