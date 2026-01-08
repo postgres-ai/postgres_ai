@@ -152,6 +152,42 @@ describe("init module", () => {
     expect(plan.steps.some((s: { optional?: boolean }) => s.optional)).toBe(true);
   });
 
+  test("buildInitPlan skips role creation for supabase provider", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+      provider: "supabase",
+    });
+    expect(plan.steps.some((s) => s.name === "01.role")).toBe(false);
+    expect(plan.steps.some((s) => s.name === "02.permissions")).toBe(true);
+  });
+
+  test("buildInitPlan removes ALTER USER for supabase provider", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+      provider: "supabase",
+    });
+    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    expect(permStep).toBeDefined();
+    expect(permStep!.sql.toLowerCase()).not.toMatch(/alter user/);
+  });
+
+  test("buildInitPlan includes role creation for unknown provider", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+      provider: "some-custom-provider",
+    });
+    expect(plan.steps.some((s) => s.name === "01.role")).toBe(true);
+  });
+
   test("resolveAdminConnection accepts positional URI", () => {
     const r = init.resolveAdminConnection({ conn: "postgresql://u:p@h:5432/d" });
     expect(r.clientConfig.connectionString).toBeTruthy();

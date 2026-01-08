@@ -7,6 +7,23 @@ import * as path from "path";
 
 export const DEFAULT_MONITORING_USER = "postgres_ai_mon";
 
+/**
+ * Database provider type. Affects which prepare-db steps are executed.
+ * Known providers have specific behavior adjustments; unknown providers use default behavior.
+ * TODO: Consider auto-detecting provider from connection string or server version string.
+ * TODO: Consider making this more flexible via a config that specifies which steps/checks to skip.
+ */
+export type DbProvider = string;
+
+/** Providers where we skip role creation (users managed externally). */
+const SKIP_ROLE_CREATION_PROVIDERS = ["supabase"];
+
+/** Providers where we skip ALTER USER statements (restricted by provider). */
+const SKIP_ALTER_USER_PROVIDERS = ["supabase"];
+
+/** Providers where we skip search_path verification (not set via ALTER USER). */
+const SKIP_SEARCH_PATH_CHECK_PROVIDERS = ["supabase"];
+
 export type PgClientConfig = {
   connectionString?: string;
   host?: string;
@@ -458,10 +475,13 @@ export async function buildInitPlan(params: {
   monitoringUser?: string;
   monitoringPassword: string;
   includeOptionalPermissions: boolean;
+  /** Provider type. Affects which steps are included. Defaults to "self-managed". */
+  provider?: DbProvider;
 }): Promise<InitPlan> {
   // NOTE: kept async for API stability / potential future async template loading.
   const monitoringUser = params.monitoringUser || DEFAULT_MONITORING_USER;
   const database = params.database;
+  const provider = params.provider ?? "self-managed";
 
   const qRole = quoteIdent(monitoringUser);
   const qDb = quoteIdent(database);
@@ -475,12 +495,15 @@ export async function buildInitPlan(params: {
     DB_IDENT: qDb,
   };
 
-  // Role creation/update is done in one template file.
-  // Always use a single DO block to avoid race conditions between "role exists?" checks and CREATE USER.
-  // We:
-  // - create role if missing (and handle duplicate_object in case another session created it concurrently),
-  // - then ALTER ROLE to ensure the password is set to the desired value.
-  const roleStmt = `do $$ begin
+  // Some providers (e.g., Supabase) manage users externally - skip role creation.
+  // TODO: Make this more flexible by allowing users to specify which steps to skip via config.
+  if (!SKIP_ROLE_CREATION_PROVIDERS.includes(provider)) {
+    // Role creation/update is done in one template file.
+    // Always use a single DO block to avoid race conditions between "role exists?" checks and CREATE USER.
+    // We:
+    // - create role if missing (and handle duplicate_object in case another session created it concurrently),
+    // - then ALTER ROLE to ensure the password is set to the desired value.
+    const roleStmt = `do $$ begin
   if not exists (select 1 from pg_catalog.pg_roles where rolname = ${qRoleNameLit}) then
     begin
       create user ${qRole} with password ${qPw};
@@ -491,12 +514,24 @@ export async function buildInitPlan(params: {
   alter user ${qRole} with password ${qPw};
 end $$;`;
 
-  const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), { ...vars, ROLE_STMT: roleStmt });
-  steps.push({ name: "01.role", sql: roleSql });
+    const roleSql = applyTemplate(loadSqlTemplate("01.role.sql"), { ...vars, ROLE_STMT: roleStmt });
+    steps.push({ name: "01.role", sql: roleSql });
+  }
+
+  let permissionsSql = applyTemplate(loadSqlTemplate("02.permissions.sql"), vars);
+
+  // Some providers restrict ALTER USER - remove those statements.
+  // TODO: Make this more flexible by allowing users to specify which statements to skip via config.
+  if (SKIP_ALTER_USER_PROVIDERS.includes(provider)) {
+    permissionsSql = permissionsSql
+      .split("\n")
+      .filter((line) => !line.toLowerCase().includes("alter user"))
+      .join("\n");
+  }
 
   steps.push({
     name: "02.permissions",
-    sql: applyTemplate(loadSqlTemplate("02.permissions.sql"), vars),
+    sql: permissionsSql,
   });
 
   // Helper functions (SECURITY DEFINER) for plan analysis and table info
@@ -612,6 +647,8 @@ export async function verifyInitSetup(params: {
   database: string;
   monitoringUser: string;
   includeOptionalPermissions: boolean;
+  /** Provider type. Affects which checks are performed. */
+  provider?: DbProvider;
 }): Promise<VerifyInitResult> {
   // Use a repeatable-read snapshot so all checks see a consistent view.
   await params.client.query("begin isolation level repeatable read;");
@@ -621,6 +658,7 @@ export async function verifyInitSetup(params: {
 
     const role = params.monitoringUser;
     const db = params.database;
+    const provider = params.provider ?? "self-managed";
 
     const roleRes = await params.client.query("select 1 from pg_catalog.pg_roles where rolname = $1", [role]);
     const roleExists = (roleRes.rowCount ?? 0) > 0;
@@ -684,16 +722,20 @@ export async function verifyInitSetup(params: {
       missingRequired.push("USAGE on schema public");
     }
 
-    const rolcfgRes = await params.client.query("select rolconfig from pg_catalog.pg_roles where rolname = $1", [role]);
-    const rolconfig = rolcfgRes.rows?.[0]?.rolconfig;
-    const spLine = Array.isArray(rolconfig) ? rolconfig.find((v: any) => String(v).startsWith("search_path=")) : undefined;
-    if (typeof spLine !== "string" || !spLine) {
-      missingRequired.push("role search_path is set");
-    } else {
-      // We accept any ordering as long as postgres_ai, public, and pg_catalog are included.
-      const sp = spLine.toLowerCase();
-      if (!sp.includes("postgres_ai") || !sp.includes("public") || !sp.includes("pg_catalog")) {
-        missingRequired.push("role search_path includes postgres_ai, public and pg_catalog");
+    // Some providers don't allow setting search_path via ALTER USER - skip this check.
+    // TODO: Make this more flexible by allowing users to specify which checks to skip via config.
+    if (!SKIP_SEARCH_PATH_CHECK_PROVIDERS.includes(provider)) {
+      const rolcfgRes = await params.client.query("select rolconfig from pg_catalog.pg_roles where rolname = $1", [role]);
+      const rolconfig = rolcfgRes.rows?.[0]?.rolconfig;
+      const spLine = Array.isArray(rolconfig) ? rolconfig.find((v: any) => String(v).startsWith("search_path=")) : undefined;
+      if (typeof spLine !== "string" || !spLine) {
+        missingRequired.push("role search_path is set");
+      } else {
+        // We accept any ordering as long as postgres_ai, public, and pg_catalog are included.
+        const sp = spLine.toLowerCase();
+        if (!sp.includes("postgres_ai") || !sp.includes("public") || !sp.includes("pg_catalog")) {
+          missingRequired.push("role search_path includes postgres_ai, public and pg_catalog");
+        }
       }
     }
 
