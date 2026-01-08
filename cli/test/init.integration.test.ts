@@ -367,6 +367,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     }
   );
 
+  // 30s timeout for PostgreSQL startup + multiple CLI invocations
   test("--reset-password updates the monitoring role login password", async () => {
     pg = await createTempPostgres();
 
@@ -397,7 +398,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 30000 });
 
   // 60s timeout for PostgreSQL startup + multiple SQL queries in slow CI
   test("explain_generic validates input and prevents SQL injection", async () => {
