@@ -11,6 +11,17 @@ export const IssueStatus = {
   CLOSED: 1,
 } as const;
 
+/**
+ * Represents a PostgreSQL configuration parameter change recommendation.
+ * Used in action items to suggest config tuning.
+ */
+export interface ConfigChange {
+  /** PostgreSQL configuration parameter name (e.g., 'work_mem', 'shared_buffers') */
+  parameter: string;
+  /** Recommended value for the parameter (e.g., '256MB', '4GB') */
+  value: string;
+}
+
 export interface IssueActionItem {
   id: string;
   issue_id: string;
@@ -20,8 +31,25 @@ export interface IssueActionItem {
   is_done: boolean;
   done_by: number | null;
   done_at: string | null;
+  status: string;
+  status_reason: string | null;
+  status_changed_by: number | null;
+  status_changed_at: string | null;
+  sql_action: string | null;
+  configs: ConfigChange[];
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Summary of an action item (minimal fields for list views).
+ * Used in issue detail responses to provide quick overview of action items.
+ */
+export interface IssueActionItemSummary {
+  /** Action item ID (UUID) */
+  id: string;
+  /** Action item title */
+  title: string;
 }
 
 export interface Issue {
@@ -59,15 +87,21 @@ export interface IssueComment {
 
 export type IssueListItem = Pick<Issue, "id" | "title" | "status" | "created_at">;
 
-export type IssueDetail = Pick<Issue, "id" | "title" | "description" | "status" | "created_at" | "author_display_name">;
+export type IssueDetail = Pick<Issue, "id" | "title" | "description" | "status" | "created_at" | "author_display_name"> & {
+  action_items: IssueActionItemSummary[];
+};
 export interface FetchIssuesParams {
   apiKey: string;
   apiBaseUrl: string;
+  orgId?: number;
+  status?: "open" | "closed";
+  limit?: number;
+  offset?: number;
   debug?: boolean;
 }
 
 export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListItem[]> {
-  const { apiKey, apiBaseUrl, debug } = params;
+  const { apiKey, apiBaseUrl, orgId, status, limit = 20, offset = 0, debug } = params;
   if (!apiKey) {
     throw new Error("API key is required");
   }
@@ -75,6 +109,17 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListI
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/issues`);
   url.searchParams.set("select", "id,title,status,created_at");
+  url.searchParams.set("order", "id.desc");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  if (typeof orgId === "number") {
+    url.searchParams.set("org_id", `eq.${orgId}`);
+  }
+  if (status === "open") {
+    url.searchParams.set("status", "eq.0");
+  } else if (status === "closed") {
+    url.searchParams.set("status", "eq.1");
+  }
 
   const headers: Record<string, string> = {
     "access-token": apiKey,
@@ -190,7 +235,7 @@ export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail 
 
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/issues`);
-  url.searchParams.set("select", "id,title,description,status,created_at,author_display_name");
+  url.searchParams.set("select", "id,title,description,status,created_at,author_display_name,action_items");
   url.searchParams.set("id", `eq.${issueId}`);
   url.searchParams.set("limit", "1");
 
@@ -224,11 +269,23 @@ export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail 
   if (response.ok) {
     try {
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed)) {
-        return (parsed[0] as IssueDetail) ?? null;
-      } else {
-        return parsed as IssueDetail;
+      const rawIssue = Array.isArray(parsed) ? parsed[0] : parsed;
+      if (!rawIssue) {
+        return null;
       }
+      // Map action_items to summary (id, title only)
+      const actionItemsSummary: IssueActionItemSummary[] = Array.isArray(rawIssue.action_items)
+        ? rawIssue.action_items.map((item: IssueActionItem) => ({ id: item.id, title: item.title }))
+        : [];
+      return {
+        id: rawIssue.id,
+        title: rawIssue.title,
+        description: rawIssue.description,
+        status: rawIssue.status,
+        created_at: rawIssue.created_at,
+        author_display_name: rawIssue.author_display_name,
+        action_items: actionItemsSummary,
+      } as IssueDetail;
     } catch {
       throw new Error(`Failed to parse issue response: ${data}`);
     }
@@ -610,5 +667,394 @@ export async function updateIssueComment(params: UpdateIssueCommentParams): Prom
     }
   } else {
     throw new Error(formatHttpError("Failed to update issue comment", response.status, data));
+  }
+}
+
+// ============================================================================
+// Action Items API Functions
+// ============================================================================
+
+export interface FetchActionItemParams {
+  apiKey: string;
+  apiBaseUrl: string;
+  actionItemIds: string | string[];
+  debug?: boolean;
+}
+
+/**
+ * Fetch action item(s) by ID(s).
+ * Supports single ID or array of IDs.
+ *
+ * @param params - Fetch parameters
+ * @param params.apiKey - API authentication key
+ * @param params.apiBaseUrl - Base URL for the API
+ * @param params.actionItemIds - Single action item ID or array of IDs (UUIDs)
+ * @param params.debug - Enable debug logging
+ * @returns Array of action items matching the provided IDs
+ * @throws Error if API key is missing or no valid IDs provided
+ *
+ * @example
+ * // Fetch single action item
+ * const items = await fetchActionItem({ apiKey, apiBaseUrl, actionItemIds: "uuid-123" });
+ *
+ * @example
+ * // Fetch multiple action items
+ * const items = await fetchActionItem({ apiKey, apiBaseUrl, actionItemIds: ["uuid-1", "uuid-2"] });
+ */
+export async function fetchActionItem(params: FetchActionItemParams): Promise<IssueActionItem[]> {
+  const { apiKey, apiBaseUrl, actionItemIds, debug } = params;
+  if (!apiKey) {
+    throw new Error("API key is required");
+  }
+  // UUID format pattern for validation
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // Normalize to array, filter out null/undefined, trim, and validate UUID format
+  const rawIds = Array.isArray(actionItemIds) ? actionItemIds : [actionItemIds];
+  const validIds = rawIds
+    .filter((id): id is string => id != null && typeof id === "string")
+    .map(id => id.trim())
+    .filter(id => id.length > 0 && uuidPattern.test(id));
+  if (validIds.length === 0) {
+    throw new Error("actionItemId is required and must be a valid UUID");
+  }
+
+  const base = normalizeBaseUrl(apiBaseUrl);
+  const url = new URL(`${base}/issue_action_items`);
+  if (validIds.length === 1) {
+    url.searchParams.set("id", `eq.${validIds[0]}`);
+  } else {
+    // PostgREST IN syntax: id=in.(val1,val2,val3)
+    url.searchParams.set("id", `in.(${validIds.join(",")})`)
+  }
+
+  const headers: Record<string, string> = {
+    "access-token": apiKey,
+    "Prefer": "return=representation",
+    "Content-Type": "application/json",
+    "Connection": "close",
+  };
+
+  if (debug) {
+    const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
+    console.log(`Debug: Resolved API base URL: ${base}`);
+    console.log(`Debug: GET URL: ${url.toString()}`);
+    console.log(`Debug: Auth scheme: access-token`);
+    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers,
+  });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed as IssueActionItem[];
+      }
+      return parsed ? [parsed as IssueActionItem] : [];
+    } catch {
+      throw new Error(`Failed to parse action item response: ${data}`);
+    }
+  } else {
+    throw new Error(formatHttpError("Failed to fetch action item", response.status, data));
+  }
+}
+
+export interface FetchActionItemsParams {
+  apiKey: string;
+  apiBaseUrl: string;
+  issueId: string;
+  debug?: boolean;
+}
+
+/**
+ * Fetch all action items for an issue.
+ *
+ * @param params - Fetch parameters
+ * @param params.apiKey - API authentication key
+ * @param params.apiBaseUrl - Base URL for the API
+ * @param params.issueId - Issue ID (UUID) to fetch action items for
+ * @param params.debug - Enable debug logging
+ * @returns Array of action items for the specified issue
+ * @throws Error if API key or issue ID is missing
+ */
+export async function fetchActionItems(params: FetchActionItemsParams): Promise<IssueActionItem[]> {
+  const { apiKey, apiBaseUrl, issueId, debug } = params;
+  if (!apiKey) {
+    throw new Error("API key is required");
+  }
+  if (!issueId) {
+    throw new Error("issueId is required");
+  }
+  // Validate UUID format to prevent PostgREST injection
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(issueId.trim())) {
+    throw new Error("issueId must be a valid UUID");
+  }
+
+  const base = normalizeBaseUrl(apiBaseUrl);
+  const url = new URL(`${base}/issue_action_items`);
+  url.searchParams.set("issue_id", `eq.${issueId.trim()}`);
+
+  const headers: Record<string, string> = {
+    "access-token": apiKey,
+    "Prefer": "return=representation",
+    "Content-Type": "application/json",
+    "Connection": "close",
+  };
+
+  if (debug) {
+    const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
+    console.log(`Debug: Resolved API base URL: ${base}`);
+    console.log(`Debug: GET URL: ${url.toString()}`);
+    console.log(`Debug: Auth scheme: access-token`);
+    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers,
+  });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      return JSON.parse(data) as IssueActionItem[];
+    } catch {
+      throw new Error(`Failed to parse action items response: ${data}`);
+    }
+  } else {
+    throw new Error(formatHttpError("Failed to fetch action items", response.status, data));
+  }
+}
+
+export interface CreateActionItemParams {
+  apiKey: string;
+  apiBaseUrl: string;
+  issueId: string;
+  title: string;
+  description?: string;
+  sqlAction?: string;
+  configs?: ConfigChange[];
+  debug?: boolean;
+}
+
+/**
+ * Create a new action item for an issue.
+ *
+ * @param params - Creation parameters
+ * @param params.apiKey - API authentication key
+ * @param params.apiBaseUrl - Base URL for the API
+ * @param params.issueId - Issue ID (UUID) to create action item for
+ * @param params.title - Action item title
+ * @param params.description - Optional detailed description
+ * @param params.sqlAction - Optional SQL command to execute
+ * @param params.configs - Optional configuration parameter changes
+ * @param params.debug - Enable debug logging
+ * @returns Created action item ID
+ * @throws Error if required fields are missing or API call fails
+ */
+export async function createActionItem(params: CreateActionItemParams): Promise<string> {
+  const { apiKey, apiBaseUrl, issueId, title, description, sqlAction, configs, debug } = params;
+  if (!apiKey) {
+    throw new Error("API key is required");
+  }
+  if (!issueId) {
+    throw new Error("issueId is required");
+  }
+  // Validate UUID format
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(issueId.trim())) {
+    throw new Error("issueId must be a valid UUID");
+  }
+  if (!title) {
+    throw new Error("title is required");
+  }
+
+  const base = normalizeBaseUrl(apiBaseUrl);
+  const url = new URL(`${base}/rpc/issue_action_item_create`);
+
+  const bodyObj: Record<string, unknown> = {
+    issue_id: issueId,
+    title: title,
+  };
+  if (description !== undefined) {
+    bodyObj.description = description;
+  }
+  if (sqlAction !== undefined) {
+    bodyObj.sql_action = sqlAction;
+  }
+  if (configs !== undefined) {
+    bodyObj.configs = configs;
+  }
+  const body = JSON.stringify(bodyObj);
+
+  const headers: Record<string, string> = {
+    "access-token": apiKey,
+    "Prefer": "return=representation",
+    "Content-Type": "application/json",
+    "Connection": "close",
+  };
+
+  if (debug) {
+    const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
+    console.log(`Debug: Resolved API base URL: ${base}`);
+    console.log(`Debug: POST URL: ${url.toString()}`);
+    console.log(`Debug: Auth scheme: access-token`);
+    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.log(`Debug: Request body: ${body}`);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers,
+    body,
+  });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  const data = await response.text();
+
+  if (response.ok) {
+    try {
+      return JSON.parse(data) as string;
+    } catch {
+      throw new Error(`Failed to parse create action item response: ${data}`);
+    }
+  } else {
+    throw new Error(formatHttpError("Failed to create action item", response.status, data));
+  }
+}
+
+export interface UpdateActionItemParams {
+  apiKey: string;
+  apiBaseUrl: string;
+  actionItemId: string;
+  title?: string;
+  description?: string;
+  isDone?: boolean;
+  status?: string;
+  statusReason?: string;
+  sqlAction?: string;
+  configs?: ConfigChange[];
+  debug?: boolean;
+}
+
+/**
+ * Update an existing action item.
+ *
+ * @param params - Update parameters
+ * @param params.apiKey - API authentication key
+ * @param params.apiBaseUrl - Base URL for the API
+ * @param params.actionItemId - Action item ID (UUID) to update
+ * @param params.title - New title
+ * @param params.description - New description
+ * @param params.isDone - Mark as done/not done
+ * @param params.status - Approval status: 'waiting_for_approval', 'approved', 'rejected'
+ * @param params.statusReason - Reason for status change
+ * @param params.sqlAction - SQL command to execute
+ * @param params.configs - Configuration parameter changes
+ * @param params.debug - Enable debug logging
+ * @throws Error if required fields missing or no update fields provided
+ */
+export async function updateActionItem(params: UpdateActionItemParams): Promise<void> {
+  const { apiKey, apiBaseUrl, actionItemId, title, description, isDone, status, statusReason, sqlAction, configs, debug } = params;
+  if (!apiKey) {
+    throw new Error("API key is required");
+  }
+  if (!actionItemId) {
+    throw new Error("actionItemId is required");
+  }
+  // Validate UUID format
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(actionItemId.trim())) {
+    throw new Error("actionItemId must be a valid UUID");
+  }
+
+  // Check that at least one update field is provided
+  const hasUpdateField = title !== undefined || description !== undefined ||
+    isDone !== undefined || status !== undefined ||
+    statusReason !== undefined || sqlAction !== undefined || configs !== undefined;
+  if (!hasUpdateField) {
+    throw new Error("At least one field to update is required");
+  }
+
+  const base = normalizeBaseUrl(apiBaseUrl);
+  const url = new URL(`${base}/rpc/issue_action_item_update`);
+
+  const bodyObj: Record<string, unknown> = {
+    action_item_id: actionItemId,
+  };
+  if (title !== undefined) {
+    bodyObj.title = title;
+  }
+  if (description !== undefined) {
+    bodyObj.description = description;
+  }
+  if (isDone !== undefined) {
+    bodyObj.is_done = isDone;
+  }
+  if (status !== undefined) {
+    bodyObj.status = status;
+  }
+  if (statusReason !== undefined) {
+    bodyObj.status_reason = statusReason;
+  }
+  if (sqlAction !== undefined) {
+    bodyObj.sql_action = sqlAction;
+  }
+  if (configs !== undefined) {
+    bodyObj.configs = configs;
+  }
+  const body = JSON.stringify(bodyObj);
+
+  const headers: Record<string, string> = {
+    "access-token": apiKey,
+    "Prefer": "return=representation",
+    "Content-Type": "application/json",
+    "Connection": "close",
+  };
+
+  if (debug) {
+    const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
+    console.log(`Debug: Resolved API base URL: ${base}`);
+    console.log(`Debug: POST URL: ${url.toString()}`);
+    console.log(`Debug: Auth scheme: access-token`);
+    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.log(`Debug: Request body: ${body}`);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers,
+    body,
+  });
+
+  if (debug) {
+    console.log(`Debug: Response status: ${response.status}`);
+    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+  }
+
+  if (!response.ok) {
+    const data = await response.text();
+    throw new Error(formatHttpError("Failed to update action item", response.status, data));
   }
 }

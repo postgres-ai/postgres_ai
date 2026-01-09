@@ -1,6 +1,19 @@
 import pkg from "../package.json";
 import * as config from "./config";
-import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "./issues";
+import {
+  fetchIssues,
+  fetchIssueComments,
+  createIssueComment,
+  fetchIssue,
+  createIssue,
+  updateIssue,
+  updateIssueComment,
+  fetchActionItem,
+  fetchActionItems,
+  createActionItem,
+  updateActionItem,
+  type ConfigChange,
+} from "./issues";
 import { resolveBaseUrls } from "./util";
 
 // MCP SDK imports - Bun handles these directly
@@ -64,7 +77,14 @@ export async function handleToolCall(
 
   try {
     if (toolName === "list_issues") {
-      const issues = await fetchIssues({ apiKey, apiBaseUrl, debug });
+      const orgId = args.org_id !== undefined ? Number(args.org_id) : cfg.orgId ?? undefined;
+      const statusArg = args.status ? String(args.status) : undefined;
+      let status: "open" | "closed" | undefined;
+      if (statusArg === "open") status = "open";
+      else if (statusArg === "closed") status = "closed";
+      const limit = args.limit !== undefined ? Number(args.limit) : undefined;
+      const offset = args.offset !== undefined ? Number(args.offset) : undefined;
+      const issues = await fetchIssues({ apiKey, apiBaseUrl, orgId, status, limit, offset, debug });
       return { content: [{ type: "text", text: JSON.stringify(issues, null, 2) }] };
     }
 
@@ -154,6 +174,82 @@ export async function handleToolCall(
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
 
+    // Action Items Tools
+    if (toolName === "view_action_item") {
+      // Support both single ID and array of IDs
+      let actionItemIds: string[];
+      if (Array.isArray(args.action_item_ids)) {
+        actionItemIds = args.action_item_ids.map((id: unknown) => String(id).trim()).filter((id: string) => id);
+      } else if (args.action_item_id) {
+        actionItemIds = [String(args.action_item_id).trim()];
+      } else {
+        actionItemIds = [];
+      }
+      if (actionItemIds.length === 0) {
+        return { content: [{ type: "text", text: "action_item_id or action_item_ids is required" }], isError: true };
+      }
+      const actionItems = await fetchActionItem({ apiKey, apiBaseUrl, actionItemIds, debug });
+      if (actionItems.length === 0) {
+        return { content: [{ type: "text", text: "Action item(s) not found" }], isError: true };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(actionItems, null, 2) }] };
+    }
+
+    if (toolName === "list_action_items") {
+      const issueId = String(args.issue_id || "").trim();
+      if (!issueId) {
+        return { content: [{ type: "text", text: "issue_id is required" }], isError: true };
+      }
+      const actionItems = await fetchActionItems({ apiKey, apiBaseUrl, issueId, debug });
+      return { content: [{ type: "text", text: JSON.stringify(actionItems, null, 2) }] };
+    }
+
+    if (toolName === "create_action_item") {
+      const issueId = String(args.issue_id || "").trim();
+      const rawTitle = String(args.title || "").trim();
+      if (!issueId) {
+        return { content: [{ type: "text", text: "issue_id is required" }], isError: true };
+      }
+      if (!rawTitle) {
+        return { content: [{ type: "text", text: "title is required" }], isError: true };
+      }
+      const title = interpretEscapes(rawTitle);
+      const rawDescription = args.description ? String(args.description) : undefined;
+      const description = rawDescription ? interpretEscapes(rawDescription) : undefined;
+      const sqlAction = args.sql_action !== undefined ? String(args.sql_action) : undefined;
+      const configs = Array.isArray(args.configs) ? args.configs as ConfigChange[] : undefined;
+      const result = await createActionItem({ apiKey, apiBaseUrl, issueId, title, description, sqlAction, configs, debug });
+      return { content: [{ type: "text", text: JSON.stringify({ id: result }, null, 2) }] };
+    }
+
+    if (toolName === "update_action_item") {
+      const actionItemId = String(args.action_item_id || "").trim();
+      if (!actionItemId) {
+        return { content: [{ type: "text", text: "action_item_id is required" }], isError: true };
+      }
+      const rawTitle = args.title !== undefined ? String(args.title) : undefined;
+      const title = rawTitle !== undefined ? interpretEscapes(rawTitle) : undefined;
+      const rawDescription = args.description !== undefined ? String(args.description) : undefined;
+      const description = rawDescription !== undefined ? interpretEscapes(rawDescription) : undefined;
+      const isDone = args.is_done !== undefined ? Boolean(args.is_done) : undefined;
+      const status = args.status !== undefined ? String(args.status) : undefined;
+      const statusReason = args.status_reason !== undefined ? String(args.status_reason) : undefined;
+
+      // Validate that at least one update field is provided
+      if (title === undefined && description === undefined &&
+          isDone === undefined && status === undefined && statusReason === undefined) {
+        return { content: [{ type: "text", text: "At least one field to update is required (title, description, is_done, status, or status_reason)" }], isError: true };
+      }
+
+      // Validate status value if provided
+      if (status !== undefined && !["waiting_for_approval", "approved", "rejected"].includes(status)) {
+        return { content: [{ type: "text", text: "status must be 'waiting_for_approval', 'approved', or 'rejected'" }], isError: true };
+      }
+
+      await updateActionItem({ apiKey, apiBaseUrl, actionItemId, title, description, isDone, status, statusReason, debug });
+      return { content: [{ type: "text", text: JSON.stringify({ success: true }, null, 2) }] };
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -163,7 +259,11 @@ export async function handleToolCall(
 
 export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: boolean }): Promise<void> {
   const server = new Server(
-    { name: "postgresai-mcp", version: pkg.version },
+    {
+      name: "postgresai-mcp",
+      version: pkg.version,
+      title: "PostgresAI MCP Server",
+    },
     { capabilities: { tools: {} } }
   );
 
@@ -176,6 +276,10 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
           inputSchema: {
             type: "object",
             properties: {
+              org_id: { type: "number", description: "Organization ID (optional, falls back to config)" },
+              status: { type: "string", description: "Filter by status: 'open', 'closed', or omit for all" },
+              limit: { type: "number", description: "Max number of issues to return (default: 20)" },
+              offset: { type: "number", description: "Number of issues to skip (default: 0)" },
               debug: { type: "boolean", description: "Enable verbose debug logs" },
             },
             additionalProperties: false,
@@ -262,6 +366,79 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
               debug: { type: "boolean", description: "Enable verbose debug logs" },
             },
             required: ["comment_id", "content"],
+            additionalProperties: false,
+          },
+        },
+        // Action Items Tools
+        {
+          name: "view_action_item",
+          description: "View action item(s) with all details. Supports single ID or multiple IDs.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              action_item_id: { type: "string", description: "Single action item ID (UUID)" },
+              action_item_ids: { type: "array", items: { type: "string" }, description: "Multiple action item IDs (UUIDs)" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "list_action_items",
+          description: "List action items for an issue",
+          inputSchema: {
+            type: "object",
+            properties: {
+              issue_id: { type: "string", description: "Issue ID (UUID)" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            required: ["issue_id"],
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "create_action_item",
+          description: "Create a new action item for an issue",
+          inputSchema: {
+            type: "object",
+            properties: {
+              issue_id: { type: "string", description: "Issue ID (UUID)" },
+              title: { type: "string", description: "Action item title" },
+              description: { type: "string", description: "Detailed description" },
+              sql_action: { type: "string", description: "SQL command to execute, e.g. 'DROP INDEX CONCURRENTLY idx_unused;'" },
+              configs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    parameter: { type: "string" },
+                    value: { type: "string" },
+                  },
+                  required: ["parameter", "value"],
+                },
+                description: "Configuration parameter changes",
+              },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            required: ["issue_id", "title"],
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "update_action_item",
+          description: "Update an action item: mark as done/not done, approve/reject, or edit title/description",
+          inputSchema: {
+            type: "object",
+            properties: {
+              action_item_id: { type: "string", description: "Action item ID (UUID)" },
+              title: { type: "string", description: "New title" },
+              description: { type: "string", description: "New description" },
+              is_done: { type: "boolean", description: "Mark as done (true) or not done (false)" },
+              status: { type: "string", description: "Approval status: 'waiting_for_approval', 'approved', or 'rejected'" },
+              status_reason: { type: "string", description: "Reason for approval/rejection" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            required: ["action_item_id"],
             additionalProperties: false,
           },
         },

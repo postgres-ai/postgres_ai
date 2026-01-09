@@ -321,7 +321,7 @@ describe("MCP Server", () => {
         );
       });
 
-      const response = await handleToolCall(createRequest("view_issue", { issue_id: "issue-1" }));
+      const response = await handleToolCall(createRequest("view_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
 
       expect(response.isError).toBeUndefined();
       const parsed = JSON.parse(getResponseText(response));
@@ -360,7 +360,7 @@ describe("MCP Server", () => {
       });
 
       const response = await handleToolCall(
-        createRequest("post_issue_comment", { issue_id: "issue-1", content: "" })
+        createRequest("post_issue_comment", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", content: "" })
       );
 
       expect(response.isError).toBe(true);
@@ -390,7 +390,7 @@ describe("MCP Server", () => {
 
       await handleToolCall(
         createRequest("post_issue_comment", {
-          issue_id: "issue-1",
+          issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
           content: "line1\\nline2\\ttab",
         })
       );
@@ -423,7 +423,7 @@ describe("MCP Server", () => {
 
       const response = await handleToolCall(
         createRequest("post_issue_comment", {
-          issue_id: "issue-1",
+          issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
           content: "Reply content",
           parent_comment_id: "parent-1",
         })
@@ -618,7 +618,7 @@ describe("MCP Server", () => {
         defaultProject: null,
       });
 
-      const response = await handleToolCall(createRequest("update_issue", { issue_id: "issue-1" }));
+      const response = await handleToolCall(createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
 
       expect(response.isError).toBe(true);
       expect(getResponseText(response)).toContain("At least one field to update is required");
@@ -635,7 +635,7 @@ describe("MCP Server", () => {
       });
 
       const response = await handleToolCall(
-        createRequest("update_issue", { issue_id: "issue-1", status: 2 })
+        createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: 2 })
       );
 
       expect(response.isError).toBe(true);
@@ -653,7 +653,7 @@ describe("MCP Server", () => {
       });
 
       const response = await handleToolCall(
-        createRequest("update_issue", { issue_id: "issue-1", status: -1 })
+        createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: -1 })
       );
 
       expect(response.isError).toBe(true);
@@ -683,7 +683,7 @@ describe("MCP Server", () => {
 
       await handleToolCall(
         createRequest("update_issue", {
-          issue_id: "issue-1",
+          issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
           title: "Updated\\nTitle",
           description: "Updated\\tDescription",
         })
@@ -715,7 +715,7 @@ describe("MCP Server", () => {
       );
 
       const response = await handleToolCall(
-        createRequest("update_issue", { issue_id: "issue-1", title: "New Title" })
+        createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", title: "New Title" })
       );
 
       expect(response.isError).toBeUndefined();
@@ -743,7 +743,7 @@ describe("MCP Server", () => {
       });
 
       const response = await handleToolCall(
-        createRequest("update_issue", { issue_id: "issue-1", status: 1 })
+        createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: 1 })
       );
 
       expect(response.isError).toBeUndefined();
@@ -774,7 +774,7 @@ describe("MCP Server", () => {
       });
 
       const response = await handleToolCall(
-        createRequest("update_issue", { issue_id: "issue-1", labels: ["new-label"] })
+        createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", labels: ["new-label"] })
       );
 
       expect(response.isError).toBeUndefined();
@@ -805,7 +805,7 @@ describe("MCP Server", () => {
       });
 
       const response = await handleToolCall(
-        createRequest("update_issue", { issue_id: "issue-1", status: 0 })
+        createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: 0 })
       );
 
       expect(response.isError).toBeUndefined();
@@ -914,6 +914,545 @@ describe("MCP Server", () => {
       expect(response.isError).toBeUndefined();
       const parsed = JSON.parse(getResponseText(response));
       expect(parsed.content).toBe("Updated content");
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
+  describe("view_action_item tool", () => {
+    test("returns error when no IDs provided", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(createRequest("view_action_item", {}));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("action_item_id or action_item_ids is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when action_item_id is empty", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "" }));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("action_item_id or action_item_ids is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when action_item_ids is empty array", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(createRequest("view_action_item", { action_item_ids: [] }));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("action_item_id or action_item_ids is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when action_item_id is not a valid UUID", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "invalid-id-format" }));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("actionItemId is required and must be a valid UUID");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when action item not found", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response("[]", {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      );
+
+      const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "00000000-0000-0000-0000-000000000000" }));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("Action item(s) not found");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully returns single action item details", async () => {
+      const mockActionItem = {
+        id: "11111111-1111-1111-1111-111111111111",
+        issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title: "Fix index",
+        description: "Drop unused index",
+        severity: 3,
+        is_done: false,
+        status: "waiting_for_approval",
+        sql_action: "DROP INDEX CONCURRENTLY idx_unused;",
+        configs: [{ parameter: "work_mem", value: "256MB" }],
+      };
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(JSON.stringify([mockActionItem]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      );
+
+      const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "11111111-1111-1111-1111-111111111111" }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed[0].title).toBe("Fix index");
+      expect(parsed[0].sql_action).toBe("DROP INDEX CONCURRENTLY idx_unused;");
+      expect(parsed[0].configs).toEqual([{ parameter: "work_mem", value: "256MB" }]);
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully returns multiple action items", async () => {
+      const mockActionItems = [
+        { id: "11111111-1111-1111-1111-111111111111", title: "Fix index", severity: 3 },
+        { id: "22222222-2222-2222-2222-222222222222", title: "Update config", severity: 2 },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify(mockActionItems), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      const response = await handleToolCall(createRequest("view_action_item", { action_item_ids: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"] }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0].title).toBe("Fix index");
+      expect(parsed[1].title).toBe("Update config");
+      // Verify the URL uses in.() syntax
+      expect(capturedUrl).toContain("id=in.");
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
+  describe("list_action_items tool", () => {
+    test("returns error when issue_id is empty", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(createRequest("list_action_items", { issue_id: "" }));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("issue_id is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when issue_id is whitespace only", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(createRequest("list_action_items", { issue_id: "   " }));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("issue_id is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully returns action items list as JSON", async () => {
+      const mockActionItems = [
+        { id: "action-1", title: "First Action", severity: 1 },
+        { id: "action-2", title: "Second Action", severity: 2 },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(mockActionItems), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      );
+
+      const response = await handleToolCall(createRequest("list_action_items", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0].title).toBe("First Action");
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
+  describe("create_action_item tool", () => {
+    test("returns error when issue_id is empty", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(
+        createRequest("create_action_item", { issue_id: "", title: "Test" })
+      );
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("issue_id is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when title is empty", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(
+        createRequest("create_action_item", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", title: "" })
+      );
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("title is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully creates action item with minimal params", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedBody: string | undefined;
+      globalThis.fetch = mock((url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return Promise.resolve(
+          new Response(JSON.stringify("new-action-item-id"), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      const response = await handleToolCall(
+        createRequest("create_action_item", {
+          issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          title: "Fix the index",
+        })
+      );
+
+      expect(response.isError).toBeUndefined();
+      expect(capturedBody).toBeDefined();
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.issue_id).toBe("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+      expect(parsed.title).toBe("Fix the index");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully creates action item with all params", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedBody: string | undefined;
+      globalThis.fetch = mock((url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return Promise.resolve(
+          new Response(JSON.stringify("new-action-item-id"), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      const response = await handleToolCall(
+        createRequest("create_action_item", {
+          issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          title: "Fix the index",
+          description: "Drop the unused index to improve performance",
+          sql_action: "DROP INDEX CONCURRENTLY idx_unused;",
+          configs: [{ parameter: "work_mem", value: "256MB" }],
+        })
+      );
+
+      expect(response.isError).toBeUndefined();
+      expect(capturedBody).toBeDefined();
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.issue_id).toBe("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+      expect(parsed.title).toBe("Fix the index");
+      expect(parsed.description).toBe("Drop the unused index to improve performance");
+      expect(parsed.sql_action).toBe("DROP INDEX CONCURRENTLY idx_unused;");
+      expect(parsed.configs).toEqual([{ parameter: "work_mem", value: "256MB" }]);
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("interprets escape sequences in title and description", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedBody: string | undefined;
+      globalThis.fetch = mock((url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return Promise.resolve(
+          new Response(JSON.stringify("new-action-item-id"), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      await handleToolCall(
+        createRequest("create_action_item", {
+          issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          title: "Title\\nwith newline",
+          description: "Desc\\twith tab",
+        })
+      );
+
+      expect(capturedBody).toBeDefined();
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.title).toBe("Title\nwith newline");
+      expect(parsed.description).toBe("Desc\twith tab");
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
+  describe("update_action_item tool", () => {
+    test("returns error when action_item_id is empty", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(
+        createRequest("update_action_item", { action_item_id: "", title: "New Title" })
+      );
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toBe("action_item_id is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when no update fields provided", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(
+        createRequest("update_action_item", { action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" })
+      );
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toContain("At least one field to update is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("returns error when status is invalid", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      const response = await handleToolCall(
+        createRequest("update_action_item", { action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", status: "invalid_status" })
+      );
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toContain("status must be");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully updates with only title", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedBody: string | undefined;
+      globalThis.fetch = mock((url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return Promise.resolve(
+          new Response("", {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      const response = await handleToolCall(
+        createRequest("update_action_item", { action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", title: "New Title" })
+      );
+
+      expect(response.isError).toBeUndefined();
+      expect(capturedBody).toBeDefined();
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.action_item_id).toBe("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+      expect(parsed.title).toBe("New Title");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully updates is_done", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedBody: string | undefined;
+      globalThis.fetch = mock((url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return Promise.resolve(
+          new Response("", {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      const response = await handleToolCall(
+        createRequest("update_action_item", { action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", is_done: true })
+      );
+
+      expect(response.isError).toBeUndefined();
+      expect(capturedBody).toBeDefined();
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.is_done).toBe(true);
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully updates status with status_reason", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+      });
+
+      let capturedBody: string | undefined;
+      globalThis.fetch = mock((url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return Promise.resolve(
+          new Response("", {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      });
+
+      const response = await handleToolCall(
+        createRequest("update_action_item", {
+          action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          status: "approved",
+          status_reason: "Looks good to me",
+        })
+      );
+
+      expect(response.isError).toBeUndefined();
+      expect(capturedBody).toBeDefined();
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.status).toBe("approved");
+      expect(parsed.status_reason).toBe("Looks good to me");
 
       readConfigSpy.mockRestore();
     });

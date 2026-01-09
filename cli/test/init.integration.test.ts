@@ -241,70 +241,76 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     }
   });
 
-  test("fixes slightly-off permissions idempotently", async () => {
-    pg = await createTempPostgres();
+  test(
+    "fixes slightly-off permissions idempotently",
+    async () => {
+      pg = await createTempPostgres();
 
-    try {
-      // Create monitoring role with wrong password, no grants.
-      {
-        const c = new Client({ connectionString: pg.adminUri });
-        await c.connect();
-        await c.query(
-          "do $$ begin if not exists (select 1 from pg_roles where rolname='postgres_ai_mon') then create role postgres_ai_mon login password 'wrong'; end if; end $$;"
-        );
-        await c.end();
+      try {
+        // Create monitoring role with wrong password, no grants.
+        {
+          const c = new Client({ connectionString: pg.adminUri });
+          await c.connect();
+          await c.query(
+            "do $$ begin if not exists (select 1 from pg_roles where rolname='postgres_ai_mon') then create role postgres_ai_mon login password 'wrong'; end if; end $$;"
+          );
+          await c.end();
+        }
+
+        // Run init (should grant everything).
+        {
+          const r = runCliInit([pg.adminUri, "--password", "correctpw", "--skip-optional-permissions"]);
+          expect(r.status).toBe(0);
+        }
+
+        // Verify privileges.
+        {
+          const c = new Client({ connectionString: pg.adminUri });
+          await c.connect();
+          const dbOk = await c.query(
+            "select has_database_privilege('postgres_ai_mon', current_database(), 'CONNECT') as ok"
+          );
+          expect(dbOk.rows[0].ok).toBe(true);
+          const roleOk = await c.query("select pg_has_role('postgres_ai_mon', 'pg_monitor', 'member') as ok");
+          expect(roleOk.rows[0].ok).toBe(true);
+          const idxOk = await c.query(
+            "select has_table_privilege('postgres_ai_mon', 'pg_catalog.pg_index', 'SELECT') as ok"
+          );
+          expect(idxOk.rows[0].ok).toBe(true);
+          const viewOk = await c.query(
+            "select has_table_privilege('postgres_ai_mon', 'postgres_ai.pg_statistic', 'SELECT') as ok"
+          );
+          expect(viewOk.rows[0].ok).toBe(true);
+          const sp = await c.query("select rolconfig from pg_roles where rolname='postgres_ai_mon'");
+          expect(Array.isArray(sp.rows[0].rolconfig)).toBe(true);
+          expect(sp.rows[0].rolconfig.some((v: string) => String(v).includes("search_path="))).toBe(true);
+          await c.end();
+        }
+
+        // Run init again (idempotent).
+        {
+          const r = runCliInit([pg.adminUri, "--password", "correctpw", "--skip-optional-permissions"]);
+          expect(r.status).toBe(0);
+        }
+      } finally {
+        await pg.cleanup();
       }
+    },
+    { timeout: 15000 }
+  );
 
-      // Run init (should grant everything).
-      {
-        const r = runCliInit([pg.adminUri, "--password", "correctpw", "--skip-optional-permissions"]);
-        expect(r.status).toBe(0);
-      }
+  test(
+    "reports nicely when lacking permissions",
+    async () => {
+      pg = await createTempPostgres();
 
-      // Verify privileges.
-      {
-        const c = new Client({ connectionString: pg.adminUri });
-        await c.connect();
-        const dbOk = await c.query(
-          "select has_database_privilege('postgres_ai_mon', current_database(), 'CONNECT') as ok"
-        );
-        expect(dbOk.rows[0].ok).toBe(true);
-        const roleOk = await c.query("select pg_has_role('postgres_ai_mon', 'pg_monitor', 'member') as ok");
-        expect(roleOk.rows[0].ok).toBe(true);
-        const idxOk = await c.query(
-          "select has_table_privilege('postgres_ai_mon', 'pg_catalog.pg_index', 'SELECT') as ok"
-        );
-        expect(idxOk.rows[0].ok).toBe(true);
-        const viewOk = await c.query(
-          "select has_table_privilege('postgres_ai_mon', 'postgres_ai.pg_statistic', 'SELECT') as ok"
-        );
-        expect(viewOk.rows[0].ok).toBe(true);
-        const sp = await c.query("select rolconfig from pg_roles where rolname='postgres_ai_mon'");
-        expect(Array.isArray(sp.rows[0].rolconfig)).toBe(true);
-        expect(sp.rows[0].rolconfig.some((v: string) => String(v).includes("search_path="))).toBe(true);
-        await c.end();
-      }
-
-      // Run init again (idempotent).
-      {
-        const r = runCliInit([pg.adminUri, "--password", "correctpw", "--skip-optional-permissions"]);
-        expect(r.status).toBe(0);
-      }
-    } finally {
-      await pg.cleanup();
-    }
-  });
-
-  test("reports nicely when lacking permissions", async () => {
-    pg = await createTempPostgres();
-
-    try {
-      // Create limited user that can connect but cannot create roles / grant.
-      const limitedPw = "limitedpw";
-      {
-        const c = new Client({ connectionString: pg.adminUri });
-        await c.connect();
-        await c.query(`do $$ begin
+      try {
+        // Create limited user that can connect but cannot create roles / grant.
+        const limitedPw = "limitedpw";
+        {
+          const c = new Client({ connectionString: pg.adminUri });
+          await c.connect();
+          await c.query(`do $$ begin
           if not exists (select 1 from pg_roles where rolname='limited') then
             begin
               create role limited login password ${sqlLiteral(limitedPw)};
@@ -313,20 +319,22 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
             end;
           end if;
         end $$;`);
-        await c.query("grant connect on database testdb to limited");
-        await c.end();
-      }
+          await c.query("grant connect on database testdb to limited");
+          await c.end();
+        }
 
-      const limitedUri = `postgresql://limited:${limitedPw}@127.0.0.1:${pg.port}/testdb`;
-      const r = runCliInit([limitedUri, "--password", "monpw", "--skip-optional-permissions"]);
-      expect(r.status).not.toBe(0);
-      expect(r.stderr).toMatch(/Error: prepare-db:/);
-      expect(r.stderr).toMatch(/Failed at step "/);
-      expect(r.stderr).toMatch(/Fix: connect as a superuser/i);
-    } finally {
-      await pg.cleanup();
-    }
-  });
+        const limitedUri = `postgresql://limited:${limitedPw}@127.0.0.1:${pg.port}/testdb`;
+        const r = runCliInit([limitedUri, "--password", "monpw", "--skip-optional-permissions"]);
+        expect(r.status).not.toBe(0);
+        expect(r.stderr).toMatch(/Error: prepare-db:/);
+        expect(r.stderr).toMatch(/Failed at step "/);
+        expect(r.stderr).toMatch(/Fix: connect as a superuser/i);
+      } finally {
+        await pg.cleanup();
+      }
+    },
+    { timeout: 15000 }
+  );
 
   test(
     "--verify returns 0 when ok and non-zero when missing",
