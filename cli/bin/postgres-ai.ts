@@ -1008,11 +1008,16 @@ program
             if (errAny.code === "42501") {
               if (failedStep === "01.role") {
                 console.error("  Context: role creation/update requires CREATEROLE or superuser");
-              } else if (failedStep === "02.permissions") {
+              } else if (failedStep === "03.permissions") {
                 console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
               }
               console.error("  Fix: ensure your Supabase access token has sufficient permissions");
               console.error("  Tip: run with --print-sql to review the exact SQL plan");
+            }
+            // Schema already exists (42P06) or other duplicate object errors
+            if (errAny.code === "42P06" || (message.includes("already exists") && failedStep === "03.permissions")) {
+              console.error("  Hint: postgres_ai schema or objects already exist from a previous setup.");
+              console.error("  Fix: run 'postgresai unprepare-db <connection>' first to clean up, then retry prepare-db.");
             }
           }
           if (errAny && typeof errAny === "object" && typeof errAny.httpStatus === "number") {
@@ -1305,12 +1310,17 @@ program
           if (errAny.code === "42501") {
             if (failedStep === "01.role") {
               console.error("  Context: role creation/update requires CREATEROLE or superuser");
-            } else if (failedStep === "02.permissions") {
+            } else if (failedStep === "03.permissions") {
               console.error("  Context: grants/view/search_path require sufficient GRANT/DDL privileges");
             }
             console.error("  Fix: connect as a superuser (or a role with CREATEROLE and sufficient GRANT privileges)");
             console.error("  Fix: on managed Postgres, use the provider's admin/master user");
             console.error("  Tip: run with --print-sql to review the exact SQL plan");
+          }
+          // Schema already exists (42P06) or other duplicate object errors
+          if (errAny.code === "42P06" || (message.includes("already exists") && failedStep === "03.permissions")) {
+            console.error("  Hint: postgres_ai schema or objects already exist from a previous setup.");
+            console.error("  Fix: run 'postgresai unprepare-db <connection>' first to clean up, then retry prepare-db.");
           }
           if (errAny.code === "ECONNREFUSED") {
             console.error("  Hint: check host/port and ensure Postgres is reachable from this machine");

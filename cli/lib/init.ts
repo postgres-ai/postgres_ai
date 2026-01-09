@@ -527,7 +527,13 @@ end $$;`;
     steps.push({ name: "01.role", sql: roleSql });
   }
 
-  let permissionsSql = applyTemplate(loadSqlTemplate("02.permissions.sql"), vars);
+  // Extensions should be created before permissions (so we can grant permissions on them)
+  steps.push({
+    name: "02.extensions",
+    sql: loadSqlTemplate("02.extensions.sql"),
+  });
+
+  let permissionsSql = applyTemplate(loadSqlTemplate("03.permissions.sql"), vars);
 
   // Some providers restrict ALTER USER - remove those statements.
   // TODO: Make this more flexible by allowing users to specify which statements to skip via config.
@@ -545,26 +551,26 @@ end $$;`;
   }
 
   steps.push({
-    name: "02.permissions",
+    name: "03.permissions",
     sql: permissionsSql,
   });
 
   // Helper functions (SECURITY DEFINER) for plan analysis and table info
   steps.push({
-    name: "05.helpers",
-    sql: applyTemplate(loadSqlTemplate("05.helpers.sql"), vars),
+    name: "06.helpers",
+    sql: applyTemplate(loadSqlTemplate("06.helpers.sql"), vars),
   });
 
   if (params.includeOptionalPermissions) {
     steps.push(
       {
-        name: "03.optional_rds",
-        sql: applyTemplate(loadSqlTemplate("03.optional_rds.sql"), vars),
+        name: "04.optional_rds",
+        sql: applyTemplate(loadSqlTemplate("04.optional_rds.sql"), vars),
         optional: true,
       },
       {
-        name: "04.optional_self_managed",
-        sql: applyTemplate(loadSqlTemplate("04.optional_self_managed.sql"), vars),
+        name: "05.optional_self_managed",
+        sql: applyTemplate(loadSqlTemplate("05.optional_self_managed.sql"), vars),
         optional: true,
       }
     );

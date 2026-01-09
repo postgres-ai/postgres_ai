@@ -89,7 +89,7 @@ describe("init module", () => {
     expect(roleStep.sql).toMatch(/create\s+user\s+"user ""with"" quotes ✓"/i);
     expect(roleStep.sql).toMatch(/alter\s+user\s+"user ""with"" quotes ✓"/i);
 
-    const permStep = plan.steps.find((s: { name: string }) => s.name === "02.permissions");
+    const permStep = plan.steps.find((s: { name: string }) => s.name === "03.permissions");
     expect(permStep).toBeTruthy();
     expect(permStep.sql).toMatch(/grant connect on database "db name ""with"" quotes ✓" to "user ""with"" quotes ✓"/i);
   });
@@ -161,7 +161,7 @@ describe("init module", () => {
       provider: "supabase",
     });
     expect(plan.steps.some((s) => s.name === "01.role")).toBe(false);
-    expect(plan.steps.some((s) => s.name === "02.permissions")).toBe(true);
+    expect(plan.steps.some((s) => s.name === "03.permissions")).toBe(true);
   });
 
   test("buildInitPlan removes ALTER USER for supabase provider", async () => {
@@ -172,7 +172,7 @@ describe("init module", () => {
       includeOptionalPermissions: false,
       provider: "supabase",
     });
-    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    const permStep = plan.steps.find((s) => s.name === "03.permissions");
     expect(permStep).toBeDefined();
     expect(permStep!.sql.toLowerCase()).not.toMatch(/alter user/);
   });
@@ -390,7 +390,7 @@ describe("init module", () => {
       includeOptionalPermissions: false,
       provider: "supabase",
     });
-    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    const permStep = plan.steps.find((s) => s.name === "03.permissions");
     expect(permStep).toBeDefined();
     // Should have removed ALTER USER but kept comments
     expect(permStep!.sql.toLowerCase()).not.toMatch(/^\s*alter\s+user/m);
@@ -538,7 +538,7 @@ describe("init module", () => {
     expect(result.errors[0]).toMatch(/02\.revoke_permissions.*division by zero/);
   });
 
-  test("buildInitPlan includes pg_stat_statements extension", async () => {
+  test("buildInitPlan includes 02.extensions step with pg_stat_statements", async () => {
     const plan = await init.buildInitPlan({
       database: "mydb",
       monitoringUser: DEFAULT_MONITORING_USER,
@@ -546,10 +546,27 @@ describe("init module", () => {
       includeOptionalPermissions: false,
     });
 
-    const permStep = plan.steps.find((s) => s.name === "02.permissions");
-    expect(permStep).toBeTruthy();
+    const extStep = plan.steps.find((s) => s.name === "02.extensions");
+    expect(extStep).toBeTruthy();
     // Should create pg_stat_statements with IF NOT EXISTS
-    expect(permStep!.sql).toMatch(/create extension if not exists pg_stat_statements/i);
+    expect(extStep!.sql).toMatch(/create extension if not exists pg_stat_statements/i);
+  });
+
+  test("buildInitPlan creates extensions before permissions", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+    });
+
+    const stepNames = plan.steps.map((s) => s.name);
+    const extIndex = stepNames.indexOf("02.extensions");
+    const permIndex = stepNames.indexOf("03.permissions");
+    expect(extIndex).toBeGreaterThanOrEqual(0);
+    expect(permIndex).toBeGreaterThanOrEqual(0);
+    // Extensions should come before permissions
+    expect(extIndex).toBeLessThan(permIndex);
   });
 
   test("buildInitPlan does NOT use IF NOT EXISTS for postgres_ai schema", async () => {
@@ -560,7 +577,7 @@ describe("init module", () => {
       includeOptionalPermissions: false,
     });
 
-    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    const permStep = plan.steps.find((s) => s.name === "03.permissions");
     expect(permStep).toBeTruthy();
     // Should create schema WITHOUT IF NOT EXISTS (will fail if exists)
     expect(permStep!.sql).toMatch(/create schema postgres_ai;/i);
@@ -602,8 +619,9 @@ describe("CLI commands", () => {
     expect(r.stdout).toMatch(/provider: supabase/);
     // Should not have 01.role step
     expect(r.stdout).not.toMatch(/-- 01\.role/);
-    // Should have 02.permissions step
-    expect(r.stdout).toMatch(/-- 02\.permissions/);
+    // Should have 02.extensions and 03.permissions steps
+    expect(r.stdout).toMatch(/-- 02\.extensions/);
+    expect(r.stdout).toMatch(/-- 03\.permissions/);
   });
 
   test("cli: prepare-db warns about unknown provider", () => {

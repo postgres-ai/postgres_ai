@@ -3,10 +3,6 @@
 -- Allow connect
 grant connect on database {{DB_IDENT}} to {{ROLE_IDENT}};
 
--- Enable pg_stat_statements for query performance monitoring
--- Note: Uses IF NOT EXISTS because extension may already be installed
-create extension if not exists pg_stat_statements;
-
 -- Standard monitoring privileges
 grant pg_monitor to {{ROLE_IDENT}};
 grant select on pg_catalog.pg_index to {{ROLE_IDENT}};
