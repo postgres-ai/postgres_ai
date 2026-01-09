@@ -792,6 +792,7 @@ describe("CLI commands", () => {
 describe("imageTag priority behavior", () => {
   // Tests for the imageTag priority: --tag flag > PGAI_TAG env var > pkg.version
   // This verifies the fix that prevents stale .env PGAI_TAG from being used
+  // These tests spawn subprocesses so need longer timeout
 
   let tempDir: string;
 
@@ -814,11 +815,13 @@ describe("imageTag priority behavior", () => {
     fs.writeFileSync(resolve(testDir, "docker-compose.yml"), "version: '3'\nservices: {}\n");
 
     // Run from the test directory (so resolvePaths finds docker-compose.yml)
+    // Note: Command may hang on Docker check in CI without Docker, so we use a timeout
     const cliPath = resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
     const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
     const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
       env: { ...process.env, PGAI_TAG: undefined },
       cwd: testDir,
+      timeout: 30000, // Kill subprocess after 30s if it hangs on Docker
     });
 
     // Read the .env that was written
@@ -828,7 +831,7 @@ describe("imageTag priority behavior", () => {
     expect(envContent).not.toMatch(/PGAI_TAG=beta/);
     // It should contain the CLI version (0.0.0-dev.0 in dev)
     expect(envContent).toMatch(/PGAI_TAG=\d+\.\d+\.\d+|PGAI_TAG=0\.0\.0-dev/);
-  });
+  }, 60000);
 
   test("--tag flag takes priority over pkg.version", () => {
     const testDir = resolve(tempDir, "tag-flag-test");
@@ -840,6 +843,7 @@ describe("imageTag priority behavior", () => {
     const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--tag", "v1.2.3-custom", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
       env: { ...process.env, PGAI_TAG: undefined },
       cwd: testDir,
+      timeout: 30000,
     });
 
     const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
@@ -848,7 +852,7 @@ describe("imageTag priority behavior", () => {
     // Verify stdout confirms the tag being used
     const stdout = new TextDecoder().decode(result.stdout);
     expect(stdout).toMatch(/Using image tag: v1\.2\.3-custom/);
-  });
+  }, 60000);
 
   test("PGAI_TAG env var is intentionally ignored (Bun auto-loads .env)", () => {
     // Note: We do NOT use process.env.PGAI_TAG because Bun auto-loads .env files,
@@ -863,13 +867,14 @@ describe("imageTag priority behavior", () => {
     const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
       env: { ...process.env, PGAI_TAG: "v2.0.0-from-env" },
       cwd: testDir,
+      timeout: 30000,
     });
 
     const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
     // PGAI_TAG env var should be IGNORED - uses pkg.version instead
     expect(envContent).not.toMatch(/PGAI_TAG=v2\.0\.0-from-env/);
     expect(envContent).toMatch(/PGAI_TAG=\d+\.\d+\.\d+|PGAI_TAG=0\.0\.0-dev/);
-  });
+  }, 60000);
 
   test("existing registry and password are preserved while tag is updated", () => {
     const testDir = resolve(tempDir, "preserve-test");
@@ -884,6 +889,7 @@ describe("imageTag priority behavior", () => {
     const result = Bun.spawnSync([bunBin, cliPath, "mon", "local-install", "--db-url", "postgresql://u:p@h:5432/d", "--yes"], {
       env: { ...process.env, PGAI_TAG: undefined },
       cwd: testDir,
+      timeout: 30000,
     });
 
     const envContent = fs.readFileSync(resolve(testDir, ".env"), "utf8");
@@ -894,5 +900,5 @@ describe("imageTag priority behavior", () => {
     // But registry and password should be preserved
     expect(envContent).toMatch(/PGAI_REGISTRY=my\.registry\.com/);
     expect(envContent).toMatch(/GF_SECURITY_ADMIN_PASSWORD=secret123/);
-  });
+  }, 60000);
 });
