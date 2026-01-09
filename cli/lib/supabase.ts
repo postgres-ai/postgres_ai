@@ -371,8 +371,9 @@ export async function fetchPoolerDatabaseUrl(
       if (typeof pooler.connection_string === "string") {
         try {
           const connUrl = new URL(pooler.connection_string);
-          // Remove password from URL
-          return `postgresql://${connUrl.username}@${connUrl.hostname}:${connUrl.port}${connUrl.pathname}`;
+          // Remove password from URL; handle empty port for default ports (e.g., 5432)
+          const portPart = connUrl.port ? `:${connUrl.port}` : "";
+          return `postgresql://${connUrl.username}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
         } catch {
           return null;
         }
