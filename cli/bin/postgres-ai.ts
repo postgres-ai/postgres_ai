@@ -13,7 +13,7 @@ import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment, fetchActionItem, fetchActionItems, createActionItem, updateActionItem, type ConfigChange } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
-import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, type PgCompatibleError } from "../lib/supabase";
+import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, fetchPoolerDatabaseUrl, type PgCompatibleError } from "../lib/supabase";
 import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
 import { maskSecret } from "../lib/util";
@@ -757,6 +757,12 @@ program
 
       const supabaseClient = new SupabaseClient(supabaseConfig);
 
+      // Fetch database URL for JSON output (non-blocking, best-effort)
+      let databaseUrl: string | null = null;
+      if (jsonOutput) {
+        databaseUrl = await fetchPoolerDatabaseUrl(supabaseConfig, opts.monitoringUser);
+      }
+
       try {
         // Get current database name
         const database = await supabaseClient.getCurrentDatabase();
@@ -776,7 +782,7 @@ program
           });
           if (v.ok) {
             if (jsonOutput) {
-              outputJson({
+              const result: Record<string, unknown> = {
                 success: true,
                 mode: "supabase",
                 action: "verify",
@@ -784,7 +790,11 @@ program
                 monitoringUser: opts.monitoringUser,
                 verified: true,
                 missingOptional: v.missingOptional,
-              });
+              };
+              if (databaseUrl) {
+                result.databaseUrl = databaseUrl;
+              }
+              outputJson(result);
             } else {
               console.log("✓ prepare-db verify: OK");
               if (v.missingOptional.length > 0) {
@@ -795,7 +805,7 @@ program
             return;
           }
           if (jsonOutput) {
-            outputJson({
+            const result: Record<string, unknown> = {
               success: false,
               mode: "supabase",
               action: "verify",
@@ -804,7 +814,11 @@ program
               verified: false,
               missingRequired: v.missingRequired,
               missingOptional: v.missingOptional,
-            });
+            };
+            if (databaseUrl) {
+              result.databaseUrl = databaseUrl;
+            }
+            outputJson(result);
           } else {
             console.error("✗ prepare-db verify failed: missing required items");
             for (const m of v.missingRequired) console.error(`- ${m}`);
@@ -908,6 +922,9 @@ program
           };
           if (passwordGenerated) {
             result.generatedPassword = monPassword;
+          }
+          if (databaseUrl) {
+            result.databaseUrl = databaseUrl;
           }
           outputJson(result);
         } else {
