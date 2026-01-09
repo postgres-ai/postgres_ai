@@ -335,13 +335,15 @@ export class SupabaseClient {
 
 /**
  * Fetch the database pooler connection string from Supabase Management API.
- * Returns a postgresql:// URL with username but no password.
+ * Returns a postgresql:// URL with the specified username but no password.
  *
  * @param config Supabase configuration with projectRef and accessToken
- * @returns Database URL without password (e.g., "postgresql://postgres.ref@host:port/postgres")
+ * @param username Username to include in the URL (e.g., monitoring user)
+ * @returns Database URL without password (e.g., "postgresql://user@host:port/postgres")
  */
 export async function fetchPoolerDatabaseUrl(
-  config: SupabaseConfig
+  config: SupabaseConfig,
+  username: string
 ): Promise<string | null> {
   const url = `${SUPABASE_API_BASE}/v1/projects/${encodeURIComponent(config.projectRef)}/config/database/pooler`;
 
@@ -364,16 +366,16 @@ export async function fetchPoolerDatabaseUrl(
     if (Array.isArray(data) && data.length > 0) {
       const pooler = data[0];
       // Build URL from components if available
-      if (pooler.db_host && pooler.db_port && pooler.db_name && pooler.db_user) {
-        return `postgresql://${pooler.db_user}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
+      if (pooler.db_host && pooler.db_port && pooler.db_name) {
+        return `postgresql://${username}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
       }
       // Fallback: try to extract from connection_string if present
       if (typeof pooler.connection_string === "string") {
         try {
           const connUrl = new URL(pooler.connection_string);
-          // Remove password from URL; handle empty port for default ports (e.g., 5432)
+          // Use provided username; handle empty port for default ports (e.g., 5432)
           const portPart = connUrl.port ? `:${connUrl.port}` : "";
-          return `postgresql://${connUrl.username}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
+          return `postgresql://${username}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
         } catch {
           return null;
         }

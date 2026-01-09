@@ -760,7 +760,7 @@ program
       // Fetch database URL for JSON output (non-blocking, best-effort)
       let databaseUrl: string | null = null;
       if (jsonOutput) {
-        databaseUrl = await fetchPoolerDatabaseUrl(supabaseConfig);
+        databaseUrl = await fetchPoolerDatabaseUrl(supabaseConfig, opts.monitoringUser);
       }
 
       try {
