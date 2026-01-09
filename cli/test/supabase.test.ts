@@ -2,6 +2,7 @@ import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
 import {
   resolveSupabaseConfig,
   extractProjectRefFromUrl,
+  fetchPoolerDatabaseUrl,
   SupabaseClient,
   applyInitPlanViaSupabase,
   verifyInitSetupViaSupabase,
@@ -134,6 +135,64 @@ describe("Supabase module", () => {
       });
       expect(config.accessToken).toBe("my-token");
       expect(config.projectRef).toBe("myprojectref12");
+    });
+  });
+
+  describe("fetchPoolerDatabaseUrl", () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    test("returns pooler db url with username including project ref (db_host/db_port/db_name response)", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                db_host: "aws-1-eu-west-1.pooler.supabase.com",
+                db_port: 6543,
+                db_name: "postgres",
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBe(
+        "postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
+      );
+    });
+
+    test("does not double-append project ref if username already has it", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                db_host: "aws-1-eu-west-1.pooler.supabase.com",
+                db_port: 6543,
+                db_name: "postgres",
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon.xhaqmsvczjkkvkgdyast"
+      );
+      expect(url).toBe(
+        "postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
+      );
     });
   });
 

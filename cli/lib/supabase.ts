@@ -347,6 +347,15 @@ export async function fetchPoolerDatabaseUrl(
 ): Promise<string | null> {
   const url = `${SUPABASE_API_BASE}/v1/projects/${encodeURIComponent(config.projectRef)}/config/database/pooler`;
 
+  // For Supabase pooler connections, the username must include the project ref:
+  //   <user>.<project_ref>
+  // Example:
+  //   postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres
+  const effectiveUsername = (() => {
+    const suffix = `.${config.projectRef}`;
+    return username.endsWith(suffix) ? username : `${username}${suffix}`;
+  })();
+
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -367,7 +376,7 @@ export async function fetchPoolerDatabaseUrl(
       const pooler = data[0];
       // Build URL from components if available
       if (pooler.db_host && pooler.db_port && pooler.db_name) {
-        return `postgresql://${username}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
+        return `postgresql://${effectiveUsername}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
       }
       // Fallback: try to extract from connection_string if present
       if (typeof pooler.connection_string === "string") {
@@ -375,7 +384,7 @@ export async function fetchPoolerDatabaseUrl(
           const connUrl = new URL(pooler.connection_string);
           // Use provided username; handle empty port for default ports (e.g., 5432)
           const portPart = connUrl.port ? `:${connUrl.port}` : "";
-          return `postgresql://${username}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
+          return `postgresql://${effectiveUsername}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
         } catch {
           return null;
         }
