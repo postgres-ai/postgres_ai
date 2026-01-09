@@ -657,6 +657,102 @@ export type VerifyInitResult = {
   missingOptional: string[];
 };
 
+export type UninitPlan = {
+  monitoringUser: string;
+  database: string;
+  steps: InitStep[];
+  /** If true, also drop the monitoring role. If false, only revoke permissions. */
+  dropRole: boolean;
+};
+
+export async function buildUninitPlan(params: {
+  database: string;
+  monitoringUser?: string;
+  /** If true, drop the role entirely. If false, only revoke permissions/drop objects. */
+  dropRole?: boolean;
+  /** Provider type. Affects which steps are included. Defaults to "self-managed". */
+  provider?: DbProvider;
+}): Promise<UninitPlan> {
+  const monitoringUser = params.monitoringUser || DEFAULT_MONITORING_USER;
+  const database = params.database;
+  const provider = params.provider ?? "self-managed";
+  const dropRole = params.dropRole ?? true;
+
+  const qRole = quoteIdent(monitoringUser);
+  const qDb = quoteIdent(database);
+  const qRoleLiteral = quoteLiteral(monitoringUser);
+
+  const steps: InitStep[] = [];
+
+  const vars: Record<string, string> = {
+    ROLE_IDENT: qRole,
+    DB_IDENT: qDb,
+    ROLE_LITERAL: qRoleLiteral,
+  };
+
+  // Step 1: Drop helper functions
+  steps.push({
+    name: "01.drop_helpers",
+    sql: applyTemplate(loadSqlTemplate("uninit/01.helpers.sql"), vars),
+  });
+
+  // Step 2: Drop view, revoke permissions, drop schema
+  steps.push({
+    name: "02.revoke_permissions",
+    sql: applyTemplate(loadSqlTemplate("uninit/02.permissions.sql"), vars),
+  });
+
+  // Step 3: Drop the role (only if requested and provider allows it)
+  if (dropRole && !SKIP_ROLE_CREATION_PROVIDERS.includes(provider)) {
+    steps.push({
+      name: "03.drop_role",
+      sql: applyTemplate(loadSqlTemplate("uninit/03.role.sql"), vars),
+    });
+  }
+
+  return { monitoringUser, database, steps, dropRole };
+}
+
+export async function applyUninitPlan(params: {
+  client: PgClient;
+  plan: UninitPlan;
+  verbose?: boolean;
+}): Promise<{ applied: string[]; errors: string[] }> {
+  const applied: string[] = [];
+  const errors: string[] = [];
+
+  // Helper to wrap a step execution in begin/commit
+  const executeStep = async (step: InitStep): Promise<void> => {
+    await params.client.query("begin;");
+    try {
+      await params.client.query(step.sql, step.params as any);
+      await params.client.query("commit;");
+    } catch (e) {
+      try {
+        await params.client.query("rollback;");
+      } catch {
+        // ignore
+      }
+      throw e;
+    }
+  };
+
+  // Apply steps in order - unlike init, uninit steps are not optional
+  // but we continue on errors to clean up as much as possible
+  for (const step of params.plan.steps) {
+    try {
+      await executeStep(step);
+      applied.push(step.name);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${step.name}: ${msg}`);
+      // Continue to try other steps
+    }
+  }
+
+  return { applied, errors };
+}
+
 export async function verifyInitSetup(params: {
   client: PgClient;
   database: string;

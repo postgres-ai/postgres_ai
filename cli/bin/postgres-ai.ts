@@ -12,7 +12,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment, fetchActionItem, fetchActionItems, createActionItem, updateActionItem, type ConfigChange } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
+import { applyInitPlan, applyUninitPlan, buildInitPlan, buildUninitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
 import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, fetchPoolerDatabaseUrl, type PgCompatibleError } from "../lib/supabase";
 import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
@@ -1332,6 +1332,302 @@ program
           // ignore
         }
       }
+    }
+  });
+
+program
+  .command("unprepare-db [conn]")
+  .description("remove monitoring setup: drop monitoring user, views, schema, and revoke permissions")
+  .option("--db-url <url>", "PostgreSQL connection URL (admin) (deprecated; pass it as positional arg)")
+  .option("-h, --host <host>", "PostgreSQL host (psql-like)")
+  .option("-p, --port <port>", "PostgreSQL port (psql-like)")
+  .option("-U, --username <username>", "PostgreSQL user (psql-like)")
+  .option("-d, --dbname <dbname>", "PostgreSQL database name (psql-like)")
+  .option("--admin-password <password>", "Admin connection password (otherwise uses PGPASSWORD if set)")
+  .option("--monitoring-user <name>", "Monitoring role name to remove", DEFAULT_MONITORING_USER)
+  .option("--keep-role", "Keep the monitoring role (only revoke permissions and drop objects)", false)
+  .option("--provider <provider>", "Database provider (e.g., supabase). Affects which steps are executed.")
+  .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
+  .option("--force", "Skip confirmation prompt", false)
+  .option("--json", "Output result as JSON (machine-readable)", false)
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  postgresai unprepare-db postgresql://admin@host:5432/dbname",
+      "  postgresai unprepare-db \"dbname=dbname host=host user=admin\"",
+      "  postgresai unprepare-db -h host -p 5432 -U admin -d dbname",
+      "",
+      "Admin password:",
+      "  --admin-password <password>   or  PGPASSWORD=... (libpq standard)",
+      "",
+      "Keep role but remove objects/permissions:",
+      "  postgresai unprepare-db <conn> --keep-role",
+      "",
+      "Inspect SQL without applying changes:",
+      "  postgresai unprepare-db <conn> --print-sql",
+      "",
+      "Offline SQL plan (no DB connection):",
+      "  postgresai unprepare-db --print-sql",
+      "",
+      "Skip confirmation prompt:",
+      "  postgresai unprepare-db <conn> --force",
+    ].join("\n")
+  )
+  .action(async (conn: string | undefined, opts: {
+    dbUrl?: string;
+    host?: string;
+    port?: string;
+    username?: string;
+    dbname?: string;
+    adminPassword?: string;
+    monitoringUser: string;
+    keepRole?: boolean;
+    provider?: string;
+    printSql?: boolean;
+    force?: boolean;
+    json?: boolean;
+  }, cmd: Command) => {
+    // JSON output helper
+    const jsonOutput = opts.json;
+    const outputJson = (data: Record<string, unknown>) => {
+      console.log(JSON.stringify(data, null, 2));
+    };
+    const outputError = (error: {
+      message: string;
+      step?: string;
+      code?: string;
+      detail?: string;
+      hint?: string;
+    }) => {
+      if (jsonOutput) {
+        outputJson({
+          success: false,
+          error,
+        });
+      } else {
+        console.error(`Error: unprepare-db: ${error.message}`);
+        if (error.step) console.error(`  Step: ${error.step}`);
+        if (error.code) console.error(`  Code: ${error.code}`);
+        if (error.detail) console.error(`  Detail: ${error.detail}`);
+        if (error.hint) console.error(`  Hint: ${error.hint}`);
+      }
+      process.exitCode = 1;
+    };
+
+    const shouldPrintSql = !!opts.printSql;
+    const dropRole = !opts.keepRole;
+
+    // Validate provider and warn if unknown
+    const providerWarning = validateProvider(opts.provider);
+    if (providerWarning) {
+      console.warn(`⚠ ${providerWarning}`);
+    }
+
+    // Offline mode: allow printing SQL without providing/using an admin connection.
+    if (!conn && !opts.dbUrl && !opts.host && !opts.port && !opts.username && !opts.adminPassword) {
+      if (shouldPrintSql) {
+        const database = (opts.dbname ?? process.env.PGDATABASE ?? "postgres").trim();
+
+        const plan = await buildUninitPlan({
+          database,
+          monitoringUser: opts.monitoringUser,
+          dropRole,
+          provider: opts.provider,
+        });
+
+        console.log("\n--- SQL plan (offline; not connected) ---");
+        console.log(`-- database: ${database}`);
+        console.log(`-- monitoring user: ${opts.monitoringUser}`);
+        console.log(`-- provider: ${opts.provider ?? "self-managed"}`);
+        console.log(`-- drop role: ${dropRole}`);
+        for (const step of plan.steps) {
+          console.log(`\n-- ${step.name}`);
+          console.log(step.sql);
+        }
+        console.log("\n--- end SQL plan ---\n");
+        return;
+      }
+    }
+
+    let adminConn;
+    try {
+      adminConn = resolveAdminConnection({
+        conn,
+        dbUrlFlag: opts.dbUrl,
+        host: opts.host ?? process.env.PGHOST,
+        port: opts.port ?? process.env.PGPORT,
+        username: opts.username ?? process.env.PGUSER,
+        dbname: opts.dbname ?? process.env.PGDATABASE,
+        adminPassword: opts.adminPassword,
+        envPassword: process.env.PGPASSWORD,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (jsonOutput) {
+        outputError({ message: msg });
+      } else {
+        console.error(`Error: unprepare-db: ${msg}`);
+        if (typeof msg === "string" && msg.startsWith("Connection is required.")) {
+          console.error("");
+          cmd.outputHelp({ error: true });
+        }
+        process.exitCode = 1;
+      }
+      return;
+    }
+
+    if (!jsonOutput) {
+      console.log(`Connecting to: ${adminConn.display}`);
+      console.log(`Monitoring user: ${opts.monitoringUser}`);
+      console.log(`Drop role: ${dropRole}`);
+    }
+
+    // Confirmation prompt (unless --force or --json)
+    if (!opts.force && !jsonOutput && !shouldPrintSql) {
+      const answer = await new Promise<string>((resolve) => {
+        const readline = getReadline();
+        readline.question(
+          `This will remove the monitoring setup for user "${opts.monitoringUser}"${dropRole ? " and drop the role" : ""}. Continue? [y/N] `,
+          (ans) => resolve(ans.trim().toLowerCase())
+        );
+      });
+      if (answer !== "y" && answer !== "yes") {
+        console.log("Aborted.");
+        return;
+      }
+    }
+
+    let client: Client | undefined;
+    try {
+      const connResult = await connectWithSslFallback(Client, adminConn);
+      client = connResult.client;
+
+      const dbRes = await client.query("select current_database() as db");
+      const database = dbRes.rows?.[0]?.db;
+      if (typeof database !== "string" || !database) {
+        throw new Error("Failed to resolve current database name");
+      }
+
+      const plan = await buildUninitPlan({
+        database,
+        monitoringUser: opts.monitoringUser,
+        dropRole,
+        provider: opts.provider,
+      });
+
+      if (shouldPrintSql) {
+        console.log("\n--- SQL plan ---");
+        for (const step of plan.steps) {
+          console.log(`\n-- ${step.name}`);
+          console.log(step.sql);
+        }
+        console.log("\n--- end SQL plan ---\n");
+        return;
+      }
+
+      const { applied, errors } = await applyUninitPlan({ client, plan });
+
+      if (jsonOutput) {
+        outputJson({
+          success: errors.length === 0,
+          action: "unprepare",
+          database,
+          monitoringUser: opts.monitoringUser,
+          dropRole,
+          applied,
+          errors,
+        });
+        if (errors.length > 0) {
+          process.exitCode = 1;
+        }
+      } else {
+        if (errors.length === 0) {
+          console.log("✓ unprepare-db completed");
+          console.log(`Applied ${applied.length} steps`);
+        } else {
+          console.log("⚠ unprepare-db completed with errors");
+          console.log(`Applied ${applied.length} steps`);
+          console.log("Errors:");
+          for (const err of errors) {
+            console.log(`  - ${err}`);
+          }
+          process.exitCode = 1;
+        }
+      }
+    } catch (error) {
+      const errAny = error as any;
+      let message = "";
+      if (error instanceof Error && error.message) {
+        message = error.message;
+      } else if (errAny && typeof errAny === "object" && typeof errAny.message === "string" && errAny.message) {
+        message = errAny.message;
+      } else {
+        message = String(error);
+      }
+      if (!message || message === "[object Object]") {
+        message = "Unknown error";
+      }
+
+      const errorObj: {
+        message: string;
+        code?: string;
+        detail?: string;
+        hint?: string;
+      } = { message };
+
+      if (errAny && typeof errAny === "object") {
+        if (typeof errAny.code === "string" && errAny.code) errorObj.code = errAny.code;
+        if (typeof errAny.detail === "string" && errAny.detail) errorObj.detail = errAny.detail;
+        if (typeof errAny.hint === "string" && errAny.hint) errorObj.hint = errAny.hint;
+      }
+
+      if (jsonOutput) {
+        outputJson({
+          success: false,
+          error: errorObj,
+        });
+        process.exitCode = 1;
+      } else {
+        console.error(`Error: unprepare-db: ${message}`);
+        if (errAny && typeof errAny === "object") {
+          if (typeof errAny.code === "string" && errAny.code) {
+            console.error(`  Code: ${errAny.code}`);
+          }
+          if (typeof errAny.detail === "string" && errAny.detail) {
+            console.error(`  Detail: ${errAny.detail}`);
+          }
+          if (typeof errAny.hint === "string" && errAny.hint) {
+            console.error(`  Hint: ${errAny.hint}`);
+          }
+        }
+        if (errAny && typeof errAny === "object" && typeof errAny.code === "string") {
+          if (errAny.code === "42501") {
+            console.error("  Context: dropping roles/objects requires sufficient privileges");
+            console.error("  Fix: connect as a superuser (or a role with appropriate DROP privileges)");
+          }
+          if (errAny.code === "ECONNREFUSED") {
+            console.error("  Hint: check host/port and ensure Postgres is reachable from this machine");
+          }
+          if (errAny.code === "ENOTFOUND") {
+            console.error("  Hint: DNS resolution failed; double-check the host name");
+          }
+          if (errAny.code === "ETIMEDOUT") {
+            console.error("  Hint: connection timed out; check network/firewall rules");
+          }
+        }
+        process.exitCode = 1;
+      }
+    } finally {
+      if (client) {
+        try {
+          await client.end();
+        } catch {
+          // ignore
+        }
+      }
+      closeReadline();
     }
   });
 
