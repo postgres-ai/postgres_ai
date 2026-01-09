@@ -537,6 +537,48 @@ describe("init module", () => {
     expect(result.errors.length).toBe(1);
     expect(result.errors[0]).toMatch(/02\.revoke_permissions.*division by zero/);
   });
+
+  test("buildInitPlan includes pg_stat_statements extension", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+    });
+
+    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    expect(permStep).toBeTruthy();
+    // Should create pg_stat_statements with IF NOT EXISTS
+    expect(permStep!.sql).toMatch(/create extension if not exists pg_stat_statements/i);
+  });
+
+  test("buildInitPlan does NOT use IF NOT EXISTS for postgres_ai schema", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+    });
+
+    const permStep = plan.steps.find((s) => s.name === "02.permissions");
+    expect(permStep).toBeTruthy();
+    // Should create schema WITHOUT IF NOT EXISTS (will fail if exists)
+    expect(permStep!.sql).toMatch(/create schema postgres_ai;/i);
+    expect(permStep!.sql).not.toMatch(/create schema if not exists postgres_ai/i);
+  });
+
+  test("buildUninitPlan does NOT drop pg_stat_statements extension", async () => {
+    const plan = await init.buildUninitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      dropRole: true,
+    });
+
+    // Check all steps - none should drop pg_stat_statements
+    for (const step of plan.steps) {
+      expect(step.sql.toLowerCase()).not.toMatch(/drop extension.*pg_stat_statements/);
+    }
+  });
 });
 
 describe("CLI commands", () => {

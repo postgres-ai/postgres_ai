@@ -3,12 +3,18 @@
 -- Allow connect
 grant connect on database {{DB_IDENT}} to {{ROLE_IDENT}};
 
+-- Enable pg_stat_statements for query performance monitoring
+-- Note: Uses IF NOT EXISTS because extension may already be installed
+create extension if not exists pg_stat_statements;
+
 -- Standard monitoring privileges
 grant pg_monitor to {{ROLE_IDENT}};
 grant select on pg_catalog.pg_index to {{ROLE_IDENT}};
 
 -- Create postgres_ai schema for our objects
-create schema if not exists postgres_ai;
+-- Note: We intentionally do NOT use "IF NOT EXISTS" here.
+-- If the schema already exists, this will fail - user should run unprepare-db first.
+create schema postgres_ai;
 grant usage on schema postgres_ai to {{ROLE_IDENT}};
 
 -- For bloat analysis: expose pg_statistic via a view
