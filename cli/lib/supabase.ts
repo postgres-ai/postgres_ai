@@ -334,6 +334,58 @@ export class SupabaseClient {
 }
 
 /**
+ * Fetch the database pooler connection string from Supabase Management API.
+ * Returns a postgresql:// URL with username but no password.
+ *
+ * @param config Supabase configuration with projectRef and accessToken
+ * @returns Database URL without password (e.g., "postgresql://postgres.ref@host:port/postgres")
+ */
+export async function fetchPoolerDatabaseUrl(
+  config: SupabaseConfig
+): Promise<string | null> {
+  const url = `${SUPABASE_API_BASE}/v1/projects/${encodeURIComponent(config.projectRef)}/config/database/pooler`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+
+    // The API returns an array of pooler configurations
+    // Look for a connection string in the response
+    if (Array.isArray(data) && data.length > 0) {
+      const pooler = data[0];
+      // Build URL from components if available
+      if (pooler.db_host && pooler.db_port && pooler.db_name && pooler.db_user) {
+        return `postgresql://${pooler.db_user}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
+      }
+      // Fallback: try to extract from connection_string if present
+      if (typeof pooler.connection_string === "string") {
+        try {
+          const connUrl = new URL(pooler.connection_string);
+          // Remove password from URL
+          return `postgresql://${connUrl.username}@${connUrl.hostname}:${connUrl.port}${connUrl.pathname}`;
+        } catch {
+          return null;
+        }
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve Supabase configuration from options and environment variables.
  */
 export function resolveSupabaseConfig(opts: {
