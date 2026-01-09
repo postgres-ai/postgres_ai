@@ -1399,7 +1399,7 @@ metrics:
                           and a2.attnum = ic.attpos
                     ) i
                     join pg_catalog.pg_namespace n on n.oid = i.relnamespace
-                                join public.pg_statistic s on s.schemaname = n.nspname
+                                join postgres_ai.pg_statistic s on s.schemaname = n.nspname
                                       and s.tablename = i.attrelname
                                       and s.attname = i.attname
                     group by 1,2,3,4,5,6,7,8,9,10,11,12
@@ -1474,7 +1474,7 @@ metrics:
               from pg_attribute as att
                 join pg_class as tbl on att.attrelid = tbl.oid
                 join pg_namespace as ns on ns.oid = tbl.relnamespace
-                left join public.pg_statistic as s on s.schemaname=ns.nspname
+                left join postgres_ai.pg_statistic as s on s.schemaname=ns.nspname
                   and s.tablename = tbl.relname and s.inherited=false and s.attname=att.attname
                 left join pg_class as toast on tbl.reltoastrelid = toast.oid
               where not att.attisdropped

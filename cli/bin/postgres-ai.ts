@@ -12,7 +12,7 @@ import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
-import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, verifyInitSetup } from "../lib/init";
+import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
 import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, type PgCompatibleError } from "../lib/supabase";
 import * as pkce from "../lib/pkce";
 import * as authServer from "../lib/auth-server";
@@ -565,6 +565,7 @@ program
   .option("--monitoring-user <name>", "Monitoring role name to create/update", DEFAULT_MONITORING_USER)
   .option("--password <password>", "Monitoring role password (overrides PGAI_MON_PASSWORD)")
   .option("--skip-optional-permissions", "Skip optional permissions (RDS/self-managed extras)", false)
+  .option("--provider <provider>", "Database provider (e.g., supabase). Affects which steps are executed.")
   .option("--verify", "Verify that monitoring role/permissions are in place (no changes)", false)
   .option("--reset-password", "Reset monitoring role password only (no other changes)", false)
   .option("--print-sql", "Print SQL plan and exit (no changes applied)", false)
@@ -619,6 +620,10 @@ program
       "",
       "  Generate a token at: https://supabase.com/dashboard/account/tokens",
       "  Find your project ref in: https://supabase.com/dashboard/project/<ref>",
+      "",
+      "Provider-specific behavior (for direct connections):",
+      "  --provider supabase    Skip role creation (create user in Supabase dashboard)",
+      "                         Skip ALTER USER (restricted by Supabase)",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: {
@@ -631,6 +636,7 @@ program
     monitoringUser: string;
     password?: string;
     skipOptionalPermissions?: boolean;
+    provider?: string;
     verify?: boolean;
     resetPassword?: boolean;
     printSql?: boolean;
@@ -681,6 +687,12 @@ program
     const shouldPrintSql = !!opts.printSql;
     const redactPasswords = (sql: string): string => redactPasswordsInSql(sql);
 
+    // Validate provider and warn if unknown
+    const providerWarning = validateProvider(opts.provider);
+    if (providerWarning) {
+      console.warn(`⚠ ${providerWarning}`);
+    }
+
     // Offline mode: allow printing SQL without providing/using an admin connection.
     // Useful for audits/reviews; caller can provide -d/PGDATABASE.
     if (!conn && !opts.dbUrl && !opts.host && !opts.port && !opts.username && !opts.adminPassword) {
@@ -698,11 +710,13 @@ program
           monitoringUser: opts.monitoringUser,
           monitoringPassword: monPassword,
           includeOptionalPermissions,
+          provider: opts.provider,
         });
 
         console.log("\n--- SQL plan (offline; not connected) ---");
         console.log(`-- database: ${database}`);
         console.log(`-- monitoring user: ${opts.monitoringUser}`);
+        console.log(`-- provider: ${opts.provider ?? "self-managed"}`);
         console.log(`-- optional permissions: ${includeOptionalPermissions ? "enabled" : "skipped"}`);
         for (const step of plan.steps) {
           console.log(`\n-- ${step.name}${step.optional ? " (optional)" : ""}`);
@@ -1059,6 +1073,7 @@ program
           database,
           monitoringUser: opts.monitoringUser,
           includeOptionalPermissions,
+          provider: opts.provider,
         });
         if (v.ok) {
           if (jsonOutput) {
@@ -1068,11 +1083,12 @@ program
               action: "verify",
               database,
               monitoringUser: opts.monitoringUser,
+              provider: opts.provider,
               verified: true,
               missingOptional: v.missingOptional,
             });
           } else {
-            console.log("✓ prepare-db verify: OK");
+            console.log(`✓ prepare-db verify: OK${opts.provider ? ` (provider: ${opts.provider})` : ""}`);
             if (v.missingOptional.length > 0) {
               console.log("⚠ Optional items missing:");
               for (const m of v.missingOptional) console.log(`- ${m}`);
@@ -1154,11 +1170,20 @@ program
         monitoringUser: opts.monitoringUser,
         monitoringPassword: monPassword,
         includeOptionalPermissions,
+        provider: opts.provider,
       });
 
+      // For reset-password, we only want the role step. But if provider skips role creation,
+      // reset-password doesn't make sense - warn the user.
       const effectivePlan = opts.resetPassword
         ? { ...plan, steps: plan.steps.filter((s) => s.name === "01.role") }
         : plan;
+
+      if (opts.resetPassword && effectivePlan.steps.length === 0) {
+        console.error(`✗ --reset-password not supported for provider "${opts.provider}" (role creation is skipped)`);
+        process.exitCode = 1;
+        return;
+      }
 
       if (shouldPrintSql) {
         console.log("\n--- SQL plan ---");
