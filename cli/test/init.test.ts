@@ -423,6 +423,120 @@ describe("init module", () => {
     const redacted = init.redactPasswordsInSql(step.sql);
     expect(redacted).toMatch(/password '<redacted>'/i);
   });
+
+  // Tests for buildUninitPlan
+  test("buildUninitPlan generates correct steps with dropRole=true", async () => {
+    const plan = await init.buildUninitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      dropRole: true,
+    });
+
+    expect(plan.database).toBe("mydb");
+    expect(plan.monitoringUser).toBe(DEFAULT_MONITORING_USER);
+    expect(plan.dropRole).toBe(true);
+    expect(plan.steps.length).toBe(3);
+    expect(plan.steps.map((s) => s.name)).toEqual([
+      "01.drop_helpers",
+      "02.revoke_permissions",
+      "03.drop_role",
+    ]);
+  });
+
+  test("buildUninitPlan skips role drop when dropRole=false", async () => {
+    const plan = await init.buildUninitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      dropRole: false,
+    });
+
+    expect(plan.dropRole).toBe(false);
+    expect(plan.steps.length).toBe(2);
+    expect(plan.steps.map((s) => s.name)).toEqual([
+      "01.drop_helpers",
+      "02.revoke_permissions",
+    ]);
+  });
+
+  test("buildUninitPlan skips role drop for supabase provider", async () => {
+    const plan = await init.buildUninitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      dropRole: true,
+      provider: "supabase",
+    });
+
+    // Even with dropRole=true, supabase provider skips role operations
+    expect(plan.steps.length).toBe(2);
+    expect(plan.steps.some((s) => s.name === "03.drop_role")).toBe(false);
+  });
+
+  test("buildUninitPlan handles special characters in identifiers", async () => {
+    const monitoringUser = 'user "with" quotes';
+    const database = 'db "name"';
+    const plan = await init.buildUninitPlan({
+      database,
+      monitoringUser,
+      dropRole: true,
+    });
+
+    // Check that identifiers are properly quoted in SQL
+    const dropHelpersStep = plan.steps.find((s) => s.name === "01.drop_helpers");
+    expect(dropHelpersStep).toBeTruthy();
+
+    const revokeStep = plan.steps.find((s) => s.name === "02.revoke_permissions");
+    expect(revokeStep).toBeTruthy();
+    expect(revokeStep!.sql).toContain('"user ""with"" quotes"');
+    expect(revokeStep!.sql).toContain('"db ""name"""');
+
+    const dropRoleStep = plan.steps.find((s) => s.name === "03.drop_role");
+    expect(dropRoleStep).toBeTruthy();
+    expect(dropRoleStep!.sql).toContain('"user ""with"" quotes"');
+  });
+
+  test("buildUninitPlan rejects identifiers with null bytes", async () => {
+    await expect(
+      init.buildUninitPlan({
+        database: "mydb",
+        monitoringUser: "bad\0user",
+        dropRole: true,
+      })
+    ).rejects.toThrow(/Identifier cannot contain null bytes/);
+  });
+
+  test("applyUninitPlan continues on errors and reports them", async () => {
+    const plan = {
+      monitoringUser: DEFAULT_MONITORING_USER,
+      database: "mydb",
+      dropRole: true,
+      steps: [
+        { name: "01.drop_helpers", sql: "drop function if exists postgres_ai.test()" },
+        { name: "02.revoke_permissions", sql: "select 1/0" }, // Will fail
+        { name: "03.drop_role", sql: "select 1" },
+      ],
+    };
+
+    const calls: string[] = [];
+    const client = {
+      query: async (sql: string) => {
+        calls.push(sql);
+        if (sql === "begin;") return { rowCount: 1 };
+        if (sql === "commit;") return { rowCount: 1 };
+        if (sql === "rollback;") return { rowCount: 1 };
+        if (sql.includes("1/0")) throw new Error("division by zero");
+        return { rowCount: 1 };
+      },
+    };
+
+    const result = await init.applyUninitPlan({ client: client as any, plan: plan as any });
+
+    // Should have applied steps 1 and 3, with step 2 in errors
+    expect(result.applied).toContain("01.drop_helpers");
+    expect(result.applied).toContain("03.drop_role");
+    expect(result.applied).not.toContain("02.revoke_permissions");
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0]).toMatch(/02\.revoke_permissions.*division by zero/);
+  });
 });
 
 describe("CLI commands", () => {
@@ -570,6 +684,48 @@ describe("CLI commands", () => {
     // Should reject demo mode with API key (from global option)
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/Cannot use --api-key with --demo mode/);
+  });
+
+  // Tests for unprepare-db command
+  test("cli: unprepare-db with missing connection prints help/options", () => {
+    const r = runCli(["unprepare-db"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/--print-sql/);
+    expect(r.stderr).toMatch(/--monitoring-user/);
+  });
+
+  test("cli: unprepare-db --print-sql works without connection (offline mode)", () => {
+    const r = runCli(["unprepare-db", "--print-sql", "-d", "mydb"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/SQL plan \(offline; not connected\)/);
+    expect(r.stdout).toMatch(/drop schema if exists postgres_ai/i);
+  });
+
+  test("cli: unprepare-db --print-sql with --keep-role skips role drop", () => {
+    const r = runCli(["unprepare-db", "--print-sql", "-d", "mydb", "--keep-role"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/drop role: false/);
+    // Should not have 03.drop_role step
+    expect(r.stdout).not.toMatch(/-- 03\.drop_role/);
+    // Should have 01 and 02 steps
+    expect(r.stdout).toMatch(/-- 01\.drop_helpers/);
+    expect(r.stdout).toMatch(/-- 02\.revoke_permissions/);
+  });
+
+  test("cli: unprepare-db --print-sql with --provider supabase skips role step", () => {
+    const r = runCli(["unprepare-db", "--print-sql", "-d", "mydb", "--provider", "supabase"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/provider: supabase/);
+    // Should not have 03.drop_role step
+    expect(r.stdout).not.toMatch(/-- 03\.drop_role/);
+  });
+
+  test("cli: unprepare-db command exists and shows help", () => {
+    const r = runCli(["unprepare-db", "--help"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/--keep-role/);
+    expect(r.stdout).toMatch(/--print-sql/);
+    expect(r.stdout).toMatch(/--force/);
   });
 });
 

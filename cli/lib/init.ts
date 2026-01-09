@@ -716,7 +716,6 @@ export async function buildUninitPlan(params: {
 export async function applyUninitPlan(params: {
   client: PgClient;
   plan: UninitPlan;
-  verbose?: boolean;
 }): Promise<{ applied: string[]; errors: string[] }> {
   const applied: string[] = [];
   const errors: string[] = [];
