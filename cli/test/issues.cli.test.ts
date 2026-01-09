@@ -133,6 +133,43 @@ async function startFakeApi() {
         );
       }
 
+      // Action Items endpoints
+      if (req.method === "GET" && url.pathname.endsWith("/issue_action_items")) {
+        const issueIdParam = url.searchParams.get("issue_id");
+        const idParam = url.searchParams.get("id");
+        if (issueIdParam) {
+          // list_action_items
+          return new Response(
+            JSON.stringify([
+              { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", issue_id: issueIdParam.replace("eq.", ""), title: "Action 1", is_done: false, status: "waiting_for_approval" },
+              { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", issue_id: issueIdParam.replace("eq.", ""), title: "Action 2", is_done: true, status: "approved" },
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        if (idParam) {
+          // view_action_item
+          const actionId = idParam.replace("eq.", "").replace("in.(", "").replace(")", "").split(",")[0];
+          return new Response(
+            JSON.stringify([
+              { id: actionId, issue_id: "11111111-1111-1111-1111-111111111111", title: "Test Action", description: "Test description", is_done: false, status: "waiting_for_approval", sql_action: "SELECT 1;", configs: [] },
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      if (req.method === "POST" && url.pathname.endsWith("/rpc/issue_action_item_create")) {
+        return new Response(
+          JSON.stringify("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      if (req.method === "POST" && url.pathname.endsWith("/rpc/issue_action_item_update")) {
+        return new Response("", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+
       return new Response("not found", { status: 404 });
     },
   });
@@ -306,6 +343,193 @@ describe("CLI issues command group", () => {
       expect(req!.headers["access-token"]).toBe("test-key");
       expect(req!.bodyJson.issue_id).toBe("issue-1");
       expect(req!.bodyJson.content).toBe("hello\nworld");
+    } finally {
+      api.stop();
+    }
+  });
+});
+
+describe("CLI action items commands", () => {
+  test("issues action-items fails fast when API key is missing", () => {
+    const r = runCli(["issues", "action-items", "00000000-0000-0000-0000-000000000000"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("API key is required");
+  });
+
+  test("issues action-items fails when issue_id is not a valid UUID", () => {
+    const r = runCli(["issues", "action-items", "invalid-id"], isolatedEnv({ PGAI_API_KEY: "test-key" }));
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("issueId must be a valid UUID");
+  });
+
+  test("issues action-items succeeds against a fake API", async () => {
+    const api = await startFakeApi();
+    try {
+      const r = await runCliAsync(
+        ["issues", "action-items", "11111111-1111-1111-1111-111111111111"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+      expect(r.status).toBe(0);
+
+      const out = JSON.parse(r.stdout.trim());
+      expect(Array.isArray(out)).toBe(true);
+      expect(out.length).toBe(2);
+      expect(out[0].title).toBe("Action 1");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("issues view-action-item fails fast when API key is missing", () => {
+    const r = runCli(["issues", "view-action-item", "00000000-0000-0000-0000-000000000000"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("API key is required");
+  });
+
+  test("issues view-action-item fails when action_item_id is not a valid UUID", () => {
+    const r = runCli(["issues", "view-action-item", "invalid-id"], isolatedEnv({ PGAI_API_KEY: "test-key" }));
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("actionItemId is required and must be a valid UUID");
+  });
+
+  test("issues view-action-item succeeds against a fake API", async () => {
+    const api = await startFakeApi();
+    try {
+      const r = await runCliAsync(
+        ["issues", "view-action-item", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+      expect(r.status).toBe(0);
+
+      const out = JSON.parse(r.stdout.trim());
+      expect(out[0].title).toBe("Test Action");
+      expect(out[0].sql_action).toBe("SELECT 1;");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("issues create-action-item fails fast when API key is missing", () => {
+    const r = runCli(["issues", "create-action-item", "00000000-0000-0000-0000-000000000000", "Test title"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("API key is required");
+  });
+
+  test("issues create-action-item fails when issue_id is not a valid UUID", () => {
+    const r = runCli(["issues", "create-action-item", "invalid-id", "Test title"], isolatedEnv({ PGAI_API_KEY: "test-key" }));
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("issueId must be a valid UUID");
+  });
+
+  test("issues create-action-item succeeds against a fake API", async () => {
+    const api = await startFakeApi();
+    try {
+      const r = await runCliAsync(
+        ["issues", "create-action-item", "11111111-1111-1111-1111-111111111111", "New action item", "--description", "Test description"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+      expect(r.status).toBe(0);
+
+      const out = JSON.parse(r.stdout.trim());
+      expect(out.id).toBe("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+      const req = api.requests.find((x) => x.pathname.endsWith("/rpc/issue_action_item_create"));
+      expect(req).toBeTruthy();
+      expect(req!.headers["access-token"]).toBe("test-key");
+      expect(req!.bodyJson.issue_id).toBe("11111111-1111-1111-1111-111111111111");
+      expect(req!.bodyJson.title).toBe("New action item");
+      expect(req!.bodyJson.description).toBe("Test description");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("issues create-action-item interprets escape sequences", async () => {
+    const api = await startFakeApi();
+    try {
+      const r = await runCliAsync(
+        ["issues", "create-action-item", "11111111-1111-1111-1111-111111111111", "Title\\nwith newline", "--description", "Desc\\twith tab"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+      expect(r.status).toBe(0);
+
+      const req = api.requests.find((x) => x.pathname.endsWith("/rpc/issue_action_item_create"));
+      expect(req).toBeTruthy();
+      expect(req!.bodyJson.title).toBe("Title\nwith newline");
+      expect(req!.bodyJson.description).toBe("Desc\twith tab");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("issues update-action-item fails fast when API key is missing", () => {
+    const r = runCli(["issues", "update-action-item", "00000000-0000-0000-0000-000000000000", "--done"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("API key is required");
+  });
+
+  test("issues update-action-item fails when action_item_id is not a valid UUID", () => {
+    const r = runCli(["issues", "update-action-item", "invalid-id", "--done"], isolatedEnv({ PGAI_API_KEY: "test-key" }));
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("actionItemId must be a valid UUID");
+  });
+
+  test("issues update-action-item fails when no update fields provided", () => {
+    const r = runCli(["issues", "update-action-item", "00000000-0000-0000-0000-000000000000"], isolatedEnv({ PGAI_API_KEY: "test-key" }));
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("At least one update option is required");
+  });
+
+  test("issues update-action-item succeeds with --done flag", async () => {
+    const api = await startFakeApi();
+    try {
+      const r = await runCliAsync(
+        ["issues", "update-action-item", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "--done"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+      expect(r.status).toBe(0);
+
+      const req = api.requests.find((x) => x.pathname.endsWith("/rpc/issue_action_item_update"));
+      expect(req).toBeTruthy();
+      expect(req!.headers["access-token"]).toBe("test-key");
+      expect(req!.bodyJson.action_item_id).toBe("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+      expect(req!.bodyJson.is_done).toBe(true);
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("issues update-action-item succeeds with --status flag", async () => {
+    const api = await startFakeApi();
+    try {
+      const r = await runCliAsync(
+        ["issues", "update-action-item", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "--status", "approved", "--status-reason", "LGTM"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+      expect(r.status).toBe(0);
+
+      const req = api.requests.find((x) => x.pathname.endsWith("/rpc/issue_action_item_update"));
+      expect(req).toBeTruthy();
+      expect(req!.bodyJson.status).toBe("approved");
+      expect(req!.bodyJson.status_reason).toBe("LGTM");
     } finally {
       api.stop();
     }

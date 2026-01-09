@@ -10,7 +10,7 @@ import * as os from "os";
 import * as crypto from "node:crypto";
 import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
-import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment } from "../lib/issues";
+import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment, fetchActionItem, fetchActionItems, createActionItem, updateActionItem, type ConfigChange } from "../lib/issues";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, buildInitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
 import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, type PgCompatibleError } from "../lib/supabase";
@@ -2999,22 +2999,44 @@ const issues = program.command("issues").description("issues management");
 issues
   .command("list")
   .description("list issues")
+  .option("--status <status>", "filter by status: open, closed, or all (default: all)")
+  .option("--limit <n>", "max number of issues to return (default: 20)", parseInt)
+  .option("--offset <n>", "number of issues to skip (default: 0)", parseInt)
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
-  .action(async (opts: { debug?: boolean; json?: boolean }) => {
+  .action(async (opts: { status?: string; limit?: number; offset?: number; debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching issues...");
     try {
       const rootOpts = program.opts<CliOptions>();
       const cfg = config.readConfig();
       const { apiKey } = getConfig(rootOpts);
       if (!apiKey) {
+        spinner.stop();
         console.error("API key is required. Run 'pgai auth' first or set --api-key.");
         process.exitCode = 1;
         return;
       }
+      const orgId = cfg.orgId ?? undefined;
 
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
-      const result = await fetchIssues({ apiKey, apiBaseUrl, debug: !!opts.debug });
+      let statusFilter: "open" | "closed" | undefined;
+      if (opts.status === "open") {
+        statusFilter = "open";
+      } else if (opts.status === "closed") {
+        statusFilter = "closed";
+      }
+
+      const result = await fetchIssues({
+        apiKey,
+        apiBaseUrl,
+        orgId,
+        status: statusFilter,
+        limit: opts.limit,
+        offset: opts.offset,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
       const trimmed = Array.isArray(result)
         ? (result as any[]).map((r) => ({
             id: (r as any).id,
@@ -3025,6 +3047,7 @@ issues
         : result;
       printResult(trimmed, opts.json);
     } catch (err) {
+      spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
       process.exitCode = 1;
@@ -3037,11 +3060,13 @@ issues
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
   .action(async (issueId: string, opts: { debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching issue...");
     try {
       const rootOpts = program.opts<CliOptions>();
       const cfg = config.readConfig();
       const { apiKey } = getConfig(rootOpts);
       if (!apiKey) {
+        spinner.stop();
         console.error("API key is required. Run 'pgai auth' first or set --api-key.");
         process.exitCode = 1;
         return;
@@ -3051,15 +3076,19 @@ issues
 
       const issue = await fetchIssue({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
       if (!issue) {
+        spinner.stop();
         console.error("Issue not found");
         process.exitCode = 1;
         return;
       }
 
+      spinner.update("Fetching comments...");
       const comments = await fetchIssueComments({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
+      spinner.stop();
       const combined = { issue, comments };
       printResult(combined, opts.json);
     } catch (err) {
+      spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
       process.exitCode = 1;
@@ -3073,22 +3102,24 @@ issues
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
   .action(async (issueId: string, content: string, opts: { parent?: string; debug?: boolean; json?: boolean }) => {
-    try {
-      // Interpret escape sequences in content (e.g., \n -> newline)
-      if (opts.debug) {
-        // eslint-disable-next-line no-console
-        console.log(`Debug: Original content: ${JSON.stringify(content)}`);
-      }
-      content = interpretEscapes(content);
-      if (opts.debug) {
-        // eslint-disable-next-line no-console
-        console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
-      }
+    // Interpret escape sequences in content (e.g., \n -> newline)
+    if (opts.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+    }
+    content = interpretEscapes(content);
+    if (opts.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+    }
 
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Posting comment...");
+    try {
       const rootOpts = program.opts<CliOptions>();
       const cfg = config.readConfig();
       const { apiKey } = getConfig(rootOpts);
       if (!apiKey) {
+        spinner.stop();
         console.error("API key is required. Run 'pgai auth' first or set --api-key.");
         process.exitCode = 1;
         return;
@@ -3104,8 +3135,10 @@ issues
         parentCommentId: opts.parent,
         debug: !!opts.debug,
       });
+      spinner.stop();
       printResult(result, opts.json);
     } catch (err) {
+      spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
       process.exitCode = 1;
@@ -3117,7 +3150,7 @@ issues
   .description("create a new issue")
   .option("--org-id <id>", "organization id (defaults to config orgId)", (v) => parseInt(v, 10))
   .option("--project-id <id>", "project id", (v) => parseInt(v, 10))
-  .option("--description <text>", "issue description (supports \\\\n)")
+  .option("--description <text>", "issue description (use \\n for newlines)")
   .option(
     "--label <label>",
     "issue label (repeatable)",
@@ -3130,34 +3163,35 @@ issues
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
   .action(async (rawTitle: string, opts: { orgId?: number; projectId?: number; description?: string; label?: string[]; debug?: boolean; json?: boolean }) => {
+    const rootOpts = program.opts<CliOptions>();
+    const cfg = config.readConfig();
+    const { apiKey } = getConfig(rootOpts);
+    if (!apiKey) {
+      console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+      process.exitCode = 1;
+      return;
+    }
+
+    const title = interpretEscapes(String(rawTitle || "").trim());
+    if (!title) {
+      console.error("title is required");
+      process.exitCode = 1;
+      return;
+    }
+
+    const orgId = typeof opts.orgId === "number" && !Number.isNaN(opts.orgId) ? opts.orgId : cfg.orgId;
+    if (typeof orgId !== "number") {
+      console.error("org_id is required. Either pass --org-id or run 'pgai auth' to store it in config.");
+      process.exitCode = 1;
+      return;
+    }
+
+    const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+    const labels = Array.isArray(opts.label) && opts.label.length > 0 ? opts.label.map(String) : undefined;
+    const projectId = typeof opts.projectId === "number" && !Number.isNaN(opts.projectId) ? opts.projectId : undefined;
+
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Creating issue...");
     try {
-      const rootOpts = program.opts<CliOptions>();
-      const cfg = config.readConfig();
-      const { apiKey } = getConfig(rootOpts);
-      if (!apiKey) {
-        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
-        process.exitCode = 1;
-        return;
-      }
-
-      const title = interpretEscapes(String(rawTitle || "").trim());
-      if (!title) {
-        console.error("title is required");
-        process.exitCode = 1;
-        return;
-      }
-
-      const orgId = typeof opts.orgId === "number" && !Number.isNaN(opts.orgId) ? opts.orgId : cfg.orgId;
-      if (typeof orgId !== "number") {
-        console.error("org_id is required. Either pass --org-id or run 'pgai auth' to store it in config.");
-        process.exitCode = 1;
-        return;
-      }
-
-      const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
-      const labels = Array.isArray(opts.label) && opts.label.length > 0 ? opts.label.map(String) : undefined;
-      const projectId = typeof opts.projectId === "number" && !Number.isNaN(opts.projectId) ? opts.projectId : undefined;
-
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
       const result = await createIssue({
         apiKey,
@@ -3169,8 +3203,10 @@ issues
         labels,
         debug: !!opts.debug,
       });
+      spinner.stop();
       printResult(result, opts.json);
     } catch (err) {
+      spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
       process.exitCode = 1;
@@ -3180,8 +3216,8 @@ issues
 issues
   .command("update <issueId>")
   .description("update an existing issue (title/description/status/labels)")
-  .option("--title <text>", "new title (supports \\\\n)")
-  .option("--description <text>", "new description (supports \\\\n)")
+  .option("--title <text>", "new title (use \\n for newlines)")
+  .option("--description <text>", "new description (use \\n for newlines)")
   .option("--status <value>", "status: open|closed|0|1")
   .option(
     "--label <label>",
@@ -3196,49 +3232,50 @@ issues
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
   .action(async (issueId: string, opts: { title?: string; description?: string; status?: string; label?: string[]; clearLabels?: boolean; debug?: boolean; json?: boolean }) => {
-    try {
-      const rootOpts = program.opts<CliOptions>();
-      const cfg = config.readConfig();
-      const { apiKey } = getConfig(rootOpts);
-      if (!apiKey) {
-        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
-        process.exitCode = 1;
-        return;
-      }
+    const rootOpts = program.opts<CliOptions>();
+    const cfg = config.readConfig();
+    const { apiKey } = getConfig(rootOpts);
+    if (!apiKey) {
+      console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+      process.exitCode = 1;
+      return;
+    }
 
-      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+    const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
-      const title = opts.title !== undefined ? interpretEscapes(String(opts.title)) : undefined;
-      const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+    const title = opts.title !== undefined ? interpretEscapes(String(opts.title)) : undefined;
+    const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
 
-      let status: number | undefined = undefined;
-      if (opts.status !== undefined) {
-        const raw = String(opts.status).trim().toLowerCase();
-        if (raw === "open") status = 0;
-        else if (raw === "closed") status = 1;
-        else {
-          const n = Number(raw);
-          if (!Number.isFinite(n)) {
-            console.error("status must be open|closed|0|1");
-            process.exitCode = 1;
-            return;
-          }
-          status = n;
-        }
-        if (status !== 0 && status !== 1) {
-          console.error("status must be 0 (open) or 1 (closed)");
+    let status: number | undefined = undefined;
+    if (opts.status !== undefined) {
+      const raw = String(opts.status).trim().toLowerCase();
+      if (raw === "open") status = 0;
+      else if (raw === "closed") status = 1;
+      else {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) {
+          console.error("status must be open|closed|0|1");
           process.exitCode = 1;
           return;
         }
+        status = n;
       }
-
-      let labels: string[] | undefined = undefined;
-      if (opts.clearLabels) {
-        labels = [];
-      } else if (Array.isArray(opts.label) && opts.label.length > 0) {
-        labels = opts.label.map(String);
+      if (status !== 0 && status !== 1) {
+        console.error("status must be 0 (open) or 1 (closed)");
+        process.exitCode = 1;
+        return;
       }
+    }
 
+    let labels: string[] | undefined = undefined;
+    if (opts.clearLabels) {
+      labels = [];
+    } else if (Array.isArray(opts.label) && opts.label.length > 0) {
+      labels = opts.label.map(String);
+    }
+
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Updating issue...");
+    try {
       const result = await updateIssue({
         apiKey,
         apiBaseUrl,
@@ -3249,8 +3286,10 @@ issues
         labels,
         debug: !!opts.debug,
       });
+      spinner.stop();
       printResult(result, opts.json);
     } catch (err) {
+      spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
       process.exitCode = 1;
@@ -3263,26 +3302,27 @@ issues
   .option("--debug", "enable debug output")
   .option("--json", "output raw JSON")
   .action(async (commentId: string, content: string, opts: { debug?: boolean; json?: boolean }) => {
+    if (opts.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+    }
+    content = interpretEscapes(content);
+    if (opts.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+    }
+
+    const rootOpts = program.opts<CliOptions>();
+    const cfg = config.readConfig();
+    const { apiKey } = getConfig(rootOpts);
+    if (!apiKey) {
+      console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+      process.exitCode = 1;
+      return;
+    }
+
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Updating comment...");
     try {
-      if (opts.debug) {
-        // eslint-disable-next-line no-console
-        console.log(`Debug: Original content: ${JSON.stringify(content)}`);
-      }
-      content = interpretEscapes(content);
-      if (opts.debug) {
-        // eslint-disable-next-line no-console
-        console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
-      }
-
-      const rootOpts = program.opts<CliOptions>();
-      const cfg = config.readConfig();
-      const { apiKey } = getConfig(rootOpts);
-      if (!apiKey) {
-        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
-        process.exitCode = 1;
-        return;
-      }
-
       const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
       const result = await updateIssueComment({
@@ -3292,8 +3332,234 @@ issues
         content,
         debug: !!opts.debug,
       });
+      spinner.stop();
       printResult(result, opts.json);
     } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+// Action Items management (subcommands of issues)
+issues
+  .command("action-items <issueId>")
+  .description("list action items for an issue")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (issueId: string, opts: { debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching action items...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await fetchActionItems({ apiKey, apiBaseUrl, issueId, debug: !!opts.debug });
+      spinner.stop();
+      printResult(result, opts.json);
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("view-action-item <actionItemIds...>")
+  .description("view action item(s) with all details (supports multiple IDs)")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (actionItemIds: string[], opts: { debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching action item(s)...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await fetchActionItem({ apiKey, apiBaseUrl, actionItemIds, debug: !!opts.debug });
+      if (result.length === 0) {
+        spinner.stop();
+        console.error("Action item(s) not found");
+        process.exitCode = 1;
+        return;
+      }
+      spinner.stop();
+      printResult(result, opts.json);
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("create-action-item <issueId> <title>")
+  .description("create a new action item for an issue")
+  .option("--description <text>", "detailed description (use \\n for newlines)")
+  .option("--sql-action <sql>", "SQL command to execute")
+  .option("--config <json>", "config change as JSON: {\"parameter\":\"...\",\"value\":\"...\"} (repeatable)", (value: string, previous: ConfigChange[]) => {
+    try {
+      previous.push(JSON.parse(value) as ConfigChange);
+    } catch {
+      console.error(`Invalid JSON for --config: ${value}`);
+      process.exit(1);
+    }
+    return previous;
+  }, [] as ConfigChange[])
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (issueId: string, rawTitle: string, opts: { description?: string; sqlAction?: string; config?: ConfigChange[]; debug?: boolean; json?: boolean }) => {
+    const rootOpts = program.opts<CliOptions>();
+    const cfg = config.readConfig();
+    const { apiKey } = getConfig(rootOpts);
+    if (!apiKey) {
+      console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+      process.exitCode = 1;
+      return;
+    }
+
+    const title = interpretEscapes(String(rawTitle || "").trim());
+    if (!title) {
+      console.error("title is required");
+      process.exitCode = 1;
+      return;
+    }
+
+    const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+    const sqlAction = opts.sqlAction;
+    const configs = Array.isArray(opts.config) && opts.config.length > 0 ? opts.config : undefined;
+
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Creating action item...");
+    try {
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+      const result = await createActionItem({
+        apiKey,
+        apiBaseUrl,
+        issueId,
+        title,
+        description,
+        sqlAction,
+        configs,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
+      printResult({ id: result }, opts.json);
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issues
+  .command("update-action-item <actionItemId>")
+  .description("update an action item (title, description, status, sql_action, configs)")
+  .option("--title <text>", "new title (use \\n for newlines)")
+  .option("--description <text>", "new description (use \\n for newlines)")
+  .option("--done", "mark as done")
+  .option("--not-done", "mark as not done")
+  .option("--status <value>", "status: waiting_for_approval|approved|rejected")
+  .option("--status-reason <text>", "reason for status change")
+  .option("--sql-action <sql>", "SQL command (use empty string to clear)")
+  .option("--config <json>", "config change as JSON (repeatable, replaces all configs)", (value: string, previous: ConfigChange[]) => {
+    try {
+      previous.push(JSON.parse(value) as ConfigChange);
+    } catch {
+      console.error(`Invalid JSON for --config: ${value}`);
+      process.exit(1);
+    }
+    return previous;
+  }, [] as ConfigChange[])
+  .option("--clear-configs", "clear all config changes")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (actionItemId: string, opts: { title?: string; description?: string; done?: boolean; notDone?: boolean; status?: string; statusReason?: string; sqlAction?: string; config?: ConfigChange[]; clearConfigs?: boolean; debug?: boolean; json?: boolean }) => {
+    const rootOpts = program.opts<CliOptions>();
+    const cfg = config.readConfig();
+    const { apiKey } = getConfig(rootOpts);
+    if (!apiKey) {
+      console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+      process.exitCode = 1;
+      return;
+    }
+
+    const title = opts.title !== undefined ? interpretEscapes(String(opts.title)) : undefined;
+    const description = opts.description !== undefined ? interpretEscapes(String(opts.description)) : undefined;
+
+    let isDone: boolean | undefined = undefined;
+    if (opts.done) isDone = true;
+    else if (opts.notDone) isDone = false;
+
+    let status: string | undefined = undefined;
+    if (opts.status !== undefined) {
+      const validStatuses = ["waiting_for_approval", "approved", "rejected"];
+      if (!validStatuses.includes(opts.status)) {
+        console.error(`status must be one of: ${validStatuses.join(", ")}`);
+        process.exitCode = 1;
+        return;
+      }
+      status = opts.status;
+    }
+
+    const statusReason = opts.statusReason;
+    const sqlAction = opts.sqlAction;
+
+    let configs: ConfigChange[] | undefined = undefined;
+    if (opts.clearConfigs) {
+      configs = [];
+    } else if (Array.isArray(opts.config) && opts.config.length > 0) {
+      configs = opts.config;
+    }
+
+    // Check that at least one update field is provided
+    if (title === undefined && description === undefined &&
+        isDone === undefined && status === undefined && statusReason === undefined &&
+        sqlAction === undefined && configs === undefined) {
+      console.error("At least one update option is required");
+      process.exitCode = 1;
+      return;
+    }
+
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Updating action item...");
+    try {
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+      await updateActionItem({
+        apiKey,
+        apiBaseUrl,
+        actionItemId,
+        title,
+        description,
+        isDone,
+        status,
+        statusReason,
+        sqlAction,
+        configs,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
+      printResult({ success: true }, opts.json);
+    } catch (err) {
+      spinner.stop();
       const message = err instanceof Error ? err.message : String(err);
       console.error(message);
       process.exitCode = 1;
