@@ -355,7 +355,6 @@ export async function fetchPoolerDatabaseUrl(
     const suffix = `.${config.projectRef}`;
     return username.endsWith(suffix) ? username : `${username}${suffix}`;
   })();
-
   try {
     const response = await fetch(url, {
       method: "GET",
