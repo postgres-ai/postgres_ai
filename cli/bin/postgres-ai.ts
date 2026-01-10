@@ -1824,7 +1824,7 @@ async function resolveOrInitPaths(): Promise<PathResolution> {
  */
 function isDockerRunning(): boolean {
   try {
-    const result = spawnSync("docker", ["info"], { stdio: "pipe" });
+    const result = spawnSync("docker", ["info"], { stdio: "pipe", timeout: 5000 });
     return result.status === 0;
   } catch {
     return false;
@@ -1836,7 +1836,7 @@ function isDockerRunning(): boolean {
  */
 function getComposeCmd(): string[] | null {
   const tryCmd = (cmd: string, args: string[]): boolean =>
-    spawnSync(cmd, args, { stdio: "ignore" }).status === 0;
+    spawnSync(cmd, args, { stdio: "ignore", timeout: 5000 }).status === 0;
   if (tryCmd("docker-compose", ["version"])) return ["docker-compose"];
   if (tryCmd("docker", ["compose", "version"])) return ["docker", "compose"];
   return null;
@@ -1850,7 +1850,7 @@ function checkRunningContainers(): { running: boolean; containers: string[] } {
     const result = spawnSync(
       "docker",
       ["ps", "--filter", "name=grafana-with-datasources", "--filter", "name=pgwatch", "--format", "{{.Names}}"],
-      { stdio: "pipe", encoding: "utf8" }
+      { stdio: "pipe", encoding: "utf8", timeout: 5000 }
     );
 
     if (result.status === 0 && result.stdout) {
