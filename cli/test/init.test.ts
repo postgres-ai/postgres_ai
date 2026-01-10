@@ -789,10 +789,22 @@ describe("CLI commands", () => {
   });
 });
 
-describe("imageTag priority behavior", () => {
+// Check if Docker is available for imageTag tests
+function isDockerAvailable(): boolean {
+  try {
+    const result = Bun.spawnSync(["docker", "info"], { timeout: 5000 });
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+const dockerAvailable = isDockerAvailable();
+
+describe.skipIf(!dockerAvailable)("imageTag priority behavior", () => {
   // Tests for the imageTag priority: --tag flag > PGAI_TAG env var > pkg.version
   // This verifies the fix that prevents stale .env PGAI_TAG from being used
-  // These tests spawn subprocesses so need longer timeout
+  // These tests require Docker and spawn subprocesses so need longer timeout
 
   let tempDir: string;
 
