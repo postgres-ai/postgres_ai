@@ -40,6 +40,8 @@ try:
 except ImportError:  # pragma: no cover
     psycopg2 = None
 
+import boto3
+from requests_aws4auth import AWS4Auth
 
 from reporter.logger import logger
 
@@ -140,6 +142,23 @@ class PostgresReportGenerator:
         if excluded_databases:
             self.excluded_databases.update(excluded_databases)
 
+        # AWS Managed Prometheus Support
+        self.auth = None
+        if os.environ.get('ENABLE_AMP', 'false').lower() == 'true':
+            region = os.environ.get('AWS_REGION', 'us-east-1')
+            service = 'aps'
+            
+            session = boto3.Session()
+            credentials = session.get_credentials()
+            
+            if credentials:
+                self.auth = AWS4Auth(
+                    region=region,
+                    service=service,
+                    refreshable_credentials=credentials,
+                )
+
+
     def _read_text_file(self, path: str) -> Optional[str]:
         """Read and strip a small text file. Returns None if missing/empty/unreadable."""
         try:
@@ -170,7 +189,7 @@ class PostgresReportGenerator:
     def test_connection(self) -> bool:
         """Test connection to Prometheus."""
         try:
-            response = requests.get(f"{self.base_url}/status/config", timeout=10)
+            response = requests.get(f"{self.base_url}/status/config", timeout=10, auth=self.auth)
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Connection failed: {e}")
@@ -345,7 +364,7 @@ class PostgresReportGenerator:
         params = {'query': query}
 
         try:
-            response = requests.get(f"{self.base_url}/query", params=params)
+            response = requests.get(f"{self.base_url}/query", params=params, auth=self.auth)
             if response.status_code == 200:
                 return response.json()
             else:
@@ -3092,7 +3111,7 @@ class PostgresReportGenerator:
         }
 
         try:
-            response = requests.get(f"{self.base_url}/query_range", params=params)
+            response = requests.get(f"{self.base_url}/query_range", params=params, auth=self.auth)
             if response.status_code == 200:
                 result = response.json()
                 if result.get('status') == 'success':

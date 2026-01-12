@@ -5,6 +5,8 @@ import io
 from datetime import datetime, timezone, timedelta
 import logging
 import os
+import boto3
+from requests_aws4auth import AWS4Auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +34,27 @@ METRIC_NAME_MAPPING = {
 def get_prometheus_client():
     """Get Prometheus client connection"""
     try:
-        return PrometheusConnect(url=PROMETHEUS_URL, disable_ssl=True)
+        auth = None
+        disable_ssl = True
+
+        if os.environ.get('ENABLE_AMP', 'false').lower() == 'true':
+            region = os.environ.get('AWS_REGION', 'us-east-1')
+            service = 'aps'
+            
+            session = boto3.Session()
+            credentials = session.get_credentials()
+            
+            if credentials:
+                auth = AWS4Auth(
+                    region=region,
+                    service=service,
+                    refreshable_credentials=credentials,
+                )
+            
+            # Enable SSL verification for AMP
+            disable_ssl = False
+
+        return PrometheusConnect(url=PROMETHEUS_URL, disable_ssl=disable_ssl, auth=auth)
     except Exception as e:
         logger.error(f"Failed to connect to Prometheus: {e}")
         raise

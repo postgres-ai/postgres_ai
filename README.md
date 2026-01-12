@@ -316,6 +316,41 @@ postgresai mon --help
 ## 🔑 PostgresAI access token
 Get your access token at [PostgresAI](https://postgres.ai) for automated report uploads and advanced analysis.
 
+## ☁️ AWS Managed Prometheus (AMP) Support
+
+postgres_ai monitoring supports AWS Managed Prometheus as an alternative to self-hosted Prometheus/Victoria Metrics.
+
+### Configuration
+
+Set these environment variables to enable AMP:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ENABLE_AMP` | Yes | `false` | Set to `true` to enable AWS Managed Prometheus |
+| `AWS_REGION` | No | `us-east-1` | AWS region for your AMP workspace |
+
+### How it works
+
+When `ENABLE_AMP=true`:
+- Requests to Prometheus are signed with AWS Signature Version 4
+- SSL verification is automatically enabled
+- Credentials are obtained via the standard boto3 credential chain (IAM roles, environment variables, credential files)
+
+### Example: Docker Compose
+
+```yaml
+services:
+  monitoring-api:
+    environment:
+      - ENABLE_AMP=true
+      - AWS_REGION=us-west-2
+      - PROMETHEUS_URL=https://aps-workspaces.us-west-2.amazonaws.com/workspaces/ws-xxx/api/v1
+```
+
+### IAM Permissions
+
+The service requires `aps:QueryMetrics` permission on your AMP workspace.
+
 ## 🛣️ Roadmap
 
 - Host stats for on-premise and managed Postgres setups
