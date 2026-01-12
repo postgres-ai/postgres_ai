@@ -1,7 +1,6 @@
 """Tests for the /version endpoint and version file reading functionality."""
 
 import pytest
-import tempfile
 import os
 import sys
 
@@ -71,7 +70,6 @@ class TestVersionEndpoint:
         build_ts_file.write_text("2025-01-01T00:00:00Z")
 
         # Need to reload the module with mocked file paths
-        import importlib
         import app as app_module
 
         # Patch the module-level constants
@@ -96,17 +94,26 @@ class TestVersionEndpoint:
         """Test that /version response contains expected keys."""
         response = client.get('/version')
         data = response.get_json()
+        
+        # Expecting a list with one item
+        assert isinstance(data, list)
+        assert len(data) == 1
+        item = data[0]
 
-        assert 'version' in data
-        assert 'build_ts' in data
+        assert 'version' in item
+        assert 'build_ts' in item
 
     def test_version_endpoint_response_values(self, client):
         """Test that /version response contains expected values."""
         response = client.get('/version')
         data = response.get_json()
+        
+        assert isinstance(data, list)
+        assert len(data) > 0
+        item = data[0]
 
-        assert data['version'] == '1.0.0-test'
-        assert data['build_ts'] == '2025-01-01T00:00:00Z'
+        assert item['version'] == '1.0.0-test'
+        assert item['build_ts'] == '2025-01-01T00:00:00Z'
 
     def test_version_endpoint_post_not_allowed(self, client):
         """Test that POST to /version returns 405."""
@@ -145,5 +152,9 @@ class TestVersionEndpointWithMissingFiles:
         data = response.get_json()
 
         assert response.status_code == 200
-        assert data['version'] == 'unknown'
-        assert data['build_ts'] == 'unknown'
+        assert isinstance(data, list)
+        assert len(data) > 0
+        item = data[0]
+        
+        assert item['version'] == 'unknown'
+        assert item['build_ts'] == 'unknown'

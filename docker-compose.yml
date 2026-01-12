@@ -175,6 +175,9 @@ services:
     environment:
       - FLASK_ENV=production
       - PROMETHEUS_URL=http://sink-prometheus:9090
+      # Optional overrides:
+      # - ENABLE_AMP=true (enable Amazon Managed Prometheus support)
+      # - AWS_REGION=us-east-1 (AWS region for Amazon Managed Prometheus)
     depends_on:
       - sink-prometheus
     restart: unless-stopped
@@ -196,6 +199,8 @@ services:
       # - REPORTER_API_URL=https://postgres.ai/api/general
       # - REPORTER_PROJECT_NAME=postgres-ai-monitoring
       # - REPORTER_PGWATCH_CONFIG_PATH=/app/.pgwatch-config
+      # - ENABLE_AMP=true (enable Amazon Managed Prometheus support)
+      # - AWS_REGION=us-east-1 (AWS region for Amazon Managed Prometheus)
     depends_on:
       config-init:
         condition: service_completed_successfully

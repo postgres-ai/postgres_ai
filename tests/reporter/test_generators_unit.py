@@ -69,6 +69,7 @@ def test_query_instant_hits_prometheus(
         url: str,
         params: dict[str, Any] | None = None,
         timeout: int | None = None,
+        **kwargs: Any,
     ):
         captured["url"] = url
         captured["params"] = params
@@ -104,6 +105,7 @@ def test_query_range_hits_prometheus(
         url: str,
         params: dict[str, Any] | None = None,
         timeout: int | None = None,
+        **kwargs: Any,
     ):
         captured["url"] = url
         captured["params"] = params
