@@ -8,6 +8,7 @@ grant pg_monitor to {{ROLE_IDENT}};
 grant select on pg_catalog.pg_index to {{ROLE_IDENT}};
 
 -- Create postgres_ai schema for our objects
+-- Using IF NOT EXISTS for idempotency - prepare-db can be run multiple times
 create schema if not exists postgres_ai;
 grant usage on schema postgres_ai to {{ROLE_IDENT}};
 
