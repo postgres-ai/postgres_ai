@@ -26,15 +26,17 @@
   },
   "scripts": {
     "embed-metrics": "bun run scripts/embed-metrics.ts",
-    "build": "bun run embed-metrics && bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\" && cp -r ./sql ./dist/sql",
+    "embed-checkup-dictionary": "bun run scripts/embed-checkup-dictionary.ts",
+    "embed-all": "bun run embed-metrics && bun run embed-checkup-dictionary",
+    "build": "bun run embed-all && bun build ./bin/postgres-ai.ts --outdir ./dist/bin --target node && node -e \"const fs=require('fs');const f='./dist/bin/postgres-ai.js';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('#!/usr/bin/env bun','#!/usr/bin/env node'))\" && cp -r ./sql ./dist/sql",
     "prepublishOnly": "npm run build",
     "start": "bun ./bin/postgres-ai.ts --help",
     "start:node": "node ./dist/bin/postgres-ai.js --help",
-    "dev": "bun run embed-metrics && bun --watch ./bin/postgres-ai.ts",
-    "test": "bun run embed-metrics && bun test",
-    "test:fast": "bun run embed-metrics && bun test --coverage=false",
-    "test:coverage": "bun run embed-metrics && bun test --coverage && echo 'Coverage report: cli/coverage/lcov-report/index.html'",
-    "typecheck": "bun run embed-metrics && bunx tsc --noEmit"
+    "dev": "bun run embed-all && bun --watch ./bin/postgres-ai.ts",
+    "test": "bun run embed-all && bun test",
+    "test:fast": "bun run embed-all && bun test --coverage=false",
+    "test:coverage": "bun run embed-all && bun test --coverage && echo 'Coverage report: cli/coverage/lcov-report/index.html'",
+    "typecheck": "bun run embed-all && bunx tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
