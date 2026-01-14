@@ -1742,7 +1742,6 @@ program
           if (dictEntry) {
             console.error(`Check ${checkId} (${dictEntry.title}) is not yet available in express mode.`);
             console.error(`Express-mode checks: ${Object.keys(CHECK_INFO).join(", ")}`);
-            console.error(`\nFull checkup reports are available at: https://postgres.ai/checkup`);
           } else {
             console.error(`Unknown check ID: ${opts.checkId}`);
             console.error(`See 'postgresai checkup --help' for available checks.`);
