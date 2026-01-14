@@ -1187,6 +1187,37 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
 }
 
 /**
+ * Generate D001 report - Logging settings
+ *
+ * Collects all PostgreSQL logging-related settings including:
+ * - Log destination and collector settings
+ * - Log file rotation and naming
+ * - Log verbosity and filtering
+ * - Statement and duration logging
+ */
+async function generateD001(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("D001", "Logging settings", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const allSettings = await getSettings(client, pgMajorVersion);
+
+  // Filter logging-related settings (log_* and logging_*)
+  const loggingSettings: Record<string, SettingInfo> = {};
+  for (const [name, setting] of Object.entries(allSettings)) {
+    if (name.startsWith("log_") || name.startsWith("logging_")) {
+      loggingSettings[name] = setting;
+    }
+  }
+
+  report.results[nodeName] = {
+    data: loggingSettings,
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Generate F001 report - Autovacuum: current settings
  */
 async function generateF001(client: Client, nodeName: string): Promise<Report> {
@@ -1336,6 +1367,7 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   A004: generateA004,
   A007: generateA007,
   A013: generateA013,
+  D001: generateD001,
   D004: generateD004,
   F001: generateF001,
   G001: generateG001,

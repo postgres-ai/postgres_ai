@@ -20,7 +20,7 @@ import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
-import { getAllCheckupEntries, getCheckupEntry, isValidCheckupCode } from "../lib/checkup-dictionary";
+import { getCheckupEntry } from "../lib/checkup-dictionary";
 import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
 
 // Singleton readline interface for stdin prompts
@@ -1642,14 +1642,6 @@ program
     }
   });
 
-// Build help text showing all checks from dictionary with express-mode indicators
-const expressCheckIds = new Set(Object.keys(REPORT_GENERATORS));
-const allChecks = getAllCheckupEntries();
-const checkHelpLines = allChecks.map((entry) => {
-  const isExpress = expressCheckIds.has(entry.code);
-  return `  ${entry.code}: ${entry.title}${isExpress ? "" : " (*)"}`;
-});
-
 program
   .command("checkup [conn]")
   .description("generate health check reports directly from PostgreSQL (express mode)")
@@ -1667,18 +1659,13 @@ program
     [
       "",
       "Available checks:",
-      ...checkHelpLines,
-      "",
-      "  (*) = not yet available in express mode (coming soon)",
-      "  ALL = run all express-mode checks",
+      ...Object.entries(CHECK_INFO).map(([id, title]) => `  ${id}: ${title}`),
       "",
       "Examples:",
       "  postgresai checkup postgresql://user:pass@host:5432/db",
-      "  postgresai checkup postgresql://user:pass@host:5432/db --check-id A003",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --check-id D001",
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
       "  postgresai checkup postgresql://user:pass@host:5432/db --project my_project",
-      "  postgresai set-default-project my_project",
-      "  postgresai checkup postgresql://user:pass@host:5432/db",
       "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
     ].join("\n")
   )
