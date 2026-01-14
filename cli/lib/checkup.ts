@@ -1359,6 +1359,82 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
 }
 
 /**
+ * Generate G003 report - Timeouts, locks, deadlocks
+ *
+ * Collects timeout and lock-related settings, plus deadlock statistics.
+ */
+async function generateG003(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("G003", "Timeouts, locks, deadlocks", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const allSettings = await getSettings(client, pgMajorVersion);
+
+  // Timeout and lock-related setting names
+  const lockTimeoutSettingNames = [
+    "lock_timeout",
+    "statement_timeout",
+    "idle_in_transaction_session_timeout",
+    "idle_session_timeout",
+    "deadlock_timeout",
+    "max_locks_per_transaction",
+    "max_pred_locks_per_transaction",
+    "max_pred_locks_per_relation",
+    "max_pred_locks_per_page",
+    "log_lock_waits",
+    "transaction_timeout",
+  ];
+
+  const lockSettings: Record<string, SettingInfo> = {};
+  for (const name of lockTimeoutSettingNames) {
+    if (allSettings[name]) {
+      lockSettings[name] = allSettings[name];
+    }
+  }
+
+  // Get deadlock statistics from pg_stat_database
+  let deadlockStats: {
+    deadlocks: number;
+    conflicts: number;
+    stats_reset: string | null;
+  } | null = null;
+  let deadlockError: string | null = null;
+
+  try {
+    const statsResult = await client.query(`
+      select
+        coalesce(sum(deadlocks), 0)::bigint as deadlocks,
+        coalesce(sum(conflicts), 0)::bigint as conflicts,
+        min(stats_reset)::text as stats_reset
+      from pg_stat_database
+      where datname = current_database()
+    `);
+    if (statsResult.rows.length > 0) {
+      const row = statsResult.rows[0];
+      deadlockStats = {
+        deadlocks: parseInt(row.deadlocks, 10),
+        conflicts: parseInt(row.conflicts, 10),
+        stats_reset: row.stats_reset || null,
+      };
+    }
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[G003] Error querying deadlock stats: ${errorMsg}`);
+    deadlockError = errorMsg;
+  }
+
+  report.results[nodeName] = {
+    data: {
+      settings: lockSettings,
+      deadlock_stats: deadlockStats,
+      ...(deadlockError && { deadlock_stats_error: deadlockError }),
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Available report generators
  */
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
@@ -1371,6 +1447,7 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   D004: generateD004,
   F001: generateF001,
   G001: generateG001,
+  G003: generateG003,
   H001: generateH001,
   H002: generateH002,
   H004: generateH004,
