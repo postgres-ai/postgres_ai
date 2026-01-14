@@ -243,6 +243,24 @@ export interface RedundantIndex {
 }
 
 /**
+ * Sequence overflow risk entry (L003)
+ * Monitors sequence-generated columns for potential integer overflow
+ */
+export interface SequenceOverflowRisk {
+  schema_name: string;
+  table_name: string;
+  column_name: string;
+  sequence_name: string;
+  sequence_data_type: string;
+  column_data_type: string;
+  current_value: number;
+  max_value: number;
+  sequence_percent_used: number;
+  column_percent_used: number;
+  capacity_used_pretty: string;
+}
+
+/**
  * Node result for reports
  */
 export interface NodeResult {
@@ -840,6 +858,49 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
 }
 
 /**
+ * Get sequence overflow risks from database (L003)
+ * Monitors sequence-generated columns (serial/identity) for potential integer overflow
+ * by checking how close the current sequence value is to the max value for the data type.
+ *
+ * @param client - Connected PostgreSQL client
+ * @param pgMajorVersion - PostgreSQL major version (default: 16)
+ * @returns Array of sequence overflow risk entries
+ */
+export async function getSequenceOverflowRisks(
+  client: Client,
+  pgMajorVersion: number = 16
+): Promise<SequenceOverflowRisk[]> {
+  const sql = getMetricSql(METRIC_NAMES.L003, pgMajorVersion);
+  const result = await client.query(sql);
+  return result.rows.map((row) => {
+    const transformed = transformMetricRow(row);
+    const currentValue = parseInt(String(transformed.current_value || 0), 10);
+    const sequencePercentUsed = parseFloat(String(transformed.sequence_percent_used || 0));
+    const columnPercentUsed = parseFloat(String(transformed.column_percent_used || 0));
+    const capacityPercent = Math.max(sequencePercentUsed, columnPercentUsed);
+
+    // Use the smaller of the two max values (column type is the constraint)
+    const sequenceMaxValue = parseInt(String(transformed.sequence_max_value || 0), 10);
+    const columnMaxValue = parseInt(String(transformed.column_max_value || 0), 10);
+    const effectiveMaxValue = Math.min(sequenceMaxValue, columnMaxValue) || columnMaxValue || sequenceMaxValue;
+
+    return {
+      schema_name: String(transformed.schema_name || ""),
+      table_name: String(transformed.table_name || ""),
+      column_name: String(transformed.column_name || ""),
+      sequence_name: String(transformed.sequence_name || ""),
+      sequence_data_type: String(transformed.sequence_data_type || ""),
+      column_data_type: String(transformed.column_data_type || ""),
+      current_value: currentValue,
+      max_value: effectiveMaxValue,
+      sequence_percent_used: Math.round(sequencePercentUsed * 100) / 100,
+      column_percent_used: Math.round(columnPercentUsed * 100) / 100,
+      capacity_used_pretty: `${capacityPercent.toFixed(2)}%`,
+    };
+  });
+}
+
+/**
  * Create base report structure
  */
 export function createBaseReport(
@@ -1327,6 +1388,49 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
 }
 
 /**
+ * Generate L003 report - Integer out-of-range risks in PKs
+ * Monitors sequence-generated columns (serial/identity) for potential integer overflow.
+ */
+export async function generateL003(client: Client, nodeName: string = "node-01"): Promise<Report> {
+  const report = createBaseReport("L003", "Integer out-of-range risks in PKs", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10) || 16;
+  const overflowRisks = await getSequenceOverflowRisks(client, pgMajorVersion);
+  const { datname: dbName } = await getCurrentDatabaseInfo(client, pgMajorVersion);
+
+  // Default thresholds matching schema
+  const warningThreshold = 50;
+  const criticalThreshold = 75;
+
+  // Count high-risk items (above warning threshold)
+  const highRiskCount = overflowRisks.filter(
+    (risk) => Math.max(risk.sequence_percent_used, risk.column_percent_used) >= warningThreshold
+  ).length;
+
+  // Sort by highest capacity usage (descending)
+  overflowRisks.sort(
+    (a, b) =>
+      Math.max(b.sequence_percent_used, b.column_percent_used) -
+      Math.max(a.sequence_percent_used, a.column_percent_used)
+  );
+
+  report.results[nodeName] = {
+    data: {
+      [dbName]: {
+        overflow_risks: overflowRisks,
+        total_count: overflowRisks.length,
+        high_risk_count: highRiskCount,
+        warning_threshold_pct: warningThreshold,
+        critical_threshold_pct: criticalThreshold,
+      },
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Available report generators
  */
 export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string) => Promise<Report>> = {
@@ -1341,6 +1445,7 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   H001: generateH001,
   H002: generateH002,
   H004: generateH004,
+  L003: generateL003,
 };
 
 /**
@@ -1358,6 +1463,7 @@ export const CHECK_INFO: Record<string, string> = {
   H001: "Invalid indexes",
   H002: "Unused indexes",
   H004: "Redundant indexes",
+  L003: "Integer out-of-range risks in PKs",
 };
 
 /**

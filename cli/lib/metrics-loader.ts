@@ -63,8 +63,10 @@ export function listMetricNames(): string[] {
 export const METRIC_NAMES = {
   // Index health checks
   H001: "pg_invalid_indexes",
-  H002: "unused_indexes", 
+  H002: "unused_indexes",
   H004: "redundant_indexes",
+  // Sequence overflow risks (L003)
+  L003: "sequence_overflow",
   // Settings and version info (A002, A003, A007, A013)
   settings: "settings",
   // Database statistics (A004)

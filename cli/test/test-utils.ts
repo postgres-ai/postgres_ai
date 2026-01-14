@@ -16,6 +16,7 @@ export interface MockClientOptions {
   unusedIndexesRows?: any[];
   redundantIndexesRows?: any[];
   sensitiveColumnsRows?: any[];
+  sequenceOverflowRows?: any[];
 }
 
 const DEFAULT_VERSION_ROWS = [
@@ -47,6 +48,7 @@ export function createMockClient(options: MockClientOptions = {}) {
     unusedIndexesRows = [],
     redundantIndexesRows = [],
     sensitiveColumnsRows = [],
+    sequenceOverflowRows = [],
   } = options;
 
   return {
@@ -98,6 +100,10 @@ export function createMockClient(options: MockClientOptions = {}) {
       // Redundant indexes (H004) - from metrics.yml
       if (sql.includes("redundant_indexes_grouped") && sql.includes("columns like")) {
         return { rows: redundantIndexesRows };
+      }
+      // Sequence overflow (L003) - from metrics.yml
+      if (sql.includes("pg_sequence_last_value") && sql.includes("pg_depend") && sql.includes("sequence_percent_used")) {
+        return { rows: sequenceOverflowRows };
       }
       // D004: pg_stat_statements extension check
       if (sql.includes("pg_extension") && sql.includes("pg_stat_statements")) {

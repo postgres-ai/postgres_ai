@@ -46,6 +46,8 @@ const REQUIRED_METRICS = [
   "redundant_indexes",
   // Stats reset info (H002)
   "stats_reset",
+  // Sequence overflow risks (L003)
+  "sequence_overflow",
 ];
 
 function main() {
