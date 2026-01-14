@@ -51,6 +51,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as pkg from "../package.json";
 import { getMetricSql, transformMetricRow, METRIC_NAMES } from "./metrics-loader";
+import { getCheckupTitle, buildCheckInfoMap } from "./checkup-dictionary";
 
 // Time constants
 const SECONDS_PER_DAY = 86400;
@@ -1344,21 +1345,27 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
 };
 
 /**
- * Check IDs and titles
+ * Check IDs and titles.
+ *
+ * This mapping is built from the embedded checkup dictionary, which is
+ * fetched from https://postgres.ai/api/general/checkup_dictionary at build time.
+ *
+ * For the full dictionary (all available checks), use the checkup-dictionary module.
+ * CHECK_INFO is filtered to only include checks that have express-mode generators.
  */
-export const CHECK_INFO: Record<string, string> = {
-  A002: "Postgres major version",
-  A003: "Postgres settings",
-  A004: "Cluster information",
-  A007: "Altered settings",
-  A013: "Postgres minor version",
-  D004: "pg_stat_statements and pg_stat_kcache settings",
-  F001: "Autovacuum: current settings",
-  G001: "Memory-related settings",
-  H001: "Invalid indexes",
-  H002: "Unused indexes",
-  H004: "Redundant indexes",
-};
+export const CHECK_INFO: Record<string, string> = (() => {
+  // Build the full dictionary map
+  const fullMap = buildCheckInfoMap();
+
+  // Filter to only include checks that have express-mode generators
+  const expressCheckIds = Object.keys(REPORT_GENERATORS);
+  const filtered: Record<string, string> = {};
+  for (const checkId of expressCheckIds) {
+    // Use dictionary title if available, otherwise use a fallback
+    filtered[checkId] = fullMap[checkId] || checkId;
+  }
+  return filtered;
+})();
 
 /**
  * Generate all available health check reports.

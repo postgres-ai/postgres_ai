@@ -85,28 +85,27 @@ describe("createBaseReport", () => {
 
 // Tests for CHECK_INFO
 describe("CHECK_INFO and REPORT_GENERATORS", () => {
-  const expectedChecks: Record<string, string> = {
-    A002: "Postgres major version",
-    A003: "Postgres settings",
-    A004: "Cluster information",
-    A007: "Altered settings",
-    A013: "Postgres minor version",
-    D004: "pg_stat_statements and pg_stat_kcache settings",
-    F001: "Autovacuum: current settings",
-    G001: "Memory-related settings",
-    H001: "Invalid indexes",
-    H002: "Unused indexes",
-    H004: "Redundant indexes",
-  };
+  // Express-mode checks that have generators
+  const expressCheckIds = ["A002", "A003", "A004", "A007", "A013", "D004", "F001", "G001", "H001", "H002", "H004"];
 
-  test("CHECK_INFO contains all expected checks with correct descriptions", () => {
-    for (const [checkId, description] of Object.entries(expectedChecks)) {
-      expect(checkup.CHECK_INFO[checkId]).toBe(description);
+  test("CHECK_INFO contains all express-mode checks", () => {
+    for (const checkId of expressCheckIds) {
+      expect(checkup.CHECK_INFO[checkId]).toBeDefined();
+      expect(typeof checkup.CHECK_INFO[checkId]).toBe("string");
+      expect(checkup.CHECK_INFO[checkId].length).toBeGreaterThan(0);
     }
   });
 
+  test("CHECK_INFO titles are loaded from embedded dictionary", () => {
+    // Verify a few known titles match the API dictionary
+    // These are canonical titles from postgres.ai/api/general/checkup_dictionary
+    expect(checkup.CHECK_INFO["A002"]).toBe("Postgres major version");
+    expect(checkup.CHECK_INFO["H001"]).toBe("Invalid indexes");
+    expect(checkup.CHECK_INFO["H002"]).toBe("Unused indexes");
+  });
+
   test("REPORT_GENERATORS has function for each check", () => {
-    for (const checkId of Object.keys(expectedChecks)) {
+    for (const checkId of expressCheckIds) {
       expect(typeof checkup.REPORT_GENERATORS[checkId]).toBe("function");
     }
   });
