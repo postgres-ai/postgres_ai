@@ -457,6 +457,40 @@ def test_schema_h004(
     validate_report(report)
 
 
+@pytest.mark.unit
+def test_schema_l003(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+    fixed_pg_version,
+    prom_result,
+) -> None:
+    monkeypatch.setattr(generator, "_get_postgres_version_info", lambda *args, **kwargs: fixed_pg_version)
+    monkeypatch.setattr(generator, "get_all_databases", lambda *args, **kwargs: ["app"])
+
+    responses = {
+        "pgwatch_sequence_overflow_current_value": prom_result(
+            [
+                {
+                    "metric": {
+                        "schema_name": "public",
+                        "table_name": "orders",
+                        "column_name": "id",
+                        "sequence_name": "orders_id_seq",
+                        "sequence_data_type": "integer",
+                        "column_data_type": "integer",
+                        "datname": "app",
+                    },
+                    "value": [0, "1073741824"],  # ~50% of integer max
+                }
+            ]
+        ),
+    }
+    monkeypatch.setattr(generator, "query_instant", _query_stub_factory(prom_result, responses))
+
+    report = generator.generate_l003_integer_overflow_report("local", "node-1")
+    validate_report(report)
+
+
 def _sample_query_metric_row() -> dict[str, Any]:
     # Must match _process_pgss_data() output keys for the current mapping used in _get_pgss_metrics_data_by_db().
     return {

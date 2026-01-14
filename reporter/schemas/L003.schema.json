@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "L003 report schema",
+  "description": "Integer out-of-range risks in sequence-generated primary keys",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkId", "checkTitle", "timestamptz", "nodes", "results"],
+  "properties": {
+    "version": { "type": ["string", "null"] },
+    "build_ts": { "type": ["string", "null"] },
+    "generation_mode": { "type": ["string", "null"] },
+    "checkId": { "const": "L003" },
+    "checkTitle": { "const": "Integer out-of-range risks in PKs" },
+    "timestamptz": { "type": "string" },
+    "nodes": { "$ref": "#/$defs/nodes" },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/nodeResult" }
+    }
+  },
+  "$defs": {
+    "nodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "standbys"],
+      "properties": {
+        "primary": { "type": "string" },
+        "standbys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postgresVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "server_version_num", "server_major_ver", "server_minor_ver"],
+      "properties": {
+        "version": { "type": "string" },
+        "server_version_num": { "type": "string" },
+        "server_major_ver": { "type": "string" },
+        "server_minor_ver": { "type": "string" }
+      }
+    },
+    "sequenceOverflowRisk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_name",
+        "table_name",
+        "column_name",
+        "sequence_name",
+        "sequence_data_type",
+        "column_data_type",
+        "current_value",
+        "max_value",
+        "sequence_percent_used",
+        "column_percent_used",
+        "capacity_used_pretty"
+      ],
+      "properties": {
+        "schema_name": {
+          "type": "string",
+          "description": "Schema containing the table"
+        },
+        "table_name": {
+          "type": "string",
+          "description": "Table name that owns the sequence"
+        },
+        "column_name": {
+          "type": "string",
+          "description": "Column name that uses the sequence (serial/identity)"
+        },
+        "sequence_name": {
+          "type": "string",
+          "description": "Name of the sequence"
+        },
+        "sequence_data_type": {
+          "type": "string",
+          "description": "Data type of the sequence (smallint, integer, bigint)"
+        },
+        "column_data_type": {
+          "type": "string",
+          "description": "Data type of the column that uses the sequence"
+        },
+        "current_value": {
+          "type": "integer",
+          "description": "Current value of the sequence (last used value)"
+        },
+        "max_value": {
+          "type": "integer",
+          "description": "Maximum value based on the more restrictive data type (sequence or column)"
+        },
+        "sequence_percent_used": {
+          "type": "number",
+          "description": "Percentage of sequence's data type range that has been used (0-100)"
+        },
+        "column_percent_used": {
+          "type": "number",
+          "description": "Percentage of column's data type range that has been used (0-100)"
+        },
+        "capacity_used_pretty": {
+          "type": "string",
+          "description": "Human-readable percentage with formatting (e.g., '45.23%')"
+        }
+      }
+    },
+    "dbEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overflow_risks",
+        "total_count",
+        "high_risk_count",
+        "warning_threshold_pct",
+        "critical_threshold_pct"
+      ],
+      "properties": {
+        "overflow_risks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sequenceOverflowRisk" }
+        },
+        "total_count": {
+          "type": "integer",
+          "description": "Total number of sequence-generated columns found"
+        },
+        "high_risk_count": {
+          "type": "integer",
+          "description": "Number of columns exceeding the warning threshold"
+        },
+        "warning_threshold_pct": {
+          "type": "number",
+          "description": "Threshold percentage for warning level (default 50%)"
+        },
+        "critical_threshold_pct": {
+          "type": "number",
+          "description": "Threshold percentage for critical level (default 75%)"
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/dbEntry" }
+    },
+    "nodeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/$defs/data" },
+        "postgres_version": { "$ref": "#/$defs/postgresVersion" }
+      }
+    }
+  }
+}

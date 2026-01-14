@@ -4,7 +4,7 @@ PostgreSQL Reports Generator using PromQL
 
 This script generates JSON reports containing Observations for specific PostgreSQL
 check types (A002, A003, A004, A007, D004, F001, F004, F005, H001, H002, H004,
-K001, K003, K004, K005, K006, K007, K008, M001, M002, M003, N001) by querying
+K001, K003, K004, K005, K006, K007, K008, L003, M001, M002, M003, N001) by querying
 Prometheus metrics using PromQL.
 
 IMPORTANT: Scope of this module
@@ -1009,6 +1009,128 @@ class PostgresReportGenerator:
         return self.format_report_data(
             "H004",
             redundant_indexes_by_db,
+            node_name,
+            postgres_version=self._get_postgres_version_info(cluster, node_name),
+        )
+
+    def generate_l003_integer_overflow_report(
+        self, cluster: str = "local", node_name: str = "node-01",
+        warning_threshold_pct: float = 50.0, critical_threshold_pct: float = 75.0
+    ) -> Dict[str, Any]:
+        """
+        Generate L003 Integer Out-of-Range Risks report.
+
+        Monitors sequence-generated columns (serial/identity) for potential integer overflow
+        by checking how close the current sequence value is to the maximum value allowed
+        by the data type (smallint: 32767, integer: 2147483647, bigint: 9223372036854775807).
+
+        Based on the approach described by Laurenz Albe at CYBERTEC:
+        https://www.cybertec-postgresql.com/en/integer-overflow-in-sequence-generated-primary-keys/
+
+        Args:
+            cluster: Cluster name
+            node_name: Node name
+            warning_threshold_pct: Percentage threshold for warning (default 50%)
+            critical_threshold_pct: Percentage threshold for critical (default 75%)
+
+        Returns:
+            Dictionary containing sequence overflow risk observation data
+        """
+        logger.info("Generating L003 Integer Out-of-Range Risks report...")
+
+        # Data type max values (positive range only since sequences typically start at 1)
+        TYPE_MAX_VALUES = {
+            'smallint': 32767,
+            'integer': 2147483647,
+            'bigint': 9223372036854775807,
+        }
+
+        # Get all databases
+        databases = self.get_all_databases(cluster, node_name)
+
+        overflow_risks_by_db = {}
+        for db_name in databases:
+            # Query pgwatch metrics for sequence overflow data
+            # The metric contains: sequence_name, schema_name, table_name, column_name,
+            # sequence_data_type, column_data_type, current_value
+            base_filter = f'cluster="{cluster}", node_name="{node_name}", datname="{db_name}"'
+
+            # Query primary metric - current sequence value
+            current_value_query = f'last_over_time(pgwatch_sequence_overflow_current_value{{{base_filter}}}[3h])'
+            current_value_result = self.query_instant(current_value_query)
+
+            # Build sequence data keyed by (schema_name, table_name, sequence_name)
+            sequences_data: Dict[tuple, Dict[str, Any]] = {}
+
+            if current_value_result.get('status') == 'success' and current_value_result.get('data', {}).get('result'):
+                for item in current_value_result['data']['result']:
+                    metric = item['metric']
+                    schema_name = metric.get('schema_name', 'public')
+                    table_name = metric.get('table_name', 'unknown')
+                    column_name = metric.get('column_name', 'unknown')
+                    sequence_name = metric.get('sequence_name', 'unknown')
+                    sequence_data_type = metric.get('sequence_data_type', 'integer').lower()
+                    column_data_type = metric.get('column_data_type', 'integer').lower()
+
+                    # Get current value from the metric value
+                    current_value = int(float(item['value'][1])) if item.get('value') else 0
+
+                    key = (schema_name, table_name, sequence_name)
+
+                    # Calculate max values based on data types
+                    sequence_max = TYPE_MAX_VALUES.get(sequence_data_type, TYPE_MAX_VALUES['integer'])
+                    column_max = TYPE_MAX_VALUES.get(column_data_type, TYPE_MAX_VALUES['integer'])
+
+                    # The effective max is the smaller of the two (sequence type vs column type)
+                    # since the column type is what ultimately stores the value
+                    effective_max = min(sequence_max, column_max)
+
+                    # Calculate percentages
+                    sequence_percent_used = (current_value / sequence_max * 100) if sequence_max > 0 else 0
+                    column_percent_used = (current_value / column_max * 100) if column_max > 0 else 0
+
+                    # Use the more restrictive (higher) percentage for display
+                    capacity_percent = max(sequence_percent_used, column_percent_used)
+
+                    sequences_data[key] = {
+                        "schema_name": schema_name,
+                        "table_name": table_name,
+                        "column_name": column_name,
+                        "sequence_name": sequence_name,
+                        "sequence_data_type": sequence_data_type,
+                        "column_data_type": column_data_type,
+                        "current_value": current_value,
+                        "max_value": effective_max,
+                        "sequence_percent_used": round(sequence_percent_used, 2),
+                        "column_percent_used": round(column_percent_used, 2),
+                        "capacity_used_pretty": f"{capacity_percent:.2f}%",
+                    }
+
+            # Convert to list and sort by capacity used (descending)
+            overflow_risks = list(sequences_data.values())
+            overflow_risks.sort(key=lambda x: max(x['sequence_percent_used'], x['column_percent_used']), reverse=True)
+
+            # Count high-risk entries (above warning threshold)
+            high_risk_count = sum(
+                1 for risk in overflow_risks
+                if max(risk['sequence_percent_used'], risk['column_percent_used']) >= warning_threshold_pct
+            )
+
+            # Skip databases with no sequence data
+            if not overflow_risks:
+                continue
+
+            overflow_risks_by_db[db_name] = {
+                "overflow_risks": overflow_risks,
+                "total_count": len(overflow_risks),
+                "high_risk_count": high_risk_count,
+                "warning_threshold_pct": warning_threshold_pct,
+                "critical_threshold_pct": critical_threshold_pct,
+            }
+
+        return self.format_report_data(
+            "L003",
+            overflow_risks_by_db,
             node_name,
             postgres_version=self._get_postgres_version_info(cluster, node_name),
         )
@@ -4047,6 +4169,7 @@ class PostgresReportGenerator:
             ('H001', self.generate_h001_invalid_indexes_report),
             ('H002', self.generate_h002_unused_indexes_report),
             ('H004', self.generate_h004_redundant_indexes_report),
+            ('L003', self.generate_l003_integer_overflow_report),
             ('K001', self.generate_k001_query_calls_report),
             ('K003', self.generate_k003_top_queries_report),
             ('K004', self.generate_k004_temp_bytes_report),

@@ -902,6 +902,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         "generate_h001_invalid_indexes_report",
         "generate_h002_unused_indexes_report",
         "generate_h004_redundant_indexes_report",
+        "generate_l003_integer_overflow_report",
         "generate_k001_query_calls_report",
         "generate_k003_top_queries_report",
         "generate_k004_temp_bytes_report",
@@ -937,6 +938,7 @@ def test_generate_all_reports_invokes_every_builder(monkeypatch: pytest.MonkeyPa
         'D004', 'F001', 'F004', 'F005', 'G001',
         'H001', 'H002', 'H004',
         'K001', 'K003', 'K004', 'K005', 'K006', 'K007', 'K008',
+        'L003',
         'M001', 'M002', 'M003',
         'N001',
         # S001 is not implemented yet
