@@ -2506,6 +2506,85 @@ metrics:
       - offsets_bytes
       - status_code
     statement_timeout_seconds: 15
+  sequence_overflow:
+    description: >
+      Monitors sequence-generated columns (serial/identity) for potential integer overflow risk.
+      Checks how close the current sequence value is to the maximum value allowed by the data type
+      (smallint: 32767, integer: 2147483647, bigint: 9223372036854775807).
+      Based on the approach described by Laurenz Albe at CYBERTEC:
+      https://www.cybertec-postgresql.com/en/integer-overflow-in-sequence-generated-primary-keys/
+      Reports both sequence data type and column data type percentages since they can differ
+      (e.g., bigint sequence feeding an integer column).
+    sqls:
+      11: |
+        select /* pgwatch_generated */
+          (extract(epoch from now()) * 1e9)::int8 as epoch_ns,
+          current_database() as tag_datname,
+          pn.nspname as tag_schema_name,
+          tbl.relname as tag_table_name,
+          att.attname as tag_column_name,
+          seq.relname as tag_sequence_name,
+          format_type(s.seqtypid, null) as tag_sequence_data_type,
+          format_type(att.atttypid, att.atttypmod) as tag_column_data_type,
+          coalesce(pg_sequence_last_value(seq.oid::regclass), s.seqstart) as current_value,
+          case format_type(s.seqtypid, null)
+            when 'smallint' then 32767
+            when 'integer' then 2147483647
+            when 'bigint' then 9223372036854775807
+          end as sequence_max_value,
+          case format_type(att.atttypid, null)
+            when 'smallint' then 32767
+            when 'integer' then 2147483647
+            when 'bigint' then 9223372036854775807
+          end as column_max_value,
+          round(
+            coalesce(pg_sequence_last_value(seq.oid::regclass), s.seqstart)::numeric /
+            (case format_type(s.seqtypid, null)
+              when 'smallint' then 32767
+              when 'integer' then 2147483647
+              when 'bigint' then 9223372036854775807
+            end) * 100, 2
+          ) as sequence_percent_used,
+          round(
+            coalesce(pg_sequence_last_value(seq.oid::regclass), s.seqstart)::numeric /
+            (case format_type(att.atttypid, null)
+              when 'smallint' then 32767
+              when 'integer' then 2147483647
+              when 'bigint' then 9223372036854775807
+            end) * 100, 2
+          ) as column_percent_used
+        from pg_depend d
+        join pg_class seq on seq.relkind = 'S' and seq.oid = d.objid
+        join pg_class tbl on tbl.relkind = 'r' and tbl.oid = d.refobjid
+        join pg_attribute att on att.attrelid = d.refobjid and att.attnum = d.refobjsubid
+        join pg_sequence s on s.seqrelid = seq.oid
+        join pg_namespace pn on pn.oid = tbl.relnamespace
+        where d.deptype = 'a'
+          and d.classid = 'pg_class'::regclass::oid
+          and pn.nspname not in ('pg_catalog', 'information_schema', 'pg_toast')
+        order by
+          greatest(
+            coalesce(pg_sequence_last_value(seq.oid::regclass), s.seqstart)::numeric /
+            (case format_type(s.seqtypid, null)
+              when 'smallint' then 32767
+              when 'integer' then 2147483647
+              when 'bigint' then 9223372036854775807
+            end),
+            coalesce(pg_sequence_last_value(seq.oid::regclass), s.seqstart)::numeric /
+            (case format_type(att.atttypid, null)
+              when 'smallint' then 32767
+              when 'integer' then 2147483647
+              when 'bigint' then 9223372036854775807
+            end)
+          ) desc
+        limit 1000;
+    gauges:
+      - current_value
+      - sequence_max_value
+      - column_max_value
+      - sequence_percent_used
+      - column_percent_used
+    statement_timeout_seconds: 30
 
 presets:
   full:
@@ -2548,6 +2627,7 @@ presets:
       redundant_indexes: 10800
       unused_indexes: 7200
       rarely_used_indexes: 10800
+      sequence_overflow: 7200
       stats_reset: 3600
       archive_lag: 15
       pg_vacuum_progress: 30
