@@ -874,14 +874,20 @@ export async function getSequenceOverflowRisks(
   const result = await client.query(sql);
   return result.rows.map((row) => {
     const transformed = transformMetricRow(row);
-    const currentValue = parseInt(String(transformed.current_value || 0), 10);
+
+    // Percentages are calculated in SQL (handles bigint precision correctly)
     const sequencePercentUsed = parseFloat(String(transformed.sequence_percent_used || 0));
     const columnPercentUsed = parseFloat(String(transformed.column_percent_used || 0));
     const capacityPercent = Math.max(sequencePercentUsed, columnPercentUsed);
 
-    // Use the smaller of the two max values (column type is the constraint)
-    const sequenceMaxValue = parseInt(String(transformed.sequence_max_value || 0), 10);
-    const columnMaxValue = parseInt(String(transformed.column_max_value || 0), 10);
+    // For current_value and max_value, use Number which may lose precision for
+    // very large bigint values (>2^53), but these are informational fields.
+    // The percentages (calculated correctly in SQL) are what matter for risk assessment.
+    const currentValue = Number(transformed.current_value || 0);
+    const sequenceMaxValue = Number(transformed.sequence_max_value || 0);
+    const columnMaxValue = Number(transformed.column_max_value || 0);
+
+    // Use the smaller of the two max values (column type is the actual constraint)
     const effectiveMaxValue = Math.min(sequenceMaxValue, columnMaxValue) || columnMaxValue || sequenceMaxValue;
 
     return {
