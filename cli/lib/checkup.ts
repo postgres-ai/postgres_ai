@@ -1243,6 +1243,272 @@ async function generateF001(client: Client, nodeName: string): Promise<Report> {
 }
 
 /**
+ * Generate F004 report - Autovacuum: heap bloat estimate
+ *
+ * Estimates table bloat based on statistical analysis of table pages vs expected pages.
+ * Uses pg_stats for column statistics to estimate row sizes.
+ */
+async function generateF004(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("F004", "Autovacuum: heap bloat estimate", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+
+  interface TableBloatRow {
+    schemaname: string;
+    tblname: string;
+    real_size_bytes: string;
+    real_size_pretty: string;
+    extra_size_bytes: string;
+    extra_size_pretty: string;
+    extra_pct: string;
+    fillfactor: string;
+    bloat_size_bytes: string;
+    bloat_size_pretty: string;
+    bloat_pct: string;
+    is_na: string;
+  }
+
+  let bloatData: TableBloatRow[] = [];
+  let bloatError: string | null = null;
+
+  try {
+    const result = await client.query<TableBloatRow>(`
+      select
+        schemaname,
+        tblname,
+        (bs * tblpages)::bigint as real_size_bytes,
+        pg_size_pretty((bs * tblpages)::bigint) as real_size_pretty,
+        ((tblpages - est_tblpages) * bs)::bigint as extra_size_bytes,
+        pg_size_pretty(((tblpages - est_tblpages) * bs)::bigint) as extra_size_pretty,
+        case when tblpages > 0 and tblpages - est_tblpages > 0
+          then round(100.0 * (tblpages - est_tblpages) / tblpages, 2)
+          else 0
+        end as extra_pct,
+        fillfactor,
+        case when tblpages - est_tblpages_ff > 0
+          then ((tblpages - est_tblpages_ff) * bs)::bigint
+          else 0
+        end as bloat_size_bytes,
+        pg_size_pretty(case when tblpages - est_tblpages_ff > 0
+          then ((tblpages - est_tblpages_ff) * bs)::bigint
+          else 0
+        end) as bloat_size_pretty,
+        case when tblpages > 0 and tblpages - est_tblpages_ff > 0
+          then round(100.0 * (tblpages - est_tblpages_ff) / tblpages, 2)
+          else 0
+        end as bloat_pct,
+        is_na::text
+      from (
+        select
+          ceil(reltuples / ((bs - page_hdr) / tpl_size)) + ceil(toasttuples / 4) as est_tblpages,
+          ceil(reltuples / ((bs - page_hdr) * fillfactor / (tpl_size * 100))) + ceil(toasttuples / 4) as est_tblpages_ff,
+          tblpages, fillfactor, bs, schemaname, tblname, is_na
+        from (
+          select
+            (4 + tpl_hdr_size + tpl_data_size + (2 * ma)
+              - case when tpl_hdr_size % ma = 0 then ma else tpl_hdr_size % ma end
+              - case when ceil(tpl_data_size)::int % ma = 0 then ma else ceil(tpl_data_size)::int % ma end
+            ) as tpl_size,
+            (heappages + toastpages) as tblpages,
+            reltuples, toasttuples, bs, page_hdr, schemaname, tblname, fillfactor, is_na
+          from (
+            select
+              ns.nspname as schemaname,
+              tbl.relname as tblname,
+              tbl.reltuples,
+              tbl.relpages as heappages,
+              coalesce(toast.relpages, 0) as toastpages,
+              coalesce(toast.reltuples, 0) as toasttuples,
+              coalesce(substring(array_to_string(tbl.reloptions, ' ') from 'fillfactor=([0-9]+)')::smallint, 100) as fillfactor,
+              current_setting('block_size')::numeric as bs,
+              case when version() ~ 'mingw32' or version() ~ '64-bit|x86_64|ppc64|ia64|amd64' then 8 else 4 end as ma,
+              24 as page_hdr,
+              23 + case when max(coalesce(s.null_frac, 0)) > 0 then (7 + count(s.attname)) / 8 else 0::int end
+                + case when bool_or(att.attname = 'oid' and att.attnum < 0) then 4 else 0 end as tpl_hdr_size,
+              sum((1 - coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 0)) as tpl_data_size,
+              (bool_or(att.atttypid = 'pg_catalog.name'::regtype)
+                or sum(case when att.attnum > 0 then 1 else 0 end) <> count(s.attname))::int as is_na
+            from pg_attribute as att
+              join pg_class as tbl on att.attrelid = tbl.oid
+              join pg_namespace as ns on ns.oid = tbl.relnamespace
+              left join pg_stats as s on s.schemaname = ns.nspname
+                and s.tablename = tbl.relname and s.attname = att.attname
+              left join pg_class as toast on tbl.reltoastrelid = toast.oid
+            where not att.attisdropped
+              and tbl.relkind in ('r', 'm')
+              and ns.nspname not in ('pg_catalog', 'information_schema', 'pg_toast')
+            group by ns.nspname, tbl.relname, tbl.reltuples, tbl.relpages, toast.relpages, toast.reltuples, tbl.reloptions
+          ) as s
+        ) as s2
+      ) as s3
+      where tblpages > 0 and (bs * tblpages) >= 1024 * 1024  -- exclude tables < 1 MiB
+      order by bloat_size_bytes desc
+      limit 100
+    `);
+    bloatData = result.rows;
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[F004] Error estimating table bloat: ${errorMsg}`);
+    bloatError = errorMsg;
+  }
+
+  report.results[nodeName] = {
+    data: {
+      tables: bloatData,
+      ...(bloatError && { error: bloatError }),
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate F005 report - Autovacuum: index bloat estimate
+ *
+ * Estimates B-tree index bloat based on statistical analysis of index pages vs expected pages.
+ */
+async function generateF005(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("F005", "Autovacuum: index bloat estimate", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+
+  interface IndexBloatRow {
+    schemaname: string;
+    tblname: string;
+    idxname: string;
+    real_size_bytes: string;
+    real_size_pretty: string;
+    table_size_bytes: string;
+    table_size_pretty: string;
+    extra_size_bytes: string;
+    extra_size_pretty: string;
+    extra_pct: string;
+    fillfactor: string;
+    bloat_size_bytes: string;
+    bloat_size_pretty: string;
+    bloat_pct: string;
+    is_na: string;
+  }
+
+  let bloatData: IndexBloatRow[] = [];
+  let bloatError: string | null = null;
+
+  try {
+    const result = await client.query<IndexBloatRow>(`
+      select
+        nspname as schemaname,
+        tblname,
+        idxname,
+        (bs * relpages)::bigint as real_size_bytes,
+        pg_size_pretty((bs * relpages)::bigint) as real_size_pretty,
+        pg_relation_size(tbloid)::bigint as table_size_bytes,
+        pg_size_pretty(pg_relation_size(tbloid)) as table_size_pretty,
+        ((relpages - est_pages) * bs)::bigint as extra_size_bytes,
+        pg_size_pretty(((relpages - est_pages) * bs)::bigint) as extra_size_pretty,
+        round(100.0 * (relpages - est_pages) / relpages, 2) as extra_pct,
+        fillfactor,
+        case when relpages > est_pages_ff
+          then ((relpages - est_pages_ff) * bs)::bigint
+          else 0
+        end as bloat_size_bytes,
+        pg_size_pretty(case when relpages > est_pages_ff
+          then ((relpages - est_pages_ff) * bs)::bigint
+          else 0
+        end) as bloat_size_pretty,
+        case when relpages > est_pages_ff
+          then round(100.0 * (relpages - est_pages_ff) / relpages, 2)
+          else 0
+        end as bloat_pct,
+        is_na::text
+      from (
+        select
+          coalesce(1 + ceil(reltuples / floor((bs - pageopqdata - pagehdr) / (4 + nulldatahdrwidth)::float)), 0) as est_pages,
+          coalesce(1 + ceil(reltuples / floor((bs - pageopqdata - pagehdr) * fillfactor / (100 * (4 + nulldatahdrwidth)::float))), 0) as est_pages_ff,
+          bs, nspname, tblname, idxname, relpages, fillfactor, is_na, tbloid
+        from (
+          select
+            maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor, tbloid,
+            (index_tuple_hdr_bm + maxalign
+              - case when index_tuple_hdr_bm % maxalign = 0 then maxalign else index_tuple_hdr_bm % maxalign end
+              + nulldatawidth + maxalign
+              - case when nulldatawidth = 0 then 0
+                     when nulldatawidth::integer % maxalign = 0 then maxalign
+                     else nulldatawidth::integer % maxalign end
+            )::numeric as nulldatahdrwidth,
+            pagehdr, pageopqdata, is_na
+          from (
+            select
+              n.nspname, i.tblname, i.idxname, i.reltuples, i.relpages, i.tbloid, i.idxoid, i.fillfactor,
+              current_setting('block_size')::numeric as bs,
+              case when version() ~ 'mingw32' or version() ~ '64-bit|x86_64|ppc64|ia64|amd64' then 8 else 4 end as maxalign,
+              24 as pagehdr,
+              16 as pageopqdata,
+              case when max(coalesce(s.null_frac, 0)) = 0
+                then 8
+                else 8 + ((32 + 8 - 1) / 8)
+              end as index_tuple_hdr_bm,
+              sum((1 - coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 1024)) as nulldatawidth,
+              (max(case when i.atttypid = 'pg_catalog.name'::regtype then 1 else 0 end) > 0)::int as is_na
+            from (
+              select
+                ct.relname as tblname, ct.relnamespace, ic.idxname, ic.attpos, ic.indkey,
+                ic.indkey[ic.attpos], ic.reltuples, ic.relpages, ic.tbloid, ic.idxoid, ic.fillfactor,
+                coalesce(a1.attnum, a2.attnum) as attnum,
+                coalesce(a1.attname, a2.attname) as attname,
+                coalesce(a1.atttypid, a2.atttypid) as atttypid,
+                case when a1.attnum is null then ic.idxname else ct.relname end as attrelname
+              from (
+                select
+                  idxname, reltuples, relpages, tbloid, idxoid, fillfactor,
+                  indkey, generate_subscripts(indkey, 1) as attpos
+                from (
+                  select
+                    ci.relname as idxname, ci.reltuples, ci.relpages, i.indrelid as tbloid,
+                    i.indexrelid as idxoid,
+                    coalesce(substring(array_to_string(ci.reloptions, ' ') from 'fillfactor=([0-9]+)')::smallint, 90) as fillfactor,
+                    i.indkey
+                  from pg_index as i
+                    join pg_class as ci on ci.oid = i.indexrelid
+                    join pg_namespace as ns on ns.oid = ci.relnamespace
+                    join pg_am as am on am.oid = ci.relam
+                  where am.amname = 'btree'
+                    and ci.relpages > 0
+                    and ns.nspname not in ('pg_catalog', 'information_schema', 'pg_toast')
+                ) as idx_data
+              ) as ic
+                join pg_class as ct on ct.oid = ic.tbloid
+                left join pg_attribute as a1 on a1.attrelid = ic.idxoid and a1.attnum = ic.indkey[ic.attpos]
+                left join pg_attribute as a2 on a2.attrelid = ic.tbloid and a2.attnum = ic.indkey[ic.attpos]
+            ) as i
+              join pg_namespace as n on n.oid = i.relnamespace
+              left join pg_stats as s on s.schemaname = n.nspname
+                and s.tablename = i.attrelname and s.attname = i.attname
+            group by n.nspname, i.tblname, i.idxname, i.reltuples, i.relpages, i.tbloid, i.idxoid, i.fillfactor
+          ) as rows_data_stats
+        ) as rows_hdr_pdg_stats
+      ) as relation_stats
+      where relpages > 0 and (bs * relpages) >= 1024 * 1024  -- exclude indexes < 1 MiB
+      order by bloat_size_bytes desc
+      limit 100
+    `);
+    bloatData = result.rows;
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[F005] Error estimating index bloat: ${errorMsg}`);
+    bloatError = errorMsg;
+  }
+
+  report.results[nodeName] = {
+    data: {
+      indexes: bloatData,
+      ...(bloatError && { error: bloatError }),
+    },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Generate G001 report - Memory-related settings
  */
 async function generateG001(client: Client, nodeName: string): Promise<Report> {
@@ -1446,6 +1712,8 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   D001: generateD001,
   D004: generateD004,
   F001: generateF001,
+  F004: generateF004,
+  F005: generateF005,
   G001: generateG001,
   G003: generateG003,
   H001: generateH001,

@@ -86,7 +86,7 @@ describe("createBaseReport", () => {
 // Tests for CHECK_INFO
 describe("CHECK_INFO and REPORT_GENERATORS", () => {
   // Express-mode checks that have generators
-  const expressCheckIds = ["A002", "A003", "A004", "A007", "A013", "D001", "D004", "F001", "G001", "G003", "H001", "H002", "H004"];
+  const expressCheckIds = ["A002", "A003", "A004", "A007", "A013", "D001", "D004", "F001", "F004", "F005", "G001", "G003", "H001", "H002", "H004"];
 
   test("CHECK_INFO contains all express-mode checks", () => {
     for (const checkId of expressCheckIds) {
