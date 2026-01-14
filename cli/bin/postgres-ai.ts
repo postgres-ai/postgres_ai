@@ -20,6 +20,7 @@ import { maskSecret } from "../lib/util";
 import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
+import { getAllCheckupEntries, getCheckupEntry, isValidCheckupCode } from "../lib/checkup-dictionary";
 import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
 
 // Singleton readline interface for stdin prompts
@@ -1641,10 +1642,18 @@ program
     }
   });
 
+// Build help text showing all checks from dictionary with express-mode indicators
+const expressCheckIds = new Set(Object.keys(REPORT_GENERATORS));
+const allChecks = getAllCheckupEntries();
+const checkHelpLines = allChecks.map((entry) => {
+  const isExpress = expressCheckIds.has(entry.code);
+  return `  ${entry.code}: ${entry.title}${isExpress ? "" : " (*)"}`;
+});
+
 program
   .command("checkup [conn]")
   .description("generate health check reports directly from PostgreSQL (express mode)")
-  .option("--check-id <id>", `specific check to run: ${Object.keys(CHECK_INFO).join(", ")}, or ALL`, "ALL")
+  .option("--check-id <id>", `specific check to run (see list below), or ALL`, "ALL")
   .option("--node-name <name>", "node name for reports", "node-01")
   .option("--output <path>", "output directory for JSON files")
   .option("--[no-]upload", "upload JSON results to PostgresAI (default: enabled; requires API key)", undefined)
@@ -1658,7 +1667,10 @@ program
     [
       "",
       "Available checks:",
-      ...Object.entries(CHECK_INFO).map(([id, title]) => `  ${id}: ${title}`),
+      ...checkHelpLines,
+      "",
+      "  (*) = not yet available in express mode (coming soon)",
+      "  ALL = run all express-mode checks",
       "",
       "Examples:",
       "  postgresai checkup postgresql://user:pass@host:5432/db",
@@ -1725,8 +1737,16 @@ program
         const generator = REPORT_GENERATORS[checkId];
         if (!generator) {
           spinner.stop();
-          console.error(`Unknown check ID: ${opts.checkId}`);
-          console.error(`Available: ${Object.keys(CHECK_INFO).join(", ")}, ALL`);
+          // Check if it's a valid check ID from the dictionary (just not implemented in express mode)
+          const dictEntry = getCheckupEntry(checkId);
+          if (dictEntry) {
+            console.error(`Check ${checkId} (${dictEntry.title}) is not yet available in express mode.`);
+            console.error(`Express-mode checks: ${Object.keys(CHECK_INFO).join(", ")}`);
+            console.error(`\nFull checkup reports are available at: https://postgres.ai/checkup`);
+          } else {
+            console.error(`Unknown check ID: ${opts.checkId}`);
+            console.error(`See 'postgresai checkup --help' for available checks.`);
+          }
           process.exitCode = 1;
           return;
         }
