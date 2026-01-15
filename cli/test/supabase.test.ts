@@ -2,6 +2,7 @@ import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
 import {
   resolveSupabaseConfig,
   extractProjectRefFromUrl,
+  fetchPoolerDatabaseUrl,
   SupabaseClient,
   applyInitPlanViaSupabase,
   verifyInitSetupViaSupabase,
@@ -134,6 +135,146 @@ describe("Supabase module", () => {
       });
       expect(config.accessToken).toBe("my-token");
       expect(config.projectRef).toBe("myprojectref12");
+    });
+  });
+
+  describe("fetchPoolerDatabaseUrl", () => {
+    const originalFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    test("returns pooler db url with username including project ref (db_host/db_port/db_name response)", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                db_host: "aws-1-eu-west-1.pooler.supabase.com",
+                db_port: 6543,
+                db_name: "postgres",
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBe(
+        "postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
+      );
+    });
+
+    test("does not double-append project ref if username already has it", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                db_host: "aws-1-eu-west-1.pooler.supabase.com",
+                db_port: 6543,
+                db_name: "postgres",
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon.xhaqmsvczjkkvkgdyast"
+      );
+      expect(url).toBe(
+        "postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
+      );
+    });
+
+    test("returns pooler db url via connection_string fallback path", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                // No db_host/db_port/db_name - uses connection_string fallback
+                connection_string:
+                  "postgresql://ignored@aws-1-eu-west-1.pooler.supabase.com:6543/postgres",
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBe(
+        "postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
+      );
+    });
+
+    test("returns null for invalid connection_string URL", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                connection_string: "not-a-valid-url",
+              },
+            ]),
+            { status: 200 }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBeNull();
+    });
+
+    test("returns null for empty API response", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBeNull();
+    });
+
+    test("returns null for API error response", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(new Response("Unauthorized", { status: 401 }))
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBeNull();
+    });
+
+    test("returns null when fetch throws network error", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.reject(new Error("Network error"))
+      ) as unknown as typeof fetch;
+
+      const url = await fetchPoolerDatabaseUrl(
+        { projectRef: "xhaqmsvczjkkvkgdyast", accessToken: "token" },
+        "postgres_ai_mon"
+      );
+      expect(url).toBeNull();
     });
   });
 

@@ -758,7 +758,7 @@ program
 
       const supabaseClient = new SupabaseClient(supabaseConfig);
 
-      // Fetch database URL for JSON output (non-blocking, best-effort)
+      // Fetch database URL for JSON output (best-effort, errors return null)
       let databaseUrl: string | null = null;
       if (jsonOutput) {
         databaseUrl = await fetchPoolerDatabaseUrl(supabaseConfig, opts.monitoringUser);

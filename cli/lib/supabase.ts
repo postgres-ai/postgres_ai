@@ -337,9 +337,14 @@ export class SupabaseClient {
  * Fetch the database pooler connection string from Supabase Management API.
  * Returns a postgresql:// URL with the specified username but no password.
  *
+ * Note: The username will be automatically suffixed with `.<projectRef>` if not
+ * already present, as required by Supabase pooler connections.
+ *
  * @param config Supabase configuration with projectRef and accessToken
- * @param username Username to include in the URL (e.g., monitoring user)
- * @returns Database URL without password (e.g., "postgresql://user@host:port/postgres")
+ * @param username Username to include in the URL (e.g., monitoring user).
+ *                 Will be transformed to `<username>.<projectRef>` format.
+ * @returns Database URL without password (e.g., "postgresql://user.project@host:port/postgres"),
+ *          or null if the API call fails or returns no pooler config.
  */
 export async function fetchPoolerDatabaseUrl(
   config: SupabaseConfig,
@@ -347,6 +352,14 @@ export async function fetchPoolerDatabaseUrl(
 ): Promise<string | null> {
   const url = `${SUPABASE_API_BASE}/v1/projects/${encodeURIComponent(config.projectRef)}/config/database/pooler`;
 
+  // For Supabase pooler connections, the username must include the project ref:
+  //   <user>.<project_ref>
+  // Example:
+  //   postgresql://postgres_ai_mon.xhaqmsvczjkkvkgdyast@aws-1-eu-west-1.pooler.supabase.com:6543/postgres
+  const suffix = `.${config.projectRef}`;
+  const effectiveUsername = username.endsWith(suffix) ? username : `${username}${suffix}`;
+  // URL-encode the username to handle special characters safely
+  const encodedUsername = encodeURIComponent(effectiveUsername);
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -367,7 +380,7 @@ export async function fetchPoolerDatabaseUrl(
       const pooler = data[0];
       // Build URL from components if available
       if (pooler.db_host && pooler.db_port && pooler.db_name) {
-        return `postgresql://${username}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
+        return `postgresql://${encodedUsername}@${pooler.db_host}:${pooler.db_port}/${pooler.db_name}`;
       }
       // Fallback: try to extract from connection_string if present
       if (typeof pooler.connection_string === "string") {
@@ -375,7 +388,7 @@ export async function fetchPoolerDatabaseUrl(
           const connUrl = new URL(pooler.connection_string);
           // Use provided username; handle empty port for default ports (e.g., 5432)
           const portPart = connUrl.port ? `:${connUrl.port}` : "";
-          return `postgresql://${username}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
+          return `postgresql://${encodedUsername}@${connUrl.hostname}${portPart}${connUrl.pathname}`;
         } catch {
           return null;
         }
