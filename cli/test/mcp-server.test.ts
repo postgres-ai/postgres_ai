@@ -96,21 +96,21 @@ describe("MCP Server", () => {
       });
 
       // Mock fetch to verify API key is used
-      let capturedHeaders: HeadersInit | undefined;
+      let capturedHeaders: Record<string, string> | undefined;
       globalThis.fetch = mock((url: string, options?: RequestInit) => {
-        capturedHeaders = options?.headers;
+        capturedHeaders = options?.headers as Record<string, string> | undefined;
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(createRequest("list_issues"), { apiKey: "test-api-key" });
 
       expect(capturedHeaders).toBeDefined();
-      expect((capturedHeaders as Record<string, string>)["access-token"]).toBe("test-api-key");
+      expect(capturedHeaders!["access-token"]).toBe("test-api-key");
 
       readConfigSpy.mockRestore();
     });
@@ -123,21 +123,21 @@ describe("MCP Server", () => {
         defaultProject: null,
       });
 
-      let capturedHeaders: HeadersInit | undefined;
+      let capturedHeaders: Record<string, string> | undefined;
       globalThis.fetch = mock((url: string, options?: RequestInit) => {
-        capturedHeaders = options?.headers;
+        capturedHeaders = options?.headers as Record<string, string> | undefined;
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(createRequest("list_issues"));
 
       expect(capturedHeaders).toBeDefined();
-      expect((capturedHeaders as Record<string, string>)["access-token"]).toBe("config-api-key");
+      expect(capturedHeaders!["access-token"]).toBe("config-api-key");
 
       readConfigSpy.mockRestore();
     });
@@ -152,21 +152,21 @@ describe("MCP Server", () => {
         defaultProject: null,
       });
 
-      let capturedHeaders: HeadersInit | undefined;
+      let capturedHeaders: Record<string, string> | undefined;
       globalThis.fetch = mock((url: string, options?: RequestInit) => {
-        capturedHeaders = options?.headers;
+        capturedHeaders = options?.headers as Record<string, string> | undefined;
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(createRequest("list_issues"));
 
       expect(capturedHeaders).toBeDefined();
-      expect((capturedHeaders as Record<string, string>)["access-token"]).toBe("env-api-key");
+      expect(capturedHeaders!["access-token"]).toBe("env-api-key");
 
       readConfigSpy.mockRestore();
     });
@@ -193,7 +193,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("list_issues"));
 
@@ -220,7 +220,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("list_issues"));
 
@@ -280,7 +280,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("view_issue", { issue_id: "nonexistent-id" }));
 
@@ -319,7 +319,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("view_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
 
@@ -386,7 +386,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(
         createRequest("post_issue_comment", {
@@ -419,7 +419,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("post_issue_comment", {
@@ -504,7 +504,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(createRequest("create_issue", { title: "Test Issue" }));
 
@@ -532,7 +532,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(
         createRequest("create_issue", {
@@ -566,7 +566,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("create_issue", {
@@ -679,7 +679,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(
         createRequest("update_issue", {
@@ -712,7 +712,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", title: "New Title" })
@@ -740,7 +740,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: 1 })
@@ -771,7 +771,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", labels: ["new-label"] })
@@ -802,7 +802,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: 0 })
@@ -871,7 +871,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(
         createRequest("update_issue_comment", {
@@ -902,7 +902,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_issue_comment", {
@@ -999,7 +999,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "00000000-0000-0000-0000-000000000000" }));
 
@@ -1036,7 +1036,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "11111111-1111-1111-1111-111111111111" }));
 
@@ -1072,7 +1072,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("view_action_item", { action_item_ids: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"] }));
 
@@ -1141,7 +1141,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(createRequest("list_action_items", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
 
@@ -1208,7 +1208,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("create_action_item", {
@@ -1243,7 +1243,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("create_action_item", {
@@ -1284,7 +1284,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       await handleToolCall(
         createRequest("create_action_item", {
@@ -1375,7 +1375,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_action_item", { action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", title: "New Title" })
@@ -1407,7 +1407,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_action_item", { action_item_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", is_done: true })
@@ -1438,7 +1438,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         );
-      });
+      }) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("update_action_item", {
@@ -1492,7 +1492,7 @@ describe("MCP Server", () => {
             headers: { "Content-Type": "application/json" },
           })
         )
-      );
+      ) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("create_issue", { title: "Test Issue" })
@@ -1512,7 +1512,7 @@ describe("MCP Server", () => {
         defaultProject: null,
       });
 
-      globalThis.fetch = mock(() => Promise.reject(new Error("Network error")));
+      globalThis.fetch = mock(() => Promise.reject(new Error("Network error"))) as unknown as typeof fetch;
 
       const response = await handleToolCall(
         createRequest("create_issue", { title: "Test Issue" })
