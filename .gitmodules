@@ -1,0 +1,3 @@
+[submodule ".cursor"]
+	path = .cursor
+	url = https://gitlab.com/postgres-ai/rules.git
