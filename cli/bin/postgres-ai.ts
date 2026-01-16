@@ -1648,12 +1648,13 @@ program
   .option("--check-id <id>", `specific check to run (see list below), or ALL`, "ALL")
   .option("--node-name <name>", "node name for reports", "node-01")
   .option("--output <path>", "output directory for JSON files")
-  .option("--[no-]upload", "upload JSON results to PostgresAI (default: enabled; requires API key)", undefined)
+  .option("--upload", "upload JSON results to PostgresAI (requires API key)")
+  .option("--no-upload", "disable upload to PostgresAI")
   .option(
     "--project <project>",
     "project name or ID for remote upload (used with --upload; defaults to config defaultProject; auto-generated on first run)"
   )
-  .option("--json", "output JSON to stdout (implies --no-upload)")
+  .option("--json", "output JSON to stdout")
   .addHelpText(
     "after",
     [
@@ -1678,7 +1679,9 @@ program
 
     const shouldPrintJson = !!opts.json;
     const uploadExplicitlyRequested = opts.upload === true;
-    const uploadExplicitlyDisabled = opts.upload === false || shouldPrintJson;
+    // Note: --json and --upload/--no-upload are independent flags.
+    // Use --no-upload to explicitly disable upload when using --json.
+    const uploadExplicitlyDisabled = opts.upload === false;
     let shouldUpload = !uploadExplicitlyDisabled;
 
     // Preflight: validate/create output directory BEFORE connecting / running checks.

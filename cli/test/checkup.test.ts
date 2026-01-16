@@ -947,6 +947,66 @@ describe("CLI tests", () => {
     expect(r.stdout).toMatch(/available checks/i);
     expect(r.stdout).toMatch(/A002/);
   });
+
+  test("checkup --help shows --upload and --no-upload options", () => {
+    const r = runCli(["checkup", "--help"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/--upload/);
+    expect(r.stdout).toMatch(/--no-upload/);
+  });
+
+  test("checkup --no-upload is recognized as valid option", () => {
+    // Should not produce "unknown option" error for --no-upload
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"]);
+    // Connection will fail, but option parsing should succeed
+    expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/did you mean/i);
+  });
+
+  test("checkup --upload is recognized as valid option", () => {
+    // Should not produce "unknown option" error for --upload
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--upload"]);
+    // Connection will fail, but option parsing should succeed
+    expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/did you mean/i);
+  });
+
+  test("checkup --json does not imply --no-upload (decoupled behavior)", () => {
+    // Use empty config dir to ensure no API key is configured
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // --json alone should NOT disable upload - when --upload is explicitly requested
+    // with --json, it should require API key (proving upload is not disabled)
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--json", "--upload"], env);
+    // Should fail with "API key is required" because upload is enabled
+    expect(r.stderr).toMatch(/API key is required/i);
+    expect(r.stderr).not.toMatch(/unknown option/i);
+  });
+
+  test("checkup --json --no-upload explicitly disables upload", () => {
+    // Use empty config dir to ensure no API key is configured
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // --json with --no-upload should disable upload (no API key error)
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--json", "--no-upload"], env);
+    // Should NOT show "API key is required" because upload is disabled
+    expect(r.stderr).not.toMatch(/API key is required/i);
+    expect(r.stderr).not.toMatch(/unknown option/i);
+  });
+
+  test("checkup --upload requires API key", () => {
+    // Use empty config dir to ensure no API key is configured
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // --upload explicitly requests upload, should fail without API key
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--upload"], env);
+    expect(r.stderr).toMatch(/API key is required/i);
+  });
+
+  test("checkup --no-upload does not require API key", () => {
+    // Use empty config dir to ensure no API key is configured
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // --no-upload disables upload, should not require API key
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"], env);
+    expect(r.stderr).not.toMatch(/API key is required/i);
+  });
 });
 
 // Tests for checkup-api module
