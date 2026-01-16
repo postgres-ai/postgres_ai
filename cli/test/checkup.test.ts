@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { resolve } from "path";
+import type { Client } from "pg";
 
 // Import from source directly since we're using Bun
 import * as checkup from "../lib/checkup";

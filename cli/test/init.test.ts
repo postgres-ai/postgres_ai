@@ -68,9 +68,9 @@ describe("init module", () => {
     expect(plan.database).toBe("mydb");
     const roleStep = plan.steps.find((s: { name: string }) => s.name === "01.role");
     expect(roleStep).toBeTruthy();
-    expect(roleStep.sql).toMatch(/do\s+\$\$/i);
-    expect(roleStep.sql).toMatch(/create\s+user/i);
-    expect(roleStep.sql).toMatch(/alter\s+user/i);
+    expect(roleStep!.sql).toMatch(/do\s+\$\$/i);
+    expect(roleStep!.sql).toMatch(/create\s+user/i);
+    expect(roleStep!.sql).toMatch(/alter\s+user/i);
     expect(plan.steps.some((s: { optional?: boolean }) => s.optional)).toBe(false);
   });
 
@@ -86,12 +86,12 @@ describe("init module", () => {
 
     const roleStep = plan.steps.find((s: { name: string }) => s.name === "01.role");
     expect(roleStep).toBeTruthy();
-    expect(roleStep.sql).toMatch(/create\s+user\s+"user ""with"" quotes ✓"/i);
-    expect(roleStep.sql).toMatch(/alter\s+user\s+"user ""with"" quotes ✓"/i);
+    expect(roleStep!.sql).toMatch(/create\s+user\s+"user ""with"" quotes ✓"/i);
+    expect(roleStep!.sql).toMatch(/alter\s+user\s+"user ""with"" quotes ✓"/i);
 
     const permStep = plan.steps.find((s: { name: string }) => s.name === "03.permissions");
     expect(permStep).toBeTruthy();
-    expect(permStep.sql).toMatch(/grant connect on database "db name ""with"" quotes ✓" to "user ""with"" quotes ✓"/i);
+    expect(permStep!.sql).toMatch(/grant connect on database "db name ""with"" quotes ✓" to "user ""with"" quotes ✓"/i);
   });
 
   test("buildInitPlan keeps backslashes in passwords (no unintended escaping)", async () => {
@@ -104,7 +104,7 @@ describe("init module", () => {
     });
     const roleStep = plan.steps.find((s: { name: string }) => s.name === "01.role");
     expect(roleStep).toBeTruthy();
-    expect(roleStep.sql).toContain(`password '${pw}'`);
+    expect(roleStep!.sql).toContain(`password '${pw}'`);
   });
 
   test("buildInitPlan rejects identifiers with null bytes", async () => {
@@ -138,8 +138,8 @@ describe("init module", () => {
     });
     const step = plan.steps.find((s: { name: string }) => s.name === "01.role");
     expect(step).toBeTruthy();
-    expect(step.sql).toMatch(/password 'pa''ss'/);
-    expect(step.params).toBeUndefined();
+    expect(step!.sql).toMatch(/password 'pa''ss'/);
+    expect(step!.params).toBeUndefined();
   });
 
   test("buildInitPlan includes optional steps when enabled", async () => {
@@ -420,7 +420,7 @@ describe("init module", () => {
     });
     const step = plan.steps.find((s: { name: string }) => s.name === "01.role");
     expect(step).toBeTruthy();
-    const redacted = init.redactPasswordsInSql(step.sql);
+    const redacted = init.redactPasswordsInSql(step!.sql);
     expect(redacted).toMatch(/password '<redacted>'/i);
   });
 

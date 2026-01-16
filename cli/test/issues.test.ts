@@ -60,7 +60,7 @@ describe("createIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     const result = await createIssue({
       apiKey: "test-key",
@@ -93,7 +93,7 @@ describe("createIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       );
-    });
+    }) as unknown as typeof fetch;
 
     const result = await createIssue({
       apiKey: "test-key",
@@ -127,7 +127,7 @@ describe("createIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     await expect(
       createIssue({
@@ -194,7 +194,7 @@ describe("updateIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     const result = await updateIssue({
       apiKey: "test-key",
@@ -223,7 +223,7 @@ describe("updateIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     const result = await updateIssue({
       apiKey: "test-key",
@@ -252,7 +252,7 @@ describe("updateIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     const result = await updateIssue({
       apiKey: "test-key",
@@ -281,7 +281,7 @@ describe("updateIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     const result = await updateIssue({
       apiKey: "test-key",
@@ -313,7 +313,7 @@ describe("updateIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       );
-    });
+    }) as unknown as typeof fetch;
 
     await updateIssue({
       apiKey: "test-key",
@@ -345,7 +345,7 @@ describe("updateIssue", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     await expect(
       updateIssue({
@@ -414,7 +414,7 @@ describe("updateIssueComment", () => {
           headers: { "Content-Type": "application/json" },
         })
       );
-    });
+    }) as unknown as typeof fetch;
 
     const result = await updateIssueComment({
       apiKey: "test-key",
@@ -442,7 +442,7 @@ describe("updateIssueComment", () => {
           headers: { "Content-Type": "application/json" },
         })
       )
-    );
+    ) as unknown as typeof fetch;
 
     await expect(
       updateIssueComment({

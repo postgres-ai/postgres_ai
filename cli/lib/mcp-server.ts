@@ -447,7 +447,7 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  server.setRequestHandler(CallToolRequestSchema, async (req: any) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req: any): Promise<any> => {
     return handleToolCall(req, rootOpts, extra);
   });
 
