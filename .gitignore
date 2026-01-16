@@ -42,6 +42,11 @@ dev_reports/
 __pycache__/
 *.py[cod]
 
+# Test results/artifacts
+test-results.xml
+junit.xml
+coverage.xml
+
 # Python virtual environments
 .venv/
 venv/

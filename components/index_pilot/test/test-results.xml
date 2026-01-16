@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="pg_index_pilot" tests="3" failures="0" time="4">
-  <testsuite name="index_pilot_tests">
-    <testcase name="01_basic_installation" classname="index_pilot" time="1"/>
-    <testcase name="02_functionality" classname="index_pilot" time="2"/>
-    <testcase name="03_security" classname="index_pilot" time="1"/>
-  </testsuite>
-</testsuites>
