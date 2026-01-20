@@ -324,8 +324,8 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     expect(typeof nodeResult.data).toBe("object");
   });
 
-  test("CLI requires API key for --markdown flag", async () => {
-    // Test that --markdown requires an API key
+  test("CLI --markdown flag works without API key", async () => {
+    // Test that --markdown works even without an API key
     const connString = `postgresql://postgres@${pg.socketDir}:${pg.port}/postgres`;
     const cliPath = path.resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
     const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
@@ -342,8 +342,7 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
 
     const stderr = new TextDecoder().decode(result.stderr);
 
-    // Should fail due to missing API key
-    expect(result.exitCode).not.toBe(0);
-    expect(stderr).toMatch(/API key is required/i);
+    // Should not complain about missing API key
+    expect(stderr).not.toMatch(/API key is required/i);
   });
 });

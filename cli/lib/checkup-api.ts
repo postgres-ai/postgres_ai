@@ -186,7 +186,6 @@ async function postRpc<T>(params: {
   timeoutMs?: number;
 }): Promise<T> {
   const { apiKey, apiBaseUrl, rpcName, bodyObj, timeoutMs = HTTP_TIMEOUT_MS } = params;
-  if (!apiKey) throw new Error("API key is required");
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/rpc/${rpcName}`);
   const body = JSON.stringify(bodyObj);

@@ -1713,17 +1713,6 @@ program
     const projectWasGenerated = uploadResult?.projectWasGenerated ?? false;
     shouldUpload = !!uploadCfg;
 
-    // Preflight: validate API key for markdown conversion BEFORE connecting / running checks.
-    if (shouldConvertMarkdown) {
-      const { apiKey } = getConfig(rootOpts);
-      if (!apiKey) {
-        console.error("Error: API key is required for markdown conversion");
-        console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
-        process.exitCode = 1;
-        return;
-      }
-    }
-
     // Connect and run checks
     const adminConn = resolveAdminConnection({
       conn,
@@ -1788,7 +1777,6 @@ program
 
       // Convert to markdown if requested
       if (shouldConvertMarkdown) {
-        // API key was already validated in preflight checks
         const { apiKey } = getConfig(rootOpts);
         const cfg = config.readConfig();
         const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);

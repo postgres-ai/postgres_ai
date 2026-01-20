@@ -1024,15 +1024,15 @@ describe("CLI tests", () => {
     expect(r.stderr).not.toMatch(/did you mean/i);
   });
 
-  test("checkup --markdown requires API key", () => {
+  test("checkup --markdown works without API key", () => {
     // Use empty config dir to ensure no API key is configured
     const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
-    // --markdown requires API key for markdown conversion
+    // --markdown should work even without API key
     const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--markdown", "--no-upload"], env);
-    // Connection will fail, but that's expected - we're just verifying the --markdown flag is recognized
-    // The actual API key check happens after successful DB connection, tested in integration tests
+    // Connection will fail, but --markdown flag should be recognized
     expect(r.status).not.toBe(0);
     expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/API key is required/i);
   });
 
   test("checkup with --no-upload and no output flags shows helpful message", () => {
