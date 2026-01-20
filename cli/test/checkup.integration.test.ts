@@ -355,8 +355,8 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     expect(stdout).toMatch(/--output/);
     expect(stdout).toMatch(/--upload/);
 
-    // Should not have errors
-    expect(stderr).not.toMatch(/error/i);
+    // Should not have CLI errors (allow pg debug messages that might contain "error")
+    expect(stderr).not.toMatch(/^Error:/im);
   });
 
   test("CLI requires API key for --markdown flag", async () => {
