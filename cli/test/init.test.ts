@@ -281,7 +281,7 @@ describe("init module", () => {
           return { rowCount: 1, rows: [] };
         }
         if (String(sql).includes("select rolconfig")) {
-          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, "$user", public, pg_catalog'] }] };
+          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, extensions, "$user", public, pg_catalog'] }] };
         }
         if (String(sql).includes("from pg_catalog.pg_roles")) {
           return { rowCount: 1, rows: [] };
@@ -306,6 +306,10 @@ describe("init module", () => {
         }
         if (String(sql).includes("has_schema_privilege")) {
           return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        // Query for pg_stat_statements extension schema location
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 1, rows: [{ schema: "pg_catalog" }] };
         }
 
         throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
@@ -363,6 +367,10 @@ describe("init module", () => {
         if (String(sql).includes("has_schema_privilege")) {
           return { rowCount: 1, rows: [{ ok: true }] };
         }
+        // Query for pg_stat_statements extension schema location (Supabase uses 'extensions' schema)
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 1, rows: [{ schema: "extensions" }] };
+        }
 
         throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
       },
@@ -380,6 +388,156 @@ describe("init module", () => {
     expect(r.missingRequired.length).toBe(0);
     // Should not have queried for rolconfig since we skip search_path check
     expect(calls.some((c) => c.includes("select rolconfig"))).toBe(false);
+  });
+
+  test("verifyInitSetup checks extensions schema when pg_stat_statements is there", async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (sql: string, params?: any) => {
+        calls.push(String(sql));
+
+        if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).toLowerCase() === "rollback;") {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).includes("select rolconfig")) {
+          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, extensions, "$user", public, pg_catalog'] }] };
+        }
+        if (String(sql).includes("from pg_catalog.pg_roles")) {
+          return { rowCount: 1, rows: [{ rolname: DEFAULT_MONITORING_USER }] };
+        }
+        if (String(sql).includes("has_database_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("pg_has_role")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_table_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("to_regclass")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_function_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        // pg_stat_statements is in 'extensions' schema
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 1, rows: [{ schema: "extensions" }] };
+        }
+        // Check for USAGE on extensions schema
+        if (String(sql).includes("has_schema_privilege") && params?.[1] === "extensions") {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_schema_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+
+        throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+      },
+    };
+
+    const r = await init.verifyInitSetup({
+      client: client as any,
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      includeOptionalPermissions: false,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.missingRequired.length).toBe(0);
+    // Should have queried for pg_stat_statements schema location
+    expect(calls.some((c) => c.includes("pg_extension e") && c.includes("pg_stat_statements"))).toBe(true);
+  });
+
+  test("verifyInitSetup reports missing extensions schema access", async () => {
+    const client = {
+      query: async (sql: string, params?: any) => {
+        if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).toLowerCase() === "rollback;") {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).includes("select rolconfig")) {
+          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, "$user", public, pg_catalog'] }] };
+        }
+        if (String(sql).includes("from pg_catalog.pg_roles")) {
+          return { rowCount: 1, rows: [{ rolname: DEFAULT_MONITORING_USER }] };
+        }
+        if (String(sql).includes("has_database_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("pg_has_role")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_table_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("to_regclass")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_function_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        // pg_stat_statements is in 'extensions' schema
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 1, rows: [{ schema: "extensions" }] };
+        }
+        // No USAGE on extensions schema
+        if (String(sql).includes("has_schema_privilege") && params?.[1] === "extensions") {
+          return { rowCount: 1, rows: [{ ok: false }] };
+        }
+        if (String(sql).includes("has_schema_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+
+        throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+      },
+    };
+
+    const r = await init.verifyInitSetup({
+      client: client as any,
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      includeOptionalPermissions: false,
+    });
+    expect(r.ok).toBe(false);
+    // Should report missing USAGE on extensions schema
+    expect(r.missingRequired.some((m) => m.includes("extensions") && m.includes("pg_stat_statements"))).toBe(true);
+    // Should also report missing extensions in search_path
+    expect(r.missingRequired.some((m) => m.includes("search_path") && m.includes("extensions"))).toBe(true);
+  });
+
+  test("buildInitPlan includes extensions in search_path", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+    });
+
+    const permStep = plan.steps.find((s) => s.name === "03.permissions");
+    expect(permStep).toBeTruthy();
+    // Should include 'extensions' in search_path
+    expect(permStep!.sql).toMatch(/search_path\s*=\s*postgres_ai,\s*extensions/i);
+  });
+
+  test("buildInitPlan includes dynamic extension schema grant", async () => {
+    const plan = await init.buildInitPlan({
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      monitoringPassword: "pw",
+      includeOptionalPermissions: false,
+    });
+
+    const permStep = plan.steps.find((s) => s.name === "03.permissions");
+    expect(permStep).toBeTruthy();
+    // Should include DO block that grants USAGE on extension schema
+    expect(permStep!.sql).toMatch(/do\s+\$\$/i);
+    expect(permStep!.sql).toMatch(/pg_stat_statements/);
+    expect(permStep!.sql).toMatch(/grant usage on schema/i);
   });
 
   test("buildInitPlan preserves comments when filtering ALTER USER", async () => {
