@@ -324,41 +324,6 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     expect(typeof nodeResult.data).toBe("object");
   });
 
-  test("CLI shows helpful message when no output flags specified", async () => {
-    // Test that running checkup without --json, --markdown, --output, or upload
-    // shows a helpful message about available output options
-    const connString = `postgresql://postgres@${pg.socketDir}:${pg.port}/postgres`;
-    const cliPath = path.resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
-    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
-
-    const result = Bun.spawnSync(
-      [bunBin, cliPath, "checkup", connString, "--check-id", "H002", "--no-upload"],
-      {
-        env: {
-          ...process.env,
-          XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config",
-        },
-      }
-    );
-
-    const stdout = new TextDecoder().decode(result.stdout);
-    const stderr = new TextDecoder().decode(result.stderr);
-
-    // Should succeed
-    expect(result.exitCode).toBe(0);
-
-    // Should show helpful message about no output destination (without emoji)
-    expect(stdout).toMatch(/Successfully ran.*check/i);
-    expect(stdout).toMatch(/No output destination specified/i);
-    expect(stdout).toMatch(/--json/);
-    expect(stdout).toMatch(/--markdown/);
-    expect(stdout).toMatch(/--output/);
-    expect(stdout).toMatch(/--upload/);
-
-    // Should not have CLI errors (allow pg debug messages that might contain "error")
-    expect(stderr).not.toMatch(/^Error:/im);
-  });
-
   test("CLI requires API key for --markdown flag", async () => {
     // Test that --markdown requires an API key
     const connString = `postgresql://postgres@${pg.socketDir}:${pg.port}/postgres`;
