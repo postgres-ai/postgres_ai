@@ -1,0 +1,23 @@
+{
+  "name": "postgresai",
+  "owner": {
+    "name": "PostgresAI",
+    "email": "team@postgres.ai"
+  },
+  "metadata": {
+    "description": "AI-native PostgreSQL observability",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "pgai",
+      "source": "./.claude",
+      "description": "Monitoring, health checks, and root cause analysis — built for humans and AI agents",
+      "version": "1.0.0",
+      "author": {
+        "name": "PostgresAI"
+      },
+      "license": "Apache-2.0"
+    }
+  ]
+}

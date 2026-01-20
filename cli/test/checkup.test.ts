@@ -1008,6 +1008,47 @@ describe("CLI tests", () => {
     const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"], env);
     expect(r.stderr).not.toMatch(/API key is required/i);
   });
+
+  // Argument parsing tests for check ID / connection string recognition
+  test("checkup with check ID but no connection shows specific error", () => {
+    const r = runCli(["checkup", "H002"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/connection string required/i);
+    expect(r.stderr).toMatch(/H002/);
+  });
+
+  test("checkup recognizes valid check ID patterns", () => {
+    // Valid check IDs: A002, H002, F004, etc.
+    for (const checkId of ["A002", "H002", "F004", "K003", "a002", "h002"]) {
+      const r = runCli(["checkup", checkId]);
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toMatch(/connection string required/i);
+    }
+  });
+
+  test("checkup does not treat connection string as check ID", () => {
+    // Connection strings should not be parsed as check IDs
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"]);
+    // Should not show "connection string required" error
+    expect(r.stderr).not.toMatch(/connection string required/i);
+  });
+
+  test("checkup with check ID and connection string works", () => {
+    // pgai checkup H002 postgresql://...
+    const r = runCli(["checkup", "H002", "postgresql://test:test@localhost:5432/test", "--no-upload"]);
+    // Should not show "connection string required" error
+    expect(r.stderr).not.toMatch(/connection string required/i);
+    // Connection will fail but argument parsing should succeed
+    expect(r.stderr).not.toMatch(/unknown option/i);
+  });
+
+  test("checkup with --check-id option works", () => {
+    // pgai checkup --check-id H002 postgresql://...
+    const r = runCli(["checkup", "--check-id", "H002", "postgresql://test:test@localhost:5432/test", "--no-upload"]);
+    // Should not show "connection string required" error
+    expect(r.stderr).not.toMatch(/connection string required/i);
+    expect(r.stderr).not.toMatch(/unknown option/i);
+  });
 });
 
 // Tests for checkup-api module
