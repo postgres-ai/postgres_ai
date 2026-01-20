@@ -21,7 +21,7 @@ import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
 import { getCheckupEntry } from "../lib/checkup-dictionary";
-import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
+import { createCheckupReport, uploadCheckupReportJson, convertCheckupReportJsonToMarkdown, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -184,6 +184,7 @@ interface CheckupOptions {
   upload?: boolean;
   project?: string;
   json?: boolean;
+  markdown?: boolean;
 }
 
 interface UploadConfig {
@@ -1655,6 +1656,7 @@ program
     "project name or ID for remote upload (used with --upload; defaults to config defaultProject; auto-generated on first run)"
   )
   .option("--json", "output JSON to stdout")
+  .option("--markdown", "output markdown to stdout")
   .addHelpText(
     "after",
     [
@@ -1668,6 +1670,7 @@ program
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
       "  postgresai checkup postgresql://user:pass@host:5432/db --project my_project",
       "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --markdown",
     ].join("\n")
   )
   .action(async (conn: string | undefined, opts: CheckupOptions, cmd: Command) => {
@@ -1678,9 +1681,10 @@ program
     }
 
     const shouldPrintJson = !!opts.json;
+    const shouldConvertMarkdown = !!opts.markdown;
     const uploadExplicitlyRequested = opts.upload === true;
-    // Note: --json and --upload/--no-upload are independent flags.
-    // Use --no-upload to explicitly disable upload when using --json.
+    // Note: --json, --markdown and --upload/--no-upload are independent flags.
+    // Use --no-upload to explicitly disable upload when using --json or --markdown.
     const uploadExplicitlyDisabled = opts.upload === false;
     let shouldUpload = !uploadExplicitlyDisabled;
 
@@ -1708,7 +1712,7 @@ program
       envPassword: process.env.PGPASSWORD,
     });
     let client: Client | undefined;
-    const spinnerEnabled = !!process.stdout.isTTY && shouldUpload;
+    const spinnerEnabled = !!process.stdout.isTTY && (shouldUpload || shouldConvertMarkdown);
     const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {
@@ -1761,12 +1765,97 @@ program
 
       // Print upload summary
       if (uploadSummary) {
-        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson);
+        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson || shouldConvertMarkdown);
+      }
+
+      // Convert to markdown if requested
+      if (shouldConvertMarkdown) {
+        // Get API key from config
+        const { apiKey } = getConfig(rootOpts);
+        if (!apiKey) {
+          console.error("Error: API key is required for markdown conversion");
+          console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
+          process.exitCode = 1;
+          return;
+        }
+
+        const cfg = config.readConfig();
+        const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+        const markdownResults: Array<{ checkId: string; markdown?: string; error?: Error }> = [];
+
+        for (const [checkId, report] of Object.entries(reports)) {
+          try {
+            spinner.update(`Converting ${checkId} to markdown`);
+
+            // For reports that share JSON files (e.g., A002/A013 share a002.json,
+            // A003/D001/G003/F001 share a003.json), pass checkId as report_type
+            // so the API can generate the correct markdown variant
+            const markdownResult = await convertCheckupReportJsonToMarkdown({
+              apiKey,
+              apiBaseUrl,
+              checkId,
+              jsonPayload: report,
+              reportType: checkId,
+            });
+
+            // Extract markdown from response structure
+            // API returns: { reports: [{ markdown: "...", ... }], ... }
+            const markdown = markdownResult?.reports?.[0]?.markdown || markdownResult?.markdown;
+
+            markdownResults.push({
+              checkId,
+              markdown,
+            });
+          } catch (error) {
+            markdownResults.push({
+              checkId,
+              error: error instanceof Error ? error : new Error(String(error)),
+            });
+          }
+        }
+
+        spinner.stop();
+
+        // Output all markdown results
+        for (const result of markdownResults) {
+          if (result.error) {
+            if (result.error instanceof RpcError) {
+              console.error(`Error converting ${result.checkId} to markdown:`);
+              for (const line of formatRpcErrorForDisplay(result.error)) {
+                console.error(line);
+              }
+            } else {
+              console.error(`Error converting ${result.checkId} to markdown: ${result.error.message}`);
+            }
+          } else if (result.markdown) {
+            console.log(result.markdown);
+            if (!result.markdown.endsWith('\n')) {
+              console.log();
+            }
+          } else {
+            console.error(`Warning: No markdown content returned for ${result.checkId}`);
+          }
+        }
       }
 
       // Output JSON to stdout
-      if (shouldPrintJson || (!shouldUpload && !opts.output)) {
+      if (shouldPrintJson) {
         console.log(JSON.stringify(reports, null, 2));
+      }
+
+      // If no output was produced, show a helpful message
+      const hadOutput = shouldPrintJson || shouldConvertMarkdown || outputPath || uploadSummary;
+      if (!hadOutput) {
+        const checkCount = Object.keys(reports).length;
+        const checkList = Object.keys(reports).join(", ");
+        console.log(`✓ Successfully ran ${checkCount} check${checkCount > 1 ? 's' : ''}: ${checkList}`);
+        console.log();
+        console.log("No output destination specified. To view or save results, use one of:");
+        console.log("  --json          Output JSON to stdout");
+        console.log("  --markdown      Output markdown to stdout (requires API key)");
+        console.log("  --output <dir>  Save JSON files to directory");
+        console.log("  --upload        Upload to PostgresAI platform (requires API key)");
       }
     } catch (error) {
       if (error instanceof RpcError) {

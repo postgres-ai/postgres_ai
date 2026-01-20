@@ -384,3 +384,45 @@ export async function uploadCheckupReportJson(params: {
   }
   return { reportChunkId: chunkId };
 }
+
+/**
+ * Convert a checkup report JSON to markdown format using the PostgresAI API.
+ * This calls the v1.checkup_report_json_to_markdown RPC function.
+ *
+ * @param params - Configuration for the conversion
+ * @param params.apiKey - PostgresAI API access token
+ * @param params.apiBaseUrl - Base URL of the PostgresAI API
+ * @param params.checkId - Check identifier (e.g., "H001", "A003")
+ * @param params.jsonPayload - The JSON data from the check report
+ * @param params.reportType - Optional report type parameter
+ * @returns Promise resolving to the markdown content as JSON
+ * @throws {RpcError} On API failures (4xx/5xx responses)
+ * @throws {Error} On network errors or unexpected response format
+ */
+export async function convertCheckupReportJsonToMarkdown(params: {
+  apiKey: string;
+  apiBaseUrl: string;
+  checkId: string;
+  jsonPayload: any;
+  reportType?: string;
+}): Promise<any> {
+  const { apiKey, apiBaseUrl, checkId, jsonPayload, reportType } = params;
+  const bodyObj: Record<string, unknown> = {
+    check_id: checkId,
+    json_payload: jsonPayload,
+    access_token: apiKey,
+  };
+
+  if (reportType) {
+    bodyObj.report_type = reportType;
+  }
+
+  const resp = await postRpc<any>({
+    apiKey,
+    apiBaseUrl,
+    rpcName: "checkup_report_json_to_markdown",
+    bodyObj,
+  });
+
+  return resp;
+}

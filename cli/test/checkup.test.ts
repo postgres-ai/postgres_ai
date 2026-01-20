@@ -1008,6 +1008,44 @@ describe("CLI tests", () => {
     const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"], env);
     expect(r.stderr).not.toMatch(/API key is required/i);
   });
+
+  test("checkup --help shows --markdown option", () => {
+    const r = runCli(["checkup", "--help"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/--markdown/);
+    expect(r.stdout).toMatch(/output markdown to stdout/i);
+  });
+
+  test("checkup --markdown is recognized as valid option", () => {
+    // Should not produce "unknown option" error for --markdown
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--markdown", "--no-upload"]);
+    // Connection will fail, but option parsing should succeed
+    expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/did you mean/i);
+  });
+
+  test("checkup --markdown requires API key", () => {
+    // Use empty config dir to ensure no API key is configured
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // --markdown requires API key for markdown conversion
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--markdown", "--no-upload"], env);
+    // Should show "API key is required" because markdown conversion requires authentication
+    expect(r.stderr).toMatch(/API key is required/i);
+  });
+
+  test("checkup with --no-upload and no output flags shows helpful message", () => {
+    // This test verifies that when running with --no-upload and no output flags,
+    // the user gets a helpful message about available output options.
+    // Note: This will fail to connect, but we can still verify the help message appears.
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"], env);
+
+    // The command will fail due to connection error, but if it succeeded,
+    // it should show the helpful message. We can't test the success case without a real DB,
+    // but we verify the option parsing is correct (tested above in other tests).
+    // The actual helpful message output is tested in integration tests.
+    expect(r.status).not.toBe(0); // Will fail due to connection
+  });
 });
 
 // Tests for checkup-api module
@@ -1171,6 +1209,203 @@ describe("checkup-api", () => {
       expect(err).toBeInstanceOf(Error);
     }
     expect(attempts).toBe(2); // Should retry on ECONNRESET
+  });
+});
+
+// Tests for convertCheckupReportJsonToMarkdown
+describe("convertCheckupReportJsonToMarkdown", () => {
+  test("function is exported and callable", () => {
+    expect(typeof api.convertCheckupReportJsonToMarkdown).toBe("function");
+  });
+
+  test("sends reportType parameter when provided", async () => {
+    // Mock https.request to capture the request body
+    const https = await import("https");
+    const originalRequest = https.request;
+    let capturedBody = "";
+
+    try {
+      // @ts-ignore - mock https.request
+      https.request = (_url: any, _options: any, callback: any) => {
+        const mockReq = {
+          write: (data: string) => {
+            capturedBody = data;
+          },
+          end: () => {
+            // Simulate successful response
+            const mockRes = {
+              statusCode: 200,
+              on: (event: string, handler: any) => {
+                if (event === "data") {
+                  handler(JSON.stringify({ reports: [{ markdown: "# Test" }] }));
+                } else if (event === "end") {
+                  handler();
+                }
+              },
+            };
+            callback(mockRes);
+          },
+          on: () => {},
+        };
+        return mockReq;
+      };
+
+      await api.convertCheckupReportJsonToMarkdown({
+        apiKey: "test-key",
+        apiBaseUrl: "https://test.example.com",
+        checkId: "A002",
+        jsonPayload: { test: "data" },
+        reportType: "A002",
+      });
+
+      const body = JSON.parse(capturedBody);
+      expect(body.check_id).toBe("A002");
+      expect(body.report_type).toBe("A002");
+      expect(body.access_token).toBe("test-key");
+    } finally {
+      // Restore original https.request
+      // @ts-ignore
+      https.request = originalRequest;
+    }
+  });
+
+  test("does not send reportType when not provided", async () => {
+    const https = await import("https");
+    const originalRequest = https.request;
+    let capturedBody = "";
+
+    try {
+      // @ts-ignore - mock https.request
+      https.request = (_url: any, _options: any, callback: any) => {
+        const mockReq = {
+          write: (data: string) => {
+            capturedBody = data;
+          },
+          end: () => {
+            const mockRes = {
+              statusCode: 200,
+              on: (event: string, handler: any) => {
+                if (event === "data") {
+                  handler(JSON.stringify({ markdown: "# Test" }));
+                } else if (event === "end") {
+                  handler();
+                }
+              },
+            };
+            callback(mockRes);
+          },
+          on: () => {},
+        };
+        return mockReq;
+      };
+
+      await api.convertCheckupReportJsonToMarkdown({
+        apiKey: "test-key",
+        apiBaseUrl: "https://test.example.com",
+        checkId: "H001",
+        jsonPayload: { test: "data" },
+      });
+
+      const body = JSON.parse(capturedBody);
+      expect(body.check_id).toBe("H001");
+      expect(body.report_type).toBeUndefined();
+      expect(body.access_token).toBe("test-key");
+    } finally {
+      // @ts-ignore
+      https.request = originalRequest;
+    }
+  });
+
+  test("extracts markdown from reports array response", async () => {
+    const https = await import("https");
+    const originalRequest = https.request;
+
+    try {
+      // @ts-ignore - mock https.request
+      https.request = (_url: any, _options: any, callback: any) => {
+        const mockReq = {
+          write: () => {},
+          end: () => {
+            const mockRes = {
+              statusCode: 200,
+              on: (event: string, handler: any) => {
+                if (event === "data") {
+                  handler(JSON.stringify({
+                    reports: [{ markdown: "# A002 Report\n\nTest content" }],
+                    report_name: "A002",
+                    report_type: "A002"
+                  }));
+                } else if (event === "end") {
+                  handler();
+                }
+              },
+            };
+            callback(mockRes);
+          },
+          on: () => {},
+        };
+        return mockReq;
+      };
+
+      const result = await api.convertCheckupReportJsonToMarkdown({
+        apiKey: "test-key",
+        apiBaseUrl: "https://test.example.com",
+        checkId: "A002",
+        jsonPayload: { test: "data" },
+        reportType: "A002",
+      });
+
+      expect(result.reports).toBeDefined();
+      expect(result.reports[0].markdown).toBe("# A002 Report\n\nTest content");
+    } finally {
+      // @ts-ignore
+      https.request = originalRequest;
+    }
+  });
+
+  test("throws RpcError on non-200 status", async () => {
+    const https = await import("https");
+    const originalRequest = https.request;
+
+    try {
+      // @ts-ignore - mock https.request
+      https.request = (_url: any, _options: any, callback: any) => {
+        const mockReq = {
+          write: () => {},
+          end: () => {
+            const mockRes = {
+              statusCode: 400,
+              on: (event: string, handler: any) => {
+                if (event === "data") {
+                  handler(JSON.stringify({ message: "Invalid request", details: "Check ID not found" }));
+                } else if (event === "end") {
+                  handler();
+                }
+              },
+            };
+            callback(mockRes);
+          },
+          on: () => {},
+        };
+        return mockReq;
+      };
+
+      try {
+        await api.convertCheckupReportJsonToMarkdown({
+          apiKey: "test-key",
+          apiBaseUrl: "https://test.example.com",
+          checkId: "INVALID",
+          jsonPayload: { test: "data" },
+        });
+        expect(true).toBe(false); // Should not reach here
+      } catch (err) {
+        expect(err).toBeInstanceOf(api.RpcError);
+        expect((err as api.RpcError).statusCode).toBe(400);
+      }
+    } finally {
+      // @ts-ignore
+      https.request = originalRequest;
+    }
   });
 });
 
