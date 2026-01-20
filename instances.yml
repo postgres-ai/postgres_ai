@@ -1,14 +1,11 @@
-# PostgreSQL instances to monitor
-# Add your instances using: postgres-ai mon targets add
-
-- name: localhost-testdb
-  conn_str: postgresql://user:pass@localhost:5432/testdb
+- name: target-database
+  conn_str: postgresql://monitor:monitor_pass@target-db:5432/target_database
   preset_metrics: full
   custom_metrics:
   is_enabled: true
   group: default
   custom_tags:
-    env: production
-    cluster: default
-    node_name: localhost-testdb
+    env: demo
+    cluster: local
+    node_name: node-01
     sink_type: ~sink_type~
