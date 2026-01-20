@@ -1780,11 +1780,10 @@ program
         // Get API key from config
         const { apiKey } = getConfig(rootOpts);
         if (!apiKey) {
-          spinner.stop();
-          console.error("Error: API key is required for markdown conversion");
-          console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
-          process.exitCode = 1;
-          return;
+          throw new Error(
+            "API key is required for markdown conversion\n" +
+            "Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY"
+          );
         }
 
         const cfg = config.readConfig();
