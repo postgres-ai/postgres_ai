@@ -174,6 +174,11 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
 
   // 60s timeout for hooks - PostgreSQL startup can take 30s+ in slow CI
   beforeAll(async () => {
+    // Create empty config directory for tests
+    const emptyConfigDir = "/tmp/postgresai-test-empty-config/postgresai";
+    fs.mkdirSync(emptyConfigDir, { recursive: true });
+    fs.writeFileSync(path.join(emptyConfigDir, "config.json"), "{}");
+
     pg = await createTempPostgres();
     client = await pg.connect();
   }, { timeout: 60000 });
