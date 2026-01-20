@@ -342,7 +342,7 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     // Should succeed
     expect(result.exitCode).toBe(0);
 
-    // Should show helpful message about no output destination
+    // Should show helpful message about no output destination (without emoji)
     expect(stdout).toMatch(/Successfully ran.*check/i);
     expect(stdout).toMatch(/No output destination specified/i);
     expect(stdout).toMatch(/--json/);
@@ -352,5 +352,28 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
 
     // Should not have errors
     expect(stderr).not.toMatch(/error/i);
+  });
+
+  test("CLI requires API key for --markdown flag", async () => {
+    // Test that --markdown requires an API key
+    const connString = `postgresql://postgres@${pg.socketDir}:${pg.port}/postgres`;
+    const cliPath = path.resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
+
+    const result = Bun.spawnSync(
+      [bunBin, cliPath, "checkup", connString, "--check-id", "H002", "--markdown", "--no-upload"],
+      {
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config",
+        },
+      }
+    );
+
+    const stderr = new TextDecoder().decode(result.stderr);
+
+    // Should fail due to missing API key
+    expect(result.exitCode).not.toBe(0);
+    expect(stderr).toMatch(/API key is required/i);
   });
 });
