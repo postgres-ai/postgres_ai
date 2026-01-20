@@ -1046,6 +1046,15 @@ describe("CLI tests", () => {
     // The actual helpful message output is tested in integration tests.
     expect(r.status).not.toBe(0); // Will fail due to connection
   });
+
+  test("checkup rejects --json and --markdown together", () => {
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--json", "--markdown", "--no-upload"], env);
+
+    // Should fail with mutual exclusivity error
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/mutually exclusive/i);
+  });
 });
 
 // Tests for checkup-api module

@@ -1683,6 +1683,13 @@ program
     const shouldPrintJson = !!opts.json;
     const shouldConvertMarkdown = !!opts.markdown;
     const uploadExplicitlyRequested = opts.upload === true;
+
+    // Validate mutually exclusive flags
+    if (shouldPrintJson && shouldConvertMarkdown) {
+      console.error("Error: --json and --markdown are mutually exclusive");
+      process.exitCode = 1;
+      return;
+    }
     // Note: --json, --markdown and --upload/--no-upload are independent flags.
     // Use --no-upload to explicitly disable upload when using --json or --markdown.
     const uploadExplicitlyDisabled = opts.upload === false;
@@ -1773,6 +1780,7 @@ program
         // Get API key from config
         const { apiKey } = getConfig(rootOpts);
         if (!apiKey) {
+          spinner.stop();
           console.error("Error: API key is required for markdown conversion");
           console.error("Tip: run 'postgresai auth' or pass --api-key / set PGAI_API_KEY");
           process.exitCode = 1;
@@ -1849,7 +1857,7 @@ program
       if (!hadOutput) {
         const checkCount = Object.keys(reports).length;
         const checkList = Object.keys(reports).join(", ");
-        console.log(`✓ Successfully ran ${checkCount} check${checkCount > 1 ? 's' : ''}: ${checkList}`);
+        console.log(`Successfully ran ${checkCount} check${checkCount > 1 ? 's' : ''}: ${checkList}`);
         console.log();
         console.log("No output destination specified. To view or save results, use one of:");
         console.log("  --json          Output JSON to stdout");
