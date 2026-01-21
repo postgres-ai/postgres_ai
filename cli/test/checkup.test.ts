@@ -1358,6 +1358,86 @@ describe("checkup-summary", () => {
     expect(result.message).toMatch(/settings analyzed/i);
   });
 
+  test("generateCheckSummary for A002 with PostgreSQL 17", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "17.2",
+              server_version_num: "170002",
+              server_major_ver: "17",
+              server_minor_ver: "2"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("PostgreSQL 17");
+  });
+
+  test("generateCheckSummary for A002 with PostgreSQL 15", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "15.4",
+              server_version_num: "150004",
+              server_major_ver: "15",
+              server_minor_ver: "4"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("PostgreSQL 15");
+  });
+
+  test("generateCheckSummary for A002 with old PostgreSQL 11", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "11.8",
+              server_version_num: "110008",
+              server_major_ver: "11",
+              server_minor_ver: "8"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/PostgreSQL 11.*consider upgrading/i);
+  });
+
+  test("generateCheckSummary for A013 with version", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "17.2",
+              server_version_num: "170002",
+              server_major_ver: "17",
+              server_minor_ver: "2"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A013", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Version 17.2");
+  });
+
   test("generateCheckSummary handles empty results", () => {
     const report = { results: {} };
     const result = summary.generateCheckSummary("H001", report);

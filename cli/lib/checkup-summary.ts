@@ -146,7 +146,8 @@ function summarizeH004(nodeData: any): CheckSummary {
 }
 
 function summarizeA002(nodeData: any): CheckSummary {
-  const ver = nodeData?.postgres_version;
+  // A002 stores version in data.version (not postgres_version)
+  const ver = nodeData?.data?.version;
   if (!ver) {
     return { status: 'info', message: 'Version checked' };
   }
@@ -169,7 +170,8 @@ function summarizeA002(nodeData: any): CheckSummary {
 }
 
 function summarizeA013(nodeData: any): CheckSummary {
-  const ver = nodeData?.postgres_version;
+  // A013 stores version in data.version (not postgres_version)
+  const ver = nodeData?.data?.version;
   if (!ver) {
     return { status: 'info', message: 'Minor version checked' };
   }
