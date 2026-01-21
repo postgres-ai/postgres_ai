@@ -49,6 +49,22 @@ const COMMIT_TYPES: Record<string, { title: string; emoji: string; priority: num
 // Scopes to highlight (CLI, monitoring, etc.)
 const KNOWN_SCOPES = ["cli", "monitoring", "reporter", "grafana", "mcp", "prepare-db", "checkup", "deps", "ci", "formula", "pgai", "dashboards"];
 
+// Author name mappings for deduplication
+const AUTHOR_ALIASES: Record<string, string> = {
+  "Nik Samokhvalov": "Nikolay Samokhvalov",
+};
+
+// Authors to exclude from contributors list (bots, AI assistants)
+const EXCLUDED_AUTHORS = ["Claude", "dependabot[bot]", "github-actions[bot]"];
+
+function normalizeAuthor(author: string): string {
+  return AUTHOR_ALIASES[author] || author;
+}
+
+function isExcludedAuthor(author: string): boolean {
+  return EXCLUDED_AUTHORS.some((excluded) => author.toLowerCase().includes(excluded.toLowerCase()));
+}
+
 interface ParsedCommit {
   hash: string;
   shortHash: string;
@@ -264,9 +280,6 @@ function generateMarkdown(notes: ReleaseNotes): string {
   lines.push(`This release includes **${notes.stats.total}** changes:`);
   lines.push(`- ${notes.stats.features} new features`);
   lines.push(`- ${notes.stats.fixes} bug fixes`);
-  if (notes.stats.contributors.length > 0) {
-    lines.push(`- ${notes.stats.contributors.length} contributors`);
-  }
   lines.push("");
 
   // Breaking changes (if any)
@@ -371,7 +384,15 @@ async function main() {
   // Build release notes structure
   const categories = categorizeCommits(commits);
   const breaking = commits.filter((c) => c.breaking);
-  const contributors = [...new Set(commits.map((c) => c.author))];
+
+  // Normalize author names and exclude bots/AI
+  const contributors = [
+    ...new Set(
+      commits
+        .map((c) => normalizeAuthor(c.author))
+        .filter((author) => author && !isExcludedAuthor(author))
+    ),
+  ];
 
   const notes: ReleaseNotes = {
     version: args.version || "",
