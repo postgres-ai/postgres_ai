@@ -538,16 +538,12 @@ end $$;`;
   // Some providers restrict ALTER USER - remove those statements.
   // TODO: Make this more flexible by allowing users to specify which statements to skip via config.
   if (SKIP_ALTER_USER_PROVIDERS.includes(provider)) {
-    permissionsSql = permissionsSql
-      .split("\n")
-      .filter((line) => {
-        const trimmed = line.trim();
-        // Keep comments and empty lines
-        if (trimmed.startsWith("--") || trimmed === "") return true;
-        // Filter out ALTER USER statements (case-insensitive, flexible whitespace)
-        return !/^\s*alter\s+user\s+/i.test(line);
-      })
-      .join("\n");
+    // Remove the entire search_path DO block (marked with SEARCH_PATH_BLOCK_START/END)
+    // since it contains ALTER USER and can't be line-filtered without breaking the DO block.
+    permissionsSql = permissionsSql.replace(
+      /-- \[SEARCH_PATH_BLOCK_START\][\s\S]*?-- \[SEARCH_PATH_BLOCK_END\]\n?/,
+      ""
+    );
   }
 
   steps.push({
@@ -838,6 +834,24 @@ export async function verifyInitSetup(params: {
       missingRequired.push("USAGE on schema public");
     }
 
+    // Check access to pg_stat_statements extension schema (may be 'extensions' on Supabase)
+    const extSchemaRes = await params.client.query(`
+      select n.nspname as schema
+      from pg_extension e
+      join pg_namespace n on e.extnamespace = n.oid
+      where e.extname = 'pg_stat_statements'
+    `);
+    const extSchema = extSchemaRes.rows?.[0]?.schema;
+    if (extSchema && extSchema !== "pg_catalog" && extSchema !== "public") {
+      const extSchemaUsageRes = await params.client.query(
+        "select has_schema_privilege($1, $2, 'USAGE') as ok",
+        [role, extSchema]
+      );
+      if (!extSchemaUsageRes.rows?.[0]?.ok) {
+        missingRequired.push(`USAGE on schema ${extSchema} (pg_stat_statements location)`);
+      }
+    }
+
     // Some providers don't allow setting search_path via ALTER USER - skip this check.
     // TODO: Make this more flexible by allowing users to specify which checks to skip via config.
     if (!SKIP_SEARCH_PATH_CHECK_PROVIDERS.includes(provider)) {
@@ -848,9 +862,16 @@ export async function verifyInitSetup(params: {
         missingRequired.push("role search_path is set");
       } else {
         // We accept any ordering as long as postgres_ai, public, and pg_catalog are included.
+        // Also verify search_path includes the pg_stat_statements schema if in a non-standard location.
         const sp = spLine.toLowerCase();
         if (!sp.includes("postgres_ai") || !sp.includes("public") || !sp.includes("pg_catalog")) {
           missingRequired.push("role search_path includes postgres_ai, public and pg_catalog");
+        }
+        // If pg_stat_statements is in a non-standard schema (e.g., 'extensions' on Supabase), verify it's in search_path
+        if (extSchema && extSchema !== "pg_catalog" && extSchema !== "public") {
+          if (!sp.includes(extSchema.toLowerCase())) {
+            missingRequired.push(`role search_path includes ${extSchema} (pg_stat_statements location)`);
+          }
         }
       }
     }
