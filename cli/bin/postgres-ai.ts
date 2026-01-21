@@ -297,7 +297,6 @@ async function uploadCheckupReports(
   );
 
   const reportId = created.reportId;
-  logUpload(`Created remote checkup report: ${reportId}`);
 
   const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
   for (const [checkId, report] of Object.entries(reports)) {
@@ -320,7 +319,6 @@ async function uploadCheckupReports(
     );
     uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
   }
-  logUpload("Upload completed");
 
   return { project: uploadCfg.project, reportId, uploaded };
 }
@@ -354,7 +352,7 @@ function printUploadSummary(
     out(`Project: ${summary.project}`);
   }
   out(`Report ID: ${summary.reportId}`);
-  out("View in Console: console.postgres.ai → Support → checkup reports");
+  out("View in Console: console.postgres.ai → Checkup → checkup reports");
   out("");
 
   // Show check summaries (filter out generic info messages)
