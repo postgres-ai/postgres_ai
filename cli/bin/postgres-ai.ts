@@ -357,15 +357,36 @@ function printUploadSummary(
   out("View in Console: console.postgres.ai → Support → checkup reports");
   out("");
 
-  // Show check summaries
+  // Show check summaries (filter out generic info messages)
+  const summaries = [];
+  let skippedCount = 0;
+
   for (const item of summary.uploaded) {
     const report = reports[item.checkId];
     if (report) {
       const { status, message } = generateCheckSummary(item.checkId, report);
-      const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
       const title = report.checkTitle || item.checkId;
-      out(`  ${icon} ${item.checkId} (${title}): ${message}`);
+
+      // Show if: warning/ok status, or info with concrete data (contains numbers or version info)
+      const isSignificant = status !== 'info' || /\d/.test(message) || message.includes('PostgreSQL') || message.includes('Version');
+
+      if (isSignificant) {
+        summaries.push({ checkId: item.checkId, title, status, message });
+      } else {
+        skippedCount++;
+      }
     }
+  }
+
+  // Print significant checks
+  for (const { checkId, title, status, message } of summaries) {
+    const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
+    out(`  ${icon} ${checkId} (${title}): ${message}`);
+  }
+
+  // Show count of other checks
+  if (skippedCount > 0) {
+    out(`  i ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
   }
 }
 
@@ -1859,12 +1880,33 @@ program
         const checkCount = Object.keys(reports).length;
         console.log(`Checkup completed: ${checkCount} check${checkCount > 1 ? 's' : ''}\n`);
 
+        // Collect and filter summaries
+        const summaries = [];
+        let skippedCount = 0;
+
         for (const [checkId, report] of Object.entries(reports)) {
           const { status, message } = generateCheckSummary(checkId, report);
-          const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
           const title = report.checkTitle || checkId;
 
+          // Show if: warning/ok status, or info with concrete data (contains numbers or version info)
+          const isSignificant = status !== 'info' || /\d/.test(message) || message.includes('PostgreSQL') || message.includes('Version');
+
+          if (isSignificant) {
+            summaries.push({ checkId, title, status, message });
+          } else {
+            skippedCount++;
+          }
+        }
+
+        // Print significant checks
+        for (const { checkId, title, status, message } of summaries) {
+          const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
           console.log(`  ${icon} ${checkId} (${title}): ${message}`);
+        }
+
+        // Show count of other checks
+        if (skippedCount > 0) {
+          console.log(`  i ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
         }
 
         console.log('\nFor details:');
