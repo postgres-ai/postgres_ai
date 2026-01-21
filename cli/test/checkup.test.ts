@@ -1455,6 +1455,302 @@ describe("checkup-summary", () => {
     expect(result.status).toBe("info");
     expect(result.message).toBe("Check completed");
   });
+
+  test("generateCheckSummary for D001 (logging settings)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "log_destination": { value: "stderr" },
+            "log_line_prefix": { value: "%m [%p] " }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 logging settings collected");
+  });
+
+  test("generateCheckSummary for D004 (pg_stat_statements)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "pg_stat_statements.max": { value: "5000" },
+            "pg_stat_statements.track": { value: "all" }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 pg_stat_statements settings collected");
+  });
+
+  test("generateCheckSummary for F001 (autovacuum)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "autovacuum": { value: "on" },
+            "autovacuum_max_workers": { value: "3" }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("F001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 autovacuum settings collected");
+  });
+
+  test("generateCheckSummary for G001 (memory settings)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "shared_buffers": { value: "128MB" },
+            "work_mem": { value: "4MB" }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 memory settings collected");
+  });
+
+  test("generateCheckSummary for G003 with deadlocks", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            settings: {
+              "lock_timeout": { value: "0" }
+            },
+            deadlock_stats: {
+              deadlocks: 5,
+              conflicts: 0,
+              stats_reset: "2025-01-01"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G003", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toBe("5 deadlocks detected");
+  });
+
+  test("generateCheckSummary for G003 without deadlocks", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            settings: {
+              "lock_timeout": { value: "0" },
+              "statement_timeout": { value: "0" }
+            },
+            deadlock_stats: {
+              deadlocks: 0,
+              conflicts: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 timeout/lock settings collected");
+  });
+
+  // Edge cases: empty data
+  test("generateCheckSummary for A003 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No settings found");
+  });
+
+  test("generateCheckSummary for A004 with no data", () => {
+    const report = {
+      results: {
+        "node1": {}
+      }
+    };
+    const result = summary.generateCheckSummary("A004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Cluster information collected");
+  });
+
+  test("generateCheckSummary for A004 with no database_sizes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            general_info: {}
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Cluster information collected");
+  });
+
+  test("generateCheckSummary for A007 with no altered settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A007", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("No altered settings");
+  });
+
+  test("generateCheckSummary for A002 with no version data", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Version checked");
+  });
+
+  test("generateCheckSummary for D001 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No logging settings found");
+  });
+
+  test("generateCheckSummary for D004 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No pg_stat_statements settings found");
+  });
+
+  test("generateCheckSummary for F001 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("F001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No autovacuum settings found");
+  });
+
+  test("generateCheckSummary for G001 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No memory settings found");
+  });
+
+  test("generateCheckSummary for G003 with no settings or deadlock_stats", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No timeout/lock settings found");
+  });
+
+  test("generateCheckSummary for H001 with no invalid indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              invalid_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("No invalid indexes");
+  });
+
+  test("generateCheckSummary for H002 with all indexes utilized", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              unused_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H002", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("All indexes utilized");
+  });
+
+  test("generateCheckSummary for H004 with no redundant indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              redundant_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H004", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("No redundant indexes");
+  });
 });
 
 
