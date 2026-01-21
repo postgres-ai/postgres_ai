@@ -342,7 +342,8 @@ function writeReportFiles(reports: Record<string, any>, outputPath: string): voi
 function printUploadSummary(
   summary: UploadSummary,
   projectWasGenerated: boolean,
-  useStderr: boolean
+  useStderr: boolean,
+  reports: Record<string, any>
 ): void {
   const out = useStderr ? console.error : console.log;
   out("\nCheckup report uploaded");
@@ -355,9 +356,16 @@ function printUploadSummary(
   out(`Report ID: ${summary.reportId}`);
   out("View in Console: console.postgres.ai → Support → checkup reports");
   out("");
-  out("Files:");
+
+  // Show check summaries
   for (const item of summary.uploaded) {
-    out(`- ${item.checkId}: ${item.filename}`);
+    const report = reports[item.checkId];
+    if (report) {
+      const { status, message } = generateCheckSummary(item.checkId, report);
+      const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
+      const title = report.checkTitle || item.checkId;
+      out(`  ${icon} ${item.checkId} (${title}): ${message}`);
+    }
   }
 }
 
@@ -1774,7 +1782,7 @@ program
 
       // Print upload summary
       if (uploadSummary) {
-        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson || shouldConvertMarkdown);
+        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson || shouldConvertMarkdown, reports);
       }
 
       // Convert to markdown if requested
