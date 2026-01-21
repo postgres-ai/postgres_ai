@@ -1355,7 +1355,7 @@ describe("checkup-summary", () => {
     };
     const result = summary.generateCheckSummary("A003", report);
     expect(result.status).toBe("info");
-    expect(result.message).toMatch(/settings analyzed/i);
+    expect(result.message).toBe("2 settings collected");
   });
 
   test("generateCheckSummary for A002 with PostgreSQL 17", () => {

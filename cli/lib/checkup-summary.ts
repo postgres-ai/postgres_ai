@@ -29,18 +29,32 @@ export function generateCheckSummary(checkId: string, report: any): CheckSummary
     // Version checks
     case 'A002': return summarizeA002(nodeData);
     case 'A013': return summarizeA013(nodeData);
-    // Settings checks (informational)
-    case 'A003': return { status: 'info', message: 'Postgres settings analyzed' };
+    // Settings checks
+    case 'A003': return summarizeA003(nodeData);
     case 'A004': return summarizeA004(nodeData);
     case 'A007': return summarizeA007(nodeData);
-    case 'D001': return { status: 'info', message: 'Logging settings reviewed' };
-    case 'D004': return { status: 'info', message: 'pg_stat_statements settings reviewed' };
-    case 'F001': return { status: 'info', message: 'Autovacuum settings reviewed' };
-    case 'G001': return { status: 'info', message: 'Memory settings reviewed' };
-    case 'G003': return { status: 'info', message: 'Timeout settings reviewed' };
+    case 'D001': return summarizeD001(nodeData);
+    case 'D004': return summarizeD004(nodeData);
+    case 'F001': return summarizeF001(nodeData);
+    case 'G001': return summarizeG001(nodeData);
+    case 'G003': return summarizeG003(nodeData);
     default:
       return { status: 'info', message: 'Check completed' };
   }
+}
+
+function summarizeA003(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+  const settingsCount = Object.keys(data).length;
+
+  if (settingsCount === 0) {
+    return { status: 'info', message: 'No settings found' };
+  }
+
+  return {
+    status: 'info',
+    message: `${settingsCount} setting${settingsCount > 1 ? 's' : ''} collected`
+  };
 }
 
 function summarizeA004(nodeData: any): CheckSummary {
@@ -177,11 +191,89 @@ function summarizeA013(nodeData: any): CheckSummary {
   }
 
   const current = ver.version || '';
-
-  // In real implementation, would compare with latest minor
-  // For now, just show the version
   return {
     status: 'info',
     message: `Version ${current}`
+  };
+}
+
+function summarizeD001(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+  const settingsCount = Object.keys(data).length;
+
+  if (settingsCount === 0) {
+    return { status: 'info', message: 'No logging settings found' };
+  }
+
+  return {
+    status: 'info',
+    message: `${settingsCount} logging setting${settingsCount > 1 ? 's' : ''} collected`
+  };
+}
+
+function summarizeD004(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+  const settingsCount = Object.keys(data).length;
+
+  if (settingsCount === 0) {
+    return { status: 'info', message: 'No pg_stat_statements settings found' };
+  }
+
+  return {
+    status: 'info',
+    message: `${settingsCount} pg_stat_statements setting${settingsCount > 1 ? 's' : ''} collected`
+  };
+}
+
+function summarizeF001(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+  const settingsCount = Object.keys(data).length;
+
+  if (settingsCount === 0) {
+    return { status: 'info', message: 'No autovacuum settings found' };
+  }
+
+  return {
+    status: 'info',
+    message: `${settingsCount} autovacuum setting${settingsCount > 1 ? 's' : ''} collected`
+  };
+}
+
+function summarizeG001(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+  const settingsCount = Object.keys(data).length;
+
+  if (settingsCount === 0) {
+    return { status: 'info', message: 'No memory settings found' };
+  }
+
+  return {
+    status: 'info',
+    message: `${settingsCount} memory setting${settingsCount > 1 ? 's' : ''} collected`
+  };
+}
+
+function summarizeG003(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+
+  // G003 has settings and deadlock_stats
+  const settings = data.settings || {};
+  const deadlockStats = data.deadlock_stats;
+  const settingsCount = Object.keys(settings).length;
+
+  if (deadlockStats && typeof deadlockStats.deadlocks === 'number' && deadlockStats.deadlocks > 0) {
+    return {
+      status: 'warning',
+      message: `${deadlockStats.deadlocks} deadlock${deadlockStats.deadlocks > 1 ? 's' : ''} detected`
+    };
+  }
+
+  if (settingsCount === 0) {
+    return { status: 'info', message: 'No timeout/lock settings found' };
+  }
+
+  return {
+    status: 'info',
+    message: `${settingsCount} timeout/lock setting${settingsCount > 1 ? 's' : ''} collected`
   };
 }
