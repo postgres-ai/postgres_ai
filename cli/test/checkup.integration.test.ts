@@ -174,6 +174,11 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
 
   // 60s timeout for hooks - PostgreSQL startup can take 30s+ in slow CI
   beforeAll(async () => {
+    // Create empty config directory for tests
+    const emptyConfigDir = "/tmp/postgresai-test-empty-config/postgresai";
+    fs.mkdirSync(emptyConfigDir, { recursive: true });
+    fs.writeFileSync(path.join(emptyConfigDir, "config.json"), "{}");
+
     pg = await createTempPostgres();
     client = await pg.connect();
   }, { timeout: 60000 });
@@ -317,5 +322,27 @@ describe.skipIf(!!skipReason)("checkup integration: express mode schema compatib
     const nodeResult = report.results["test-node"];
     expect(nodeResult).toHaveProperty("data");
     expect(typeof nodeResult.data).toBe("object");
+  });
+
+  test("CLI --markdown flag works without API key", async () => {
+    // Test that --markdown works even without an API key
+    const connString = `postgresql://postgres@${pg.socketDir}:${pg.port}/postgres`;
+    const cliPath = path.resolve(import.meta.dir, "..", "bin", "postgres-ai.ts");
+    const bunBin = typeof process.execPath === "string" && process.execPath.length > 0 ? process.execPath : "bun";
+
+    const result = Bun.spawnSync(
+      [bunBin, cliPath, "checkup", connString, "--check-id", "H002", "--markdown", "--no-upload"],
+      {
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config",
+        },
+      }
+    );
+
+    const stderr = new TextDecoder().decode(result.stderr);
+
+    // Should not complain about missing API key
+    expect(stderr).not.toMatch(/API key is required/i);
   });
 });

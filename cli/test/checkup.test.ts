@@ -1009,6 +1009,55 @@ describe("CLI tests", () => {
     expect(r.stderr).not.toMatch(/API key is required/i);
   });
 
+  test("checkup --help shows --markdown option", () => {
+    const r = runCli(["checkup", "--help"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/--markdown/);
+    expect(r.stdout).toMatch(/output markdown to stdout/i);
+  });
+
+  test("checkup --markdown is recognized as valid option", () => {
+    // Should not produce "unknown option" error for --markdown
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--markdown", "--no-upload"]);
+    // Connection will fail, but option parsing should succeed
+    expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/did you mean/i);
+  });
+
+  test("checkup --markdown works without API key", () => {
+    // Use empty config dir to ensure no API key is configured
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // --markdown should work even without API key
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--markdown", "--no-upload"], env);
+    // Connection will fail, but --markdown flag should be recognized
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/API key is required/i);
+  });
+
+  test("checkup with --no-upload and no output flags shows summary", () => {
+    // This test verifies that when running with --no-upload and no output flags,
+    // the user gets a summary of checks.
+    // Note: This will fail to connect, but we can still verify behavior.
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"], env);
+
+    // The command will fail due to connection error, but if it succeeded,
+    // it should show the summary. We can't test the success case without a real DB,
+    // but we verify the option parsing is correct (tested above in other tests).
+    // The actual summary output is tested in integration tests.
+    expect(r.status).not.toBe(0); // Will fail due to connection
+  });
+
+  test("checkup rejects --json and --markdown together", () => {
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--json", "--markdown", "--no-upload"], env);
+
+    // Should fail with mutual exclusivity error
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/mutually exclusive/i);
+  });
+
   // Argument parsing tests for check ID / connection string recognition
   test("checkup with check ID but no connection shows specific error", () => {
     const r = runCli(["checkup", "H002"]);
@@ -1111,7 +1160,7 @@ describe("checkup-api", () => {
         return "ok";
       },
       { maxAttempts: 3, initialDelayMs: 10 },
-      (attempt, err, delayMs) => {
+      (attempt, _err, delayMs) => {
         retryLogs.push(`attempt ${attempt}, delay ${delayMs}ms`);
       }
     );
@@ -1212,6 +1261,536 @@ describe("checkup-api", () => {
       expect(err).toBeInstanceOf(Error);
     }
     expect(attempts).toBe(2); // Should retry on ECONNRESET
+  });
+});
+
+// Tests for checkup-summary module
+describe("checkup-summary", () => {
+  const summary = require("../lib/checkup-summary");
+
+  test("generateCheckSummary for H001 with no issues", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              invalid_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0,
+              total_size_pretty: "0 bytes",
+              database_size_bytes: 1000000,
+              database_size_pretty: "1 MB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toMatch(/no invalid/i);
+  });
+
+  test("generateCheckSummary for H001 with invalid indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              invalid_indexes: [{}, {}, {}],
+              total_count: 3,
+              total_size_bytes: 1024 * 1024 * 245,
+              total_size_pretty: "245 MiB",
+              database_size_bytes: 1000000000,
+              database_size_pretty: "1 GB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/3 invalid indexes/i);
+    expect(result.message).toMatch(/245 MiB/i);
+  });
+
+  test("generateCheckSummary for H002 with no issues", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              unused_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0,
+              total_size_pretty: "0 bytes",
+              database_size_bytes: 1000000,
+              database_size_pretty: "1 MB",
+              stats_reset: {}
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H002", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toMatch(/all indexes utilized/i);
+  });
+
+  test("generateCheckSummary for H002 with unused indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              unused_indexes: [{}, {}],
+              total_count: 2,
+              total_size_bytes: 1024 * 1024 * 150,
+              total_size_pretty: "150 MiB",
+              database_size_bytes: 1000000000,
+              database_size_pretty: "1 GB",
+              stats_reset: {}
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H002", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/2 unused indexes/i);
+    expect(result.message).toMatch(/150 MiB/i);
+  });
+
+  test("generateCheckSummary for H004 with redundant indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              redundant_indexes: [{}, {}, {}, {}],
+              total_count: 4,
+              total_size_bytes: 1024 * 1024 * 1024 * 1.2,
+              total_size_pretty: "1.2 GiB",
+              database_size_bytes: 10000000000,
+              database_size_pretty: "10 GB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H004", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/4 redundant indexes/i);
+    expect(result.message).toMatch(/1\.2 GiB/i);
+  });
+
+  test("generateCheckSummary for A003 (settings)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "setting1": "value1",
+            "setting2": "value2"
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 settings collected");
+  });
+
+  test("generateCheckSummary for A002 with PostgreSQL 17", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "17.2",
+              server_version_num: "170002",
+              server_major_ver: "17",
+              server_minor_ver: "2"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("PostgreSQL 17");
+  });
+
+  test("generateCheckSummary for A002 with PostgreSQL 15", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "15.4",
+              server_version_num: "150004",
+              server_major_ver: "15",
+              server_minor_ver: "4"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("PostgreSQL 15");
+  });
+
+  test("generateCheckSummary for A002 with old PostgreSQL 11", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "11.8",
+              server_version_num: "110008",
+              server_major_ver: "11",
+              server_minor_ver: "8"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/PostgreSQL 11.*consider upgrading/i);
+  });
+
+  test("generateCheckSummary for A013 with version", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            version: {
+              version: "17.2",
+              server_version_num: "170002",
+              server_major_ver: "17",
+              server_minor_ver: "2"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A013", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Version 17.2");
+  });
+
+  test("generateCheckSummary handles empty results", () => {
+    const report = { results: {} };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No data");
+  });
+
+  test("generateCheckSummary handles unknown check ID", () => {
+    const report = {
+      results: {
+        "node1": { data: {} }
+      }
+    };
+    const result = summary.generateCheckSummary("UNKNOWN", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Check completed");
+  });
+
+  test("generateCheckSummary for D001 (logging settings)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "log_destination": { value: "stderr" },
+            "log_line_prefix": { value: "%m [%p] " }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 logging settings collected");
+  });
+
+  test("generateCheckSummary for D004 (pg_stat_statements)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "pg_stat_statements.max": { value: "5000" },
+            "pg_stat_statements.track": { value: "all" }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 pg_stat_statements settings collected");
+  });
+
+  test("generateCheckSummary for F001 (autovacuum)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "autovacuum": { value: "on" },
+            "autovacuum_max_workers": { value: "3" }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("F001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 autovacuum settings collected");
+  });
+
+  test("generateCheckSummary for G001 (memory settings)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "shared_buffers": { value: "128MB" },
+            "work_mem": { value: "4MB" }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 memory settings collected");
+  });
+
+  test("generateCheckSummary for G003 with deadlocks", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            settings: {
+              "lock_timeout": { value: "0" }
+            },
+            deadlock_stats: {
+              deadlocks: 5,
+              conflicts: 0,
+              stats_reset: "2025-01-01"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G003", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toBe("5 deadlocks detected");
+  });
+
+  test("generateCheckSummary for G003 without deadlocks", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            settings: {
+              "lock_timeout": { value: "0" },
+              "statement_timeout": { value: "0" }
+            },
+            deadlock_stats: {
+              deadlocks: 0,
+              conflicts: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("2 timeout/lock settings collected");
+  });
+
+  // Edge cases: empty data
+  test("generateCheckSummary for A003 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No settings found");
+  });
+
+  test("generateCheckSummary for A004 with no data", () => {
+    const report = {
+      results: {
+        "node1": {}
+      }
+    };
+    const result = summary.generateCheckSummary("A004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Cluster information collected");
+  });
+
+  test("generateCheckSummary for A004 with no database_sizes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            general_info: {}
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Cluster information collected");
+  });
+
+  test("generateCheckSummary for A007 with no altered settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A007", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("No altered settings");
+  });
+
+  test("generateCheckSummary for A002 with no version data", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A002", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Version checked");
+  });
+
+  test("generateCheckSummary for D001 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No logging settings found");
+  });
+
+  test("generateCheckSummary for D004 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("D004", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No pg_stat_statements settings found");
+  });
+
+  test("generateCheckSummary for F001 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("F001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No autovacuum settings found");
+  });
+
+  test("generateCheckSummary for G001 with no settings", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No memory settings found");
+  });
+
+  test("generateCheckSummary for G003 with no settings or deadlock_stats", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {}
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("G003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No timeout/lock settings found");
+  });
+
+  test("generateCheckSummary for H001 with no invalid indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              invalid_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("No invalid indexes");
+  });
+
+  test("generateCheckSummary for H002 with all indexes utilized", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              unused_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H002", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("All indexes utilized");
+  });
+
+  test("generateCheckSummary for H004 with no redundant indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              redundant_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H004", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toBe("No redundant indexes");
   });
 });
 

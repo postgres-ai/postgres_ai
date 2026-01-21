@@ -21,7 +21,8 @@ import { createInterface } from "readline";
 import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
 import { getCheckupEntry } from "../lib/checkup-dictionary";
-import { createCheckupReport, uploadCheckupReportJson, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
+import { createCheckupReport, uploadCheckupReportJson, convertCheckupReportJsonToMarkdown, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
+import { generateCheckSummary } from "../lib/checkup-summary";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -184,6 +185,7 @@ interface CheckupOptions {
   upload?: boolean;
   project?: string;
   json?: boolean;
+  markdown?: boolean;
 }
 
 interface UploadConfig {
@@ -295,7 +297,6 @@ async function uploadCheckupReports(
   );
 
   const reportId = created.reportId;
-  logUpload(`Created remote checkup report: ${reportId}`);
 
   const uploaded: Array<{ checkId: string; filename: string; chunkId: number }> = [];
   for (const [checkId, report] of Object.entries(reports)) {
@@ -318,7 +319,6 @@ async function uploadCheckupReports(
     );
     uploaded.push({ checkId, filename: `${checkId}.json`, chunkId: r.reportChunkId });
   }
-  logUpload("Upload completed");
 
   return { project: uploadCfg.project, reportId, uploaded };
 }
@@ -340,7 +340,8 @@ function writeReportFiles(reports: Record<string, any>, outputPath: string): voi
 function printUploadSummary(
   summary: UploadSummary,
   projectWasGenerated: boolean,
-  useStderr: boolean
+  useStderr: boolean,
+  reports: Record<string, any>
 ): void {
   const out = useStderr ? console.error : console.log;
   out("\nCheckup report uploaded");
@@ -351,11 +352,38 @@ function printUploadSummary(
     out(`Project: ${summary.project}`);
   }
   out(`Report ID: ${summary.reportId}`);
-  out("View in Console: console.postgres.ai → Support → checkup reports");
+  out("View in Console: console.postgres.ai → Checkup → checkup reports");
   out("");
-  out("Files:");
+
+  // Show check summaries (filter out generic info messages)
+  const summaries = [];
+  let skippedCount = 0;
+
   for (const item of summary.uploaded) {
-    out(`- ${item.checkId}: ${item.filename}`);
+    const report = reports[item.checkId];
+    if (report) {
+      const { status, message } = generateCheckSummary(item.checkId, report);
+      const title = report.checkTitle || item.checkId;
+
+      // Show if: warning/ok status, or info with concrete data (contains numbers or version info)
+      const isSignificant = status !== 'info' || /\d/.test(message) || message.includes('PostgreSQL') || message.includes('Version');
+
+      if (isSignificant) {
+        summaries.push({ checkId: item.checkId, title, status, message });
+      } else {
+        skippedCount++;
+      }
+    }
+  }
+
+  // Print significant checks
+  for (const { checkId, title, message } of summaries) {
+    out(`  ${checkId} (${title}): ${message}`);
+  }
+
+  // Show count of other checks
+  if (skippedCount > 0) {
+    out(`  ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
   }
 }
 
@@ -1655,6 +1683,7 @@ program
     "project name or ID for remote upload (used with --upload; defaults to config defaultProject; auto-generated on first run)"
   )
   .option("--json", "output JSON to stdout")
+  .option("--markdown", "output markdown to stdout")
   .addHelpText(
     "after",
     [
@@ -1668,6 +1697,7 @@ program
       "  postgresai checkup postgresql://user:pass@host:5432/db --check-id H002",
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
       "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --markdown",
     ].join("\n")
   )
   .action(async (checkIdOrConn: string | undefined, connArg: string | undefined, opts: CheckupOptions, cmd: Command) => {
@@ -1708,9 +1738,17 @@ program
     }
 
     const shouldPrintJson = !!opts.json;
+    const shouldConvertMarkdown = !!opts.markdown;
     const uploadExplicitlyRequested = opts.upload === true;
-    // Note: --json and --upload/--no-upload are independent flags.
-    // Use --no-upload to explicitly disable upload when using --json.
+
+    // Validate mutually exclusive flags
+    if (shouldPrintJson && shouldConvertMarkdown) {
+      console.error("Error: --json and --markdown are mutually exclusive");
+      process.exitCode = 1;
+      return;
+    }
+    // Note: --json, --markdown and --upload/--no-upload are independent flags.
+    // Use --no-upload to explicitly disable upload when using --json or --markdown.
     const uploadExplicitlyDisabled = opts.upload === false;
     let shouldUpload = !uploadExplicitlyDisabled;
 
@@ -1738,7 +1776,8 @@ program
       envPassword: process.env.PGPASSWORD,
     });
     let client: Client | undefined;
-    const spinnerEnabled = !!process.stdout.isTTY && shouldUpload;
+    // Show spinner when output is to TTY (not redirected) and not in JSON mode
+    const spinnerEnabled = !!process.stdout.isTTY && !shouldPrintJson;
     const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {
@@ -1790,12 +1829,132 @@ program
 
       // Print upload summary
       if (uploadSummary) {
-        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson);
+        printUploadSummary(uploadSummary, projectWasGenerated, shouldPrintJson || shouldConvertMarkdown, reports);
+      }
+
+      // Convert to markdown if requested
+      if (shouldConvertMarkdown) {
+        let apiKey: string;
+        let apiBaseUrl: string;
+
+        try {
+          const configResult = getConfig(rootOpts);
+          apiKey = configResult.apiKey;
+          const cfg = config.readConfig();
+          apiBaseUrl = resolveBaseUrls(rootOpts, cfg).apiBaseUrl;
+        } catch (error) {
+          spinner.stop();
+          console.error("Error: Failed to read configuration for markdown conversion");
+          console.error(error instanceof Error ? error.message : String(error));
+          process.exitCode = 1;
+          return;
+        }
+
+        // NOTE: apiKey can be empty - this is intentional. The API will return:
+        // - Without API key: Partial markdown with observations only (limited functionality)
+        // - With API key: Full markdown reports with all details
+        // This allows users to get basic insights without requiring authentication.
+
+        const markdownResults: Array<{ checkId: string; markdown?: string; error?: Error }> = [];
+
+        for (const [checkId, report] of Object.entries(reports)) {
+          try {
+            spinner.update(`Converting ${checkId} to markdown`);
+
+            // For reports that share JSON files (e.g., A002/A013 share a002.json,
+            // A003/D001/G003/F001 share a003.json), pass checkId as report_type
+            // so the API can generate the correct markdown variant
+            const markdownResult = await convertCheckupReportJsonToMarkdown({
+              apiKey,
+              apiBaseUrl,
+              checkId,
+              jsonPayload: report,
+              reportType: checkId,
+            });
+
+            // Extract markdown from response structure
+            // API returns: { reports: [{ markdown: "...", ... }], ... }
+            const markdown = markdownResult?.reports?.[0]?.markdown || markdownResult?.markdown;
+
+            markdownResults.push({
+              checkId,
+              markdown,
+            });
+          } catch (error) {
+            markdownResults.push({
+              checkId,
+              error: error instanceof Error ? error : new Error(String(error)),
+            });
+          }
+        }
+
+        spinner.stop();
+
+        // Output all markdown results
+        for (const result of markdownResults) {
+          if (result.error) {
+            if (result.error instanceof RpcError) {
+              console.error(`Error converting ${result.checkId} to markdown:`);
+              for (const line of formatRpcErrorForDisplay(result.error)) {
+                console.error(line);
+              }
+            } else {
+              console.error(`Error converting ${result.checkId} to markdown: ${result.error.message}`);
+            }
+          } else if (result.markdown) {
+            console.log(result.markdown);
+            if (!result.markdown.endsWith('\n')) {
+              console.log();
+            }
+          } else {
+            console.error(`Warning: No markdown content returned for ${result.checkId}`);
+          }
+        }
       }
 
       // Output JSON to stdout
-      if (shouldPrintJson || (!shouldUpload && !opts.output)) {
+      if (shouldPrintJson) {
         console.log(JSON.stringify(reports, null, 2));
+      }
+
+      // If no output was produced, show summary
+      const hadOutput = shouldPrintJson || shouldConvertMarkdown || outputPath || uploadSummary;
+      if (!hadOutput) {
+        const checkCount = Object.keys(reports).length;
+        console.log(`Checkup completed: ${checkCount} check${checkCount > 1 ? 's' : ''}\n`);
+
+        // Collect and filter summaries
+        const summaries = [];
+        let skippedCount = 0;
+
+        for (const [checkId, report] of Object.entries(reports)) {
+          const { status, message } = generateCheckSummary(checkId, report);
+          const title = report.checkTitle || checkId;
+
+          // Show if: warning/ok status, or info with concrete data (contains numbers or version info)
+          const isSignificant = status !== 'info' || /\d/.test(message) || message.includes('PostgreSQL') || message.includes('Version');
+
+          if (isSignificant) {
+            summaries.push({ checkId, title, status, message });
+          } else {
+            skippedCount++;
+          }
+        }
+
+        // Print significant checks
+        for (const { checkId, title, message } of summaries) {
+          console.log(`  ${checkId} (${title}): ${message}`);
+        }
+
+        // Show count of other checks
+        if (skippedCount > 0) {
+          console.log(`  ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
+        }
+
+        console.log('\nFor details:');
+        console.log('  --json          Output JSON');
+        console.log('  --markdown      Output markdown');
+        console.log('  --output <dir>  Save to directory');
       }
     } catch (error) {
       if (error instanceof RpcError) {
