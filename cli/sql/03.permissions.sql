@@ -51,7 +51,26 @@ begin
 end $$;
 
 -- Keep search_path predictable; postgres_ai first so our objects are found.
--- Include 'extensions' for providers that use it (e.g., Supabase) - harmless if it doesn't exist.
-alter user {{ROLE_IDENT}} set search_path = postgres_ai, extensions, "$user", public, pg_catalog;
+-- Dynamically include the pg_stat_statements extension schema if it's in a non-standard location.
+do $$
+declare
+  ext_schema text;
+  sp text;
+begin
+  -- Detect pg_stat_statements extension schema
+  select n.nspname into ext_schema
+  from pg_extension e
+  join pg_namespace n on e.extnamespace = n.oid
+  where e.extname = 'pg_stat_statements';
+
+  -- Build search_path: include extension schema if in non-standard location
+  if ext_schema is not null and ext_schema not in ('pg_catalog', 'public') then
+    sp := 'postgres_ai, ' || quote_ident(ext_schema) || ', "$user", public, pg_catalog';
+  else
+    sp := 'postgres_ai, "$user", public, pg_catalog';
+  end if;
+
+  execute format('alter user {{ROLE_IDENT}} set search_path = %s', sp);
+end $$;
 
 

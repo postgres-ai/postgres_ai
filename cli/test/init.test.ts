@@ -510,7 +510,7 @@ describe("init module", () => {
     expect(r.missingRequired.some((m) => m.includes("search_path") && m.includes("extensions"))).toBe(true);
   });
 
-  test("buildInitPlan includes extensions in search_path", async () => {
+  test("buildInitPlan includes dynamic search_path with extension schema detection", async () => {
     const plan = await init.buildInitPlan({
       database: "mydb",
       monitoringUser: DEFAULT_MONITORING_USER,
@@ -520,8 +520,10 @@ describe("init module", () => {
 
     const permStep = plan.steps.find((s) => s.name === "03.permissions");
     expect(permStep).toBeTruthy();
-    // Should include 'extensions' in search_path
-    expect(permStep!.sql).toMatch(/search_path\s*=\s*postgres_ai,\s*extensions/i);
+    // Should use dynamic DO block to set search_path based on detected extension schema
+    expect(permStep!.sql).toMatch(/alter\s+user.*set\s+search_path\s*=/i);
+    // Should detect pg_stat_statements extension schema dynamically
+    expect(permStep!.sql).toMatch(/quote_ident\(ext_schema\)/i);
   });
 
   test("buildInitPlan includes dynamic extension schema grant", async () => {
