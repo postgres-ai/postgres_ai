@@ -50,7 +50,7 @@ begin
   end if;
 end $$;
 
--- Keep search_path predictable; postgres_ai first so our objects are found.
+-- [SEARCH_PATH_BLOCK_START] Keep search_path predictable; postgres_ai first so our objects are found.
 -- Dynamically include the pg_stat_statements extension schema if it's in a non-standard location.
 do $$
 declare
@@ -72,5 +72,6 @@ begin
 
   execute format('alter user {{ROLE_IDENT}} set search_path = %s', sp);
 end $$;
+-- [SEARCH_PATH_BLOCK_END]
 
 

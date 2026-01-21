@@ -538,16 +538,12 @@ end $$;`;
   // Some providers restrict ALTER USER - remove those statements.
   // TODO: Make this more flexible by allowing users to specify which statements to skip via config.
   if (SKIP_ALTER_USER_PROVIDERS.includes(provider)) {
-    permissionsSql = permissionsSql
-      .split("\n")
-      .filter((line) => {
-        const trimmed = line.trim();
-        // Keep comments and empty lines
-        if (trimmed.startsWith("--") || trimmed === "") return true;
-        // Filter out ALTER USER statements (case-insensitive, flexible whitespace)
-        return !/^\s*alter\s+user\s+/i.test(line);
-      })
-      .join("\n");
+    // Remove the entire search_path DO block (marked with SEARCH_PATH_BLOCK_START/END)
+    // since it contains ALTER USER and can't be line-filtered without breaking the DO block.
+    permissionsSql = permissionsSql.replace(
+      /-- \[SEARCH_PATH_BLOCK_START\][\s\S]*?-- \[SEARCH_PATH_BLOCK_END\]\n?/,
+      ""
+    );
   }
 
   steps.push({
