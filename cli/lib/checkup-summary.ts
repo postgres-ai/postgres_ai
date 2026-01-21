@@ -22,21 +22,53 @@ export function generateCheckSummary(checkId: string, report: any): CheckSummary
   const nodeData = report.results[nodeIds[0]];
 
   switch (checkId) {
+    // Index health checks
     case 'H001': return summarizeH001(nodeData);
     case 'H002': return summarizeH002(nodeData);
     case 'H004': return summarizeH004(nodeData);
-    case 'F004': return summarizeF004(nodeData);
-    case 'F005': return summarizeF005(nodeData);
+    // Version checks
     case 'A002': return summarizeA002(nodeData);
     case 'A013': return summarizeA013(nodeData);
-    case 'A003':
-    case 'D001':
-    case 'G003':
-    case 'F001':
-      return { status: 'info', message: 'Settings analyzed' };
+    // Settings checks (informational)
+    case 'A003': return { status: 'info', message: 'Postgres settings analyzed' };
+    case 'A004': return summarizeA004(nodeData);
+    case 'A007': return summarizeA007(nodeData);
+    case 'D001': return { status: 'info', message: 'Logging settings reviewed' };
+    case 'D004': return { status: 'info', message: 'pg_stat_statements settings reviewed' };
+    case 'F001': return { status: 'info', message: 'Autovacuum settings reviewed' };
+    case 'G001': return { status: 'info', message: 'Memory settings reviewed' };
+    case 'G003': return { status: 'info', message: 'Timeout settings reviewed' };
     default:
       return { status: 'info', message: 'Check completed' };
   }
+}
+
+function summarizeA004(nodeData: any): CheckSummary {
+  const data = nodeData?.data;
+  if (!data) {
+    return { status: 'info', message: 'Cluster information collected' };
+  }
+
+  const dbCount = Object.keys(data.database_sizes || {}).length;
+  if (dbCount > 0) {
+    return { status: 'info', message: `${dbCount} database${dbCount > 1 ? 's' : ''} analyzed` };
+  }
+
+  return { status: 'info', message: 'Cluster information collected' };
+}
+
+function summarizeA007(nodeData: any): CheckSummary {
+  const data = nodeData?.data || {};
+  const alteredCount = Object.keys(data).length;
+
+  if (alteredCount === 0) {
+    return { status: 'ok', message: 'No altered settings' };
+  }
+
+  return {
+    status: 'info',
+    message: `${alteredCount} setting${alteredCount > 1 ? 's' : ''} altered from defaults`
+  };
 }
 
 function formatBytes(bytes: number): string {
@@ -110,64 +142,6 @@ function summarizeH004(nodeData: any): CheckSummary {
   return {
     status: 'warning',
     message: `Found ${totalCount} redundant index${totalCount > 1 ? 'es' : ''} (${formatBytes(totalSize)})`
-  };
-}
-
-function summarizeF004(nodeData: any): CheckSummary {
-  const data = nodeData?.data || {};
-  let totalCount = 0;
-  let totalBloatSize = 0;
-  let maxBloatPct = 0;
-
-  // Aggregate across all databases
-  for (const dbData of Object.values(data)) {
-    const dbEntry = dbData as any;
-    totalCount += dbEntry.total_count || 0;
-    totalBloatSize += dbEntry.total_bloat_size_bytes || 0;
-
-    // Find max bloat percentage across all tables
-    const tables = dbEntry.bloated_tables || [];
-    for (const table of tables) {
-      maxBloatPct = Math.max(maxBloatPct, table.bloat_pct || 0);
-    }
-  }
-
-  if (totalCount === 0) {
-    return { status: 'ok', message: 'No significant table bloat' };
-  }
-
-  return {
-    status: 'warning',
-    message: `${totalCount} table${totalCount > 1 ? 's' : ''} with bloat (${formatBytes(totalBloatSize)}, max ${maxBloatPct.toFixed(0)}%)`
-  };
-}
-
-function summarizeF005(nodeData: any): CheckSummary {
-  const data = nodeData?.data || {};
-  let totalCount = 0;
-  let totalBloatSize = 0;
-  let maxBloatPct = 0;
-
-  // Aggregate across all databases
-  for (const dbData of Object.values(data)) {
-    const dbEntry = dbData as any;
-    totalCount += dbEntry.total_count || 0;
-    totalBloatSize += dbEntry.total_bloat_size_bytes || 0;
-
-    // Find max bloat percentage across all indexes
-    const indexes = dbEntry.bloated_indexes || [];
-    for (const index of indexes) {
-      maxBloatPct = Math.max(maxBloatPct, index.bloat_pct || 0);
-    }
-  }
-
-  if (totalCount === 0) {
-    return { status: 'ok', message: 'No significant index bloat' };
-  }
-
-  return {
-    status: 'warning',
-    message: `${totalCount} index${totalCount > 1 ? 'es' : ''} with bloat (${formatBytes(totalBloatSize)}, max ${maxBloatPct.toFixed(0)}%)`
   };
 }
 

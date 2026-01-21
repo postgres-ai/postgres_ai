@@ -1720,7 +1720,8 @@ program
       envPassword: process.env.PGPASSWORD,
     });
     let client: Client | undefined;
-    const spinnerEnabled = !!process.stdout.isTTY && (shouldUpload || shouldConvertMarkdown);
+    // Show spinner when output is to TTY (not redirected) and not in JSON mode
+    const spinnerEnabled = !!process.stdout.isTTY && !shouldPrintJson;
     const spinner = createTtySpinner(spinnerEnabled, "Connecting to Postgres");
 
     try {

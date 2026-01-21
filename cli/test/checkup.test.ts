@@ -1342,34 +1342,6 @@ describe("checkup-summary", () => {
     expect(result.message).toMatch(/1\.2 GiB/i);
   });
 
-  test("generateCheckSummary for F004 with table bloat", () => {
-    const report = {
-      results: {
-        "node1": {
-          data: {
-            "db1": {
-              bloated_tables: [
-                { bloat_pct: 45 },
-                { bloat_pct: 62 },
-                { bloat_pct: 35 }
-              ],
-              total_count: 3,
-              total_bloat_size_bytes: 1024 * 1024 * 1024 * 3.5,
-              total_bloat_size_pretty: "3.5 GiB",
-              database_size_bytes: 10000000000,
-              database_size_pretty: "10 GB"
-            }
-          }
-        }
-      }
-    };
-    const result = summary.generateCheckSummary("F004", report);
-    expect(result.status).toBe("warning");
-    expect(result.message).toMatch(/3 tables with bloat/i);
-    expect(result.message).toMatch(/3\.5 GiB/i);
-    expect(result.message).toMatch(/62%/i); // max bloat
-  });
-
   test("generateCheckSummary for A003 (settings)", () => {
     const report = {
       results: {
