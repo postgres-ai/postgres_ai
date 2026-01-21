@@ -16,8 +16,21 @@
  *   --output <file>   Write to file instead of stdout
  */
 
-import * as childProcess from "child_process";
+import { execFileSync } from "child_process";
 import * as fs from "fs";
+
+// Valid git ref pattern: alphanumeric, dots, hyphens, underscores, slashes, tildes, carets
+const GIT_REF_PATTERN = /^[a-zA-Z0-9._~^/+-]+$/;
+// Valid git SHA pattern: 7-40 hex characters
+const GIT_SHA_PATTERN = /^[a-f0-9]{7,40}$/i;
+
+function isValidGitRef(ref: string): boolean {
+  return GIT_REF_PATTERN.test(ref) && !ref.includes("..");
+}
+
+function isValidGitSha(sha: string): boolean {
+  return GIT_SHA_PATTERN.test(sha);
+}
 
 // Conventional commit types and their display names
 const COMMIT_TYPES: Record<string, { title: string; emoji: string; priority: number }> = {
@@ -64,9 +77,9 @@ interface ReleaseNotes {
   };
 }
 
-function execSync(command: string): string {
+function gitExec(args: string[]): string {
   try {
-    const result = childProcess.execSync(command, { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
+    const result = execFileSync("git", args, { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
     return result.trim();
   } catch (err) {
     return "";
@@ -135,7 +148,7 @@ Examples:
 
 function detectLastTag(): string {
   // Try to find the last version tag
-  const tags = execSync("git tag --sort=-version:refname 2>/dev/null").split("\n").filter(Boolean);
+  const tags = gitExec(["tag", "--sort=-version:refname"]).split("\n").filter(Boolean);
 
   // Look for semantic version tags
   for (const tag of tags) {
@@ -145,9 +158,9 @@ function detectLastTag(): string {
   }
 
   // Fallback: find a meaningful starting point from commit messages
-  const versionCommit = execSync("git log --oneline --grep='prepare-for-0.14\\|0.13\\|release' --format='%H' | head -1");
-  if (versionCommit) {
-    return versionCommit;
+  const versionCommits = gitExec(["log", "--grep=prepare-for-0.14\\|0.13\\|release", "--format=%H"]).split("\n").filter(Boolean);
+  if (versionCommits.length > 0 && versionCommits[0]) {
+    return versionCommits[0];
   }
 
   // Last resort: 100 commits back
@@ -155,25 +168,38 @@ function detectLastTag(): string {
 }
 
 function getCommitsBetween(since: string, until: string): string[] {
+  // Validate refs to prevent command injection
+  if (since && !isValidGitRef(since)) {
+    throw new Error(`Invalid git ref: ${since}`);
+  }
+  if (!isValidGitRef(until)) {
+    throw new Error(`Invalid git ref: ${until}`);
+  }
+
   // Get commit hashes between the two refs
   const range = since ? `${since}..${until}` : until;
-  const output = execSync(`git log ${range} --format='%H' --no-merges 2>/dev/null`);
+  const output = gitExec(["log", range, "--format=%H", "--no-merges"]);
   return output.split("\n").filter(Boolean);
 }
 
 function parseCommit(hash: string): ParsedCommit | null {
-  const format = "%H%n%h%n%s%n%b%n%ad%n%an%n---END---";
-  const output = execSync(`git log -1 --format='${format}' --date=short ${hash}`);
+  // Validate hash to prevent command injection
+  if (!isValidGitSha(hash)) {
+    return null;
+  }
+
+  // Use null byte as delimiter (unlikely to appear in commit messages)
+  const format = "%H%x00%h%x00%s%x00%b%x00%ad%x00%an";
+  const output = gitExec(["log", "-1", `--format=${format}`, "--date=short", hash]);
 
   if (!output) return null;
 
-  const parts = output.split("\n---END---")[0]?.split("\n") || [];
-  const [fullHash, shortHash, subject, ...rest] = parts;
-  const author = rest.pop() || "";
-  const date = rest.pop() || "";
-  const body = rest.join("\n").trim();
+  const parts = output.split("\x00");
+  const [fullHash, shortHash, subject, body, date, author] = parts;
 
   if (!subject) return null;
+
+  const trimmedBody = (body || "").trim();
 
   // Parse conventional commit format: type(scope): subject
   // Also handle: type: subject, type!: subject (breaking)
@@ -187,7 +213,7 @@ function parseCommit(hash: string): ParsedCommit | null {
   if (match) {
     type = match[1]?.toLowerCase() || "other";
     scope = match[2] || null;
-    breaking = !!match[3] || body.includes("BREAKING CHANGE");
+    breaking = !!match[3] || trimmedBody.includes("BREAKING CHANGE");
     cleanSubject = match[4] || subject;
   }
 
@@ -201,10 +227,10 @@ function parseCommit(hash: string): ParsedCommit | null {
     type,
     scope,
     subject: cleanSubject,
-    body,
+    body: trimmedBody,
     breaking,
     date: date || new Date().toISOString().split("T")[0] || "",
-    author,
+    author: (author || "").trim(),
   };
 }
 
