@@ -1671,9 +1671,9 @@ program
   });
 
 program
-  .command("checkup [conn]")
+  .command("checkup [checkIdOrConn] [conn]")
   .description("generate health check reports directly from PostgreSQL (express mode)")
-  .option("--check-id <id>", `specific check to run (see list below), or ALL`, "ALL")
+  .option("--check-id <id>", `specific check to run (see list below), or ALL`)
   .option("--node-name <name>", "node name for reports", "node-01")
   .option("--output <path>", "output directory for JSON files")
   .option("--upload", "upload JSON results to PostgresAI (requires API key)")
@@ -1693,14 +1693,44 @@ program
       "",
       "Examples:",
       "  postgresai checkup postgresql://user:pass@host:5432/db",
-      "  postgresai checkup postgresql://user:pass@host:5432/db --check-id D001",
+      "  postgresai checkup H002 postgresql://user:pass@host:5432/db",
+      "  postgresai checkup postgresql://user:pass@host:5432/db --check-id H002",
       "  postgresai checkup postgresql://user:pass@host:5432/db --output ./reports",
-      "  postgresai checkup postgresql://user:pass@host:5432/db --project my_project",
       "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --json",
       "  postgresai checkup postgresql://user:pass@host:5432/db --no-upload --markdown",
     ].join("\n")
   )
-  .action(async (conn: string | undefined, opts: CheckupOptions, cmd: Command) => {
+  .action(async (checkIdOrConn: string | undefined, connArg: string | undefined, opts: CheckupOptions, cmd: Command) => {
+    // Support both syntaxes:
+    //   pgai checkup postgresql://...              -> run ALL checks
+    //   pgai checkup H002 postgresql://...         -> run specific check (positional)
+    //   pgai checkup --check-id H002 postgresql:// -> run specific check (option)
+    const checkIdPattern = /^[A-Z]\d{3}$/i;
+    let conn: string | undefined;
+    let checkId: string;
+
+    if (!checkIdOrConn) {
+      cmd.outputHelp();
+      process.exitCode = 1;
+      return;
+    }
+
+    if (checkIdPattern.test(checkIdOrConn)) {
+      // First arg is a check ID
+      checkId = checkIdOrConn.toUpperCase();
+      conn = connArg;
+      if (!conn) {
+        console.error(`Error: Connection string required when specifying check ID "${checkId}"`);
+        console.error(`\nUsage: postgresai checkup ${checkId} postgresql://user@host:5432/dbname\n`);
+        process.exitCode = 1;
+        return;
+      }
+    } else {
+      // First arg is the connection string
+      conn = checkIdOrConn;
+      checkId = opts.checkId?.toUpperCase() || "ALL";
+    }
+
     if (!conn) {
       cmd.outputHelp();
       process.exitCode = 1;
@@ -1757,12 +1787,11 @@ program
 
       // Generate reports
       let reports: Record<string, any>;
-      if (opts.checkId === "ALL") {
+      if (checkId === "ALL") {
         reports = await generateAllReports(client, opts.nodeName, (p) => {
           spinner.update(`Running ${p.checkId}: ${p.checkTitle} (${p.index}/${p.total})`);
         });
       } else {
-        const checkId = opts.checkId.toUpperCase();
         const generator = REPORT_GENERATORS[checkId];
         if (!generator) {
           spinner.stop();
@@ -1772,7 +1801,7 @@ program
             console.error(`Check ${checkId} (${dictEntry.title}) is not yet available in express mode.`);
             console.error(`Express-mode checks: ${Object.keys(CHECK_INFO).join(", ")}`);
           } else {
-            console.error(`Unknown check ID: ${opts.checkId}`);
+            console.error(`Unknown check ID: ${checkId}`);
             console.error(`See 'postgresai checkup --help' for available checks.`);
           }
           process.exitCode = 1;
