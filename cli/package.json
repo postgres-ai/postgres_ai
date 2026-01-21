@@ -36,7 +36,8 @@
     "test": "bun run embed-all && bun test",
     "test:fast": "bun run embed-all && bun test --coverage=false",
     "test:coverage": "bun run embed-all && bun test --coverage && echo 'Coverage report: cli/coverage/lcov-report/index.html'",
-    "typecheck": "bun run embed-all && bunx tsc --noEmit"
+    "typecheck": "bun run embed-all && bunx tsc --noEmit",
+    "release-notes": "bun run scripts/generate-release-notes.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
