@@ -186,6 +186,11 @@ async function postRpc<T>(params: {
   timeoutMs?: number;
 }): Promise<T> {
   const { apiKey, apiBaseUrl, rpcName, bodyObj, timeoutMs = HTTP_TIMEOUT_MS } = params;
+
+  // NOTE: API key validation removed intentionally to allow markdown conversion without auth.
+  // When apiKey is empty, API returns partial markdown (observations only, no full reports).
+  // API will return 401/403 for endpoints that require authentication.
+
   const base = normalizeBaseUrl(apiBaseUrl);
   const url = new URL(`${base}/rpc/${rpcName}`);
   const body = JSON.stringify(bodyObj);

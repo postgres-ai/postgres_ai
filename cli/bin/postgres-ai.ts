@@ -1834,9 +1834,26 @@ program
 
       // Convert to markdown if requested
       if (shouldConvertMarkdown) {
-        const { apiKey } = getConfig(rootOpts);
-        const cfg = config.readConfig();
-        const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+        let apiKey: string;
+        let apiBaseUrl: string;
+
+        try {
+          const configResult = getConfig(rootOpts);
+          apiKey = configResult.apiKey;
+          const cfg = config.readConfig();
+          apiBaseUrl = resolveBaseUrls(rootOpts, cfg).apiBaseUrl;
+        } catch (error) {
+          spinner.stop();
+          console.error("Error: Failed to read configuration for markdown conversion");
+          console.error(error instanceof Error ? error.message : String(error));
+          process.exitCode = 1;
+          return;
+        }
+
+        // NOTE: apiKey can be empty - this is intentional. The API will return:
+        // - Without API key: Partial markdown with observations only (limited functionality)
+        // - With API key: Full markdown reports with all details
+        // This allows users to get basic insights without requiring authentication.
 
         const markdownResults: Array<{ checkId: string; markdown?: string; error?: Error }> = [];
 

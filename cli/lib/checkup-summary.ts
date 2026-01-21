@@ -1,6 +1,10 @@
 /**
  * Generate human-readable summaries from checkup report JSON.
  * Used for default CLI output without requiring API calls.
+ *
+ * NOTE: This file uses `any` types for report structures to maintain flexibility
+ * with the dynamic JSON schema from the API. Future improvement: define proper
+ * TypeScript interfaces for report structures based on schema files.
  */
 
 export interface CheckSummary {
