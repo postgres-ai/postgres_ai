@@ -866,12 +866,12 @@ export async function verifyInitSetup(params: {
         missingRequired.push("role search_path is set");
       } else {
         // We accept any ordering as long as postgres_ai, public, and pg_catalog are included.
-        // Also check for 'extensions' if pg_stat_statements is in a non-standard schema.
+        // Also verify search_path includes the pg_stat_statements schema if in a non-standard location.
         const sp = spLine.toLowerCase();
         if (!sp.includes("postgres_ai") || !sp.includes("public") || !sp.includes("pg_catalog")) {
           missingRequired.push("role search_path includes postgres_ai, public and pg_catalog");
         }
-        // If pg_stat_statements is in 'extensions' schema, verify it's in search_path
+        // If pg_stat_statements is in a non-standard schema (e.g., 'extensions' on Supabase), verify it's in search_path
         if (extSchema && extSchema !== "pg_catalog" && extSchema !== "public") {
           if (!sp.includes(extSchema.toLowerCase())) {
             missingRequired.push(`role search_path includes ${extSchema} (pg_stat_statements location)`);

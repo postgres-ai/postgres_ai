@@ -540,6 +540,183 @@ describe("init module", () => {
     expect(permStep!.sql).toMatch(/grant usage on schema/i);
   });
 
+  test("verifyInitSetup handles pg_stat_statements not installed", async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (sql: string, params?: any) => {
+        calls.push(String(sql));
+
+        if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).toLowerCase() === "rollback;") {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).includes("select rolconfig")) {
+          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, extensions, "$user", public, pg_catalog'] }] };
+        }
+        if (String(sql).includes("from pg_catalog.pg_roles")) {
+          return { rowCount: 1, rows: [{ rolname: DEFAULT_MONITORING_USER }] };
+        }
+        if (String(sql).includes("has_database_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("pg_has_role")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_table_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("to_regclass")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_function_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        // pg_stat_statements is NOT installed - empty result
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 0, rows: [] };
+        }
+        if (String(sql).includes("has_schema_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+
+        throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+      },
+    };
+
+    const r = await init.verifyInitSetup({
+      client: client as any,
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      includeOptionalPermissions: false,
+    });
+    // Should pass without errors - missing extension shouldn't cause failure
+    expect(r.ok).toBe(true);
+    expect(r.missingRequired.length).toBe(0);
+    // Should have queried for pg_stat_statements schema location
+    expect(calls.some((c) => c.includes("pg_extension e") && c.includes("pg_stat_statements"))).toBe(true);
+  });
+
+  test("verifyInitSetup skips extension schema check when in pg_catalog", async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (sql: string, params?: any) => {
+        calls.push(String(sql));
+
+        if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).toLowerCase() === "rollback;") {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).includes("select rolconfig")) {
+          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, "$user", public, pg_catalog'] }] };
+        }
+        if (String(sql).includes("from pg_catalog.pg_roles")) {
+          return { rowCount: 1, rows: [{ rolname: DEFAULT_MONITORING_USER }] };
+        }
+        if (String(sql).includes("has_database_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("pg_has_role")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_table_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("to_regclass")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_function_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        // pg_stat_statements is in pg_catalog (standard location)
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 1, rows: [{ schema: "pg_catalog" }] };
+        }
+        if (String(sql).includes("has_schema_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+
+        throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+      },
+    };
+
+    const r = await init.verifyInitSetup({
+      client: client as any,
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      includeOptionalPermissions: false,
+    });
+    // Should pass - pg_catalog doesn't need extra USAGE grant
+    expect(r.ok).toBe(true);
+    expect(r.missingRequired.length).toBe(0);
+    // Should NOT have queried for has_schema_privilege on pg_catalog specifically
+    // (the code skips the check for pg_catalog and public schemas)
+    const pgCatalogPrivCheck = calls.filter(
+      (c) => c.includes("has_schema_privilege") && c.includes("pg_catalog")
+    );
+    // Should only have the standard public schema check, not a pg_catalog check for extension
+    expect(pgCatalogPrivCheck.length).toBe(0);
+  });
+
+  test("verifyInitSetup skips extension schema check when in public", async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (sql: string, params?: any) => {
+        calls.push(String(sql));
+
+        if (String(sql).toLowerCase().startsWith("begin isolation level repeatable read")) {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).toLowerCase() === "rollback;") {
+          return { rowCount: 1, rows: [] };
+        }
+        if (String(sql).includes("select rolconfig")) {
+          return { rowCount: 1, rows: [{ rolconfig: ['search_path=postgres_ai, "$user", public, pg_catalog'] }] };
+        }
+        if (String(sql).includes("from pg_catalog.pg_roles")) {
+          return { rowCount: 1, rows: [{ rolname: DEFAULT_MONITORING_USER }] };
+        }
+        if (String(sql).includes("has_database_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("pg_has_role")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_table_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("to_regclass")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        if (String(sql).includes("has_function_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+        // pg_stat_statements is in public schema
+        if (String(sql).includes("pg_extension e") && String(sql).includes("pg_stat_statements")) {
+          return { rowCount: 1, rows: [{ schema: "public" }] };
+        }
+        if (String(sql).includes("has_schema_privilege")) {
+          return { rowCount: 1, rows: [{ ok: true }] };
+        }
+
+        throw new Error(`unexpected sql: ${sql} params=${JSON.stringify(params)}`);
+      },
+    };
+
+    const r = await init.verifyInitSetup({
+      client: client as any,
+      database: "mydb",
+      monitoringUser: DEFAULT_MONITORING_USER,
+      includeOptionalPermissions: false,
+    });
+    // Should pass - public doesn't need extra USAGE grant for extension
+    expect(r.ok).toBe(true);
+    expect(r.missingRequired.length).toBe(0);
+  });
+
   test("buildInitPlan preserves comments when filtering ALTER USER", async () => {
     const plan = await init.buildInitPlan({
       database: "mydb",
