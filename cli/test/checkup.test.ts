@@ -1035,17 +1035,17 @@ describe("CLI tests", () => {
     expect(r.stderr).not.toMatch(/API key is required/i);
   });
 
-  test("checkup with --no-upload and no output flags shows helpful message", () => {
+  test("checkup with --no-upload and no output flags shows summary", () => {
     // This test verifies that when running with --no-upload and no output flags,
-    // the user gets a helpful message about available output options.
-    // Note: This will fail to connect, but we can still verify the help message appears.
+    // the user gets a summary of checks.
+    // Note: This will fail to connect, but we can still verify behavior.
     const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
     const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload"], env);
 
     // The command will fail due to connection error, but if it succeeded,
-    // it should show the helpful message. We can't test the success case without a real DB,
+    // it should show the summary. We can't test the success case without a real DB,
     // but we verify the option parsing is correct (tested above in other tests).
-    // The actual helpful message output is tested in integration tests.
+    // The actual summary output is tested in integration tests.
     expect(r.status).not.toBe(0); // Will fail due to connection
   });
 
@@ -1220,6 +1220,188 @@ describe("checkup-api", () => {
       expect(err).toBeInstanceOf(Error);
     }
     expect(attempts).toBe(2); // Should retry on ECONNRESET
+  });
+});
+
+// Tests for checkup-summary module
+describe("checkup-summary", () => {
+  const summary = require("../lib/checkup-summary");
+
+  test("generateCheckSummary for H001 with no issues", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              invalid_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0,
+              total_size_pretty: "0 bytes",
+              database_size_bytes: 1000000,
+              database_size_pretty: "1 MB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toMatch(/no invalid/i);
+  });
+
+  test("generateCheckSummary for H001 with invalid indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              invalid_indexes: [{}, {}, {}],
+              total_count: 3,
+              total_size_bytes: 1024 * 1024 * 245,
+              total_size_pretty: "245 MiB",
+              database_size_bytes: 1000000000,
+              database_size_pretty: "1 GB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/3 invalid indexes/i);
+    expect(result.message).toMatch(/245 MiB/i);
+  });
+
+  test("generateCheckSummary for H002 with no issues", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              unused_indexes: [],
+              total_count: 0,
+              total_size_bytes: 0,
+              total_size_pretty: "0 bytes",
+              database_size_bytes: 1000000,
+              database_size_pretty: "1 MB",
+              stats_reset: {}
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H002", report);
+    expect(result.status).toBe("ok");
+    expect(result.message).toMatch(/all indexes utilized/i);
+  });
+
+  test("generateCheckSummary for H002 with unused indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              unused_indexes: [{}, {}],
+              total_count: 2,
+              total_size_bytes: 1024 * 1024 * 150,
+              total_size_pretty: "150 MiB",
+              database_size_bytes: 1000000000,
+              database_size_pretty: "1 GB",
+              stats_reset: {}
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H002", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/2 unused indexes/i);
+    expect(result.message).toMatch(/150 MiB/i);
+  });
+
+  test("generateCheckSummary for H004 with redundant indexes", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              redundant_indexes: [{}, {}, {}, {}],
+              total_count: 4,
+              total_size_bytes: 1024 * 1024 * 1024 * 1.2,
+              total_size_pretty: "1.2 GiB",
+              database_size_bytes: 10000000000,
+              database_size_pretty: "10 GB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("H004", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/4 redundant indexes/i);
+    expect(result.message).toMatch(/1\.2 GiB/i);
+  });
+
+  test("generateCheckSummary for F004 with table bloat", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "db1": {
+              bloated_tables: [
+                { bloat_pct: 45 },
+                { bloat_pct: 62 },
+                { bloat_pct: 35 }
+              ],
+              total_count: 3,
+              total_bloat_size_bytes: 1024 * 1024 * 1024 * 3.5,
+              total_bloat_size_pretty: "3.5 GiB",
+              database_size_bytes: 10000000000,
+              database_size_pretty: "10 GB"
+            }
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("F004", report);
+    expect(result.status).toBe("warning");
+    expect(result.message).toMatch(/3 tables with bloat/i);
+    expect(result.message).toMatch(/3\.5 GiB/i);
+    expect(result.message).toMatch(/62%/i); // max bloat
+  });
+
+  test("generateCheckSummary for A003 (settings)", () => {
+    const report = {
+      results: {
+        "node1": {
+          data: {
+            "setting1": "value1",
+            "setting2": "value2"
+          }
+        }
+      }
+    };
+    const result = summary.generateCheckSummary("A003", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toMatch(/settings analyzed/i);
+  });
+
+  test("generateCheckSummary handles empty results", () => {
+    const report = { results: {} };
+    const result = summary.generateCheckSummary("H001", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("No data");
+  });
+
+  test("generateCheckSummary handles unknown check ID", () => {
+    const report = {
+      results: {
+        "node1": { data: {} }
+      }
+    };
+    const result = summary.generateCheckSummary("UNKNOWN", report);
+    expect(result.status).toBe("info");
+    expect(result.message).toBe("Check completed");
   });
 });
 

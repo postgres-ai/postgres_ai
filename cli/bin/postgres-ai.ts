@@ -22,6 +22,7 @@ import * as childProcess from "child_process";
 import { REPORT_GENERATORS, CHECK_INFO, generateAllReports } from "../lib/checkup";
 import { getCheckupEntry } from "../lib/checkup-dictionary";
 import { createCheckupReport, uploadCheckupReportJson, convertCheckupReportJsonToMarkdown, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
+import { generateCheckSummary } from "../lib/checkup-summary";
 
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
@@ -1843,18 +1844,24 @@ program
         console.log(JSON.stringify(reports, null, 2));
       }
 
-      // If no output was produced, show a helpful message
+      // If no output was produced, show summary
       const hadOutput = shouldPrintJson || shouldConvertMarkdown || outputPath || uploadSummary;
       if (!hadOutput) {
         const checkCount = Object.keys(reports).length;
-        const checkList = Object.keys(reports).join(", ");
-        console.log(`Successfully ran ${checkCount} check${checkCount > 1 ? 's' : ''}: ${checkList}`);
-        console.log();
-        console.log("No output destination specified. To view or save results, use one of:");
-        console.log("  --json          Output JSON to stdout");
-        console.log("  --markdown      Output markdown to stdout (requires API key)");
-        console.log("  --output <dir>  Save JSON files to directory");
-        console.log("  --upload        Upload to PostgresAI platform (requires API key)");
+        console.log(`Checkup completed: ${checkCount} check${checkCount > 1 ? 's' : ''}\n`);
+
+        for (const [checkId, report] of Object.entries(reports)) {
+          const { status, message } = generateCheckSummary(checkId, report);
+          const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
+          const title = report.checkTitle || checkId;
+
+          console.log(`  ${icon} ${checkId} (${title}): ${message}`);
+        }
+
+        console.log('\nFor details:');
+        console.log('  --json          Output JSON');
+        console.log('  --markdown      Output markdown');
+        console.log('  --output <dir>  Save to directory');
       }
     } catch (error) {
       if (error instanceof RpcError) {
