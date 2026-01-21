@@ -379,14 +379,13 @@ function printUploadSummary(
   }
 
   // Print significant checks
-  for (const { checkId, title, status, message } of summaries) {
-    const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
-    out(`  ${icon} ${checkId} (${title}): ${message}`);
+  for (const { checkId, title, message } of summaries) {
+    out(`  ${checkId} (${title}): ${message}`);
   }
 
   // Show count of other checks
   if (skippedCount > 0) {
-    out(`  i ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
+    out(`  ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
   }
 }
 
@@ -1899,14 +1898,13 @@ program
         }
 
         // Print significant checks
-        for (const { checkId, title, status, message } of summaries) {
-          const icon = status === 'ok' ? '✓' : status === 'warning' ? '!' : 'i';
-          console.log(`  ${icon} ${checkId} (${title}): ${message}`);
+        for (const { checkId, title, message } of summaries) {
+          console.log(`  ${checkId} (${title}): ${message}`);
         }
 
         // Show count of other checks
         if (skippedCount > 0) {
-          console.log(`  i ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
+          console.log(`  ${skippedCount} other check${skippedCount > 1 ? 's' : ''} completed`);
         }
 
         console.log('\nFor details:');
