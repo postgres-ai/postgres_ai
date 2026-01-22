@@ -73,7 +73,8 @@ spec:
                 --sources=/etc/pgwatch/sources.yml \
                 --metrics=/etc/pgwatch/metrics.yml \
                 --sink=postgresql://{{ .Values.sinkPostgres.user }}:${POSTGRES_PASSWORD}@{{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres:5432/{{ .Values.sinkPostgres.database }}?sslmode=disable \
-                --web-addr=:8080
+                --web-addr=:8080 \
+                --log-level={{ .Values.pgwatchPostgres.logLevel | default "error" }}
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:

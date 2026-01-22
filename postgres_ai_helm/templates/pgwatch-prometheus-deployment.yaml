@@ -68,6 +68,7 @@ spec:
             - --metrics=/etc/pgwatch/metrics.yml
             - --sink=prometheus://0.0.0.0:9091/pgwatch
             - --web-addr=:8089
+            - --log-level={{ .Values.pgwatchPrometheus.logLevel | default "error" }}
           ports:
             - name: http
               containerPort: 8089
