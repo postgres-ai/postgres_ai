@@ -205,31 +205,45 @@ cli:npm:publish:
         exit 1
       fi
 
-      # npm requires SemVer. We accept an optional leading 'v' in git tags for npm publishing,
-      # but the raw git tag is still treated as the canonical version string elsewhere (e.g. in container /VERSION).
-      TAG_VERSION="$RAW_TAG"
+      # npm requires SemVer. We accept an optional leading 'v' in git tags (e.g., v0.14.0 or 0.14.0).
       NPM_VERSION="${RAW_TAG#v}"
       if ! printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][-0-9A-Za-z.]+)?$'; then
         echo "Invalid npm version derived from git tag: RAW_TAG='$RAW_TAG' -> NPM_VERSION='$NPM_VERSION' (must be SemVer)"
         exit 1
       fi
 
+      # Determine npm dist-tags:
+      #   - X.Y.Z (final release) → @latest
+      #   - X.Y.Z-beta.N → @latest + @beta
+      #   - X.Y.Z-rc.N → @latest + @rc
+      #   - X.Y.Z-dev.N → @dev only
       DIST_TAG=""
-      if printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-(dev|beta|rc)\.[0-9]+$'; then
-        DIST_TAG="$(printf '%s' "$NPM_VERSION" | sed -E 's/^.*-(dev|beta|rc)\.[0-9]+$/\1/')"
-      elif printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+      EXTRA_TAG=""
+      if printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
         DIST_TAG="latest"
+      elif printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
+        DIST_TAG="latest"
+        EXTRA_TAG="beta"
+      elif printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'; then
+        DIST_TAG="latest"
+        EXTRA_TAG="rc"
+      elif printf '%s' "$NPM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$'; then
+        DIST_TAG="dev"
       fi
 
-      if [ "$DIST_TAG" != "dev" ] && [ "$DIST_TAG" != "beta" ] && [ "$DIST_TAG" != "rc" ] && [ "$DIST_TAG" != "latest" ]; then
-        echo "Unsupported version: $NPM_VERSION (expected X.Y.Z, X.Y.Z-dev.N, X.Y.Z-beta.N, or X.Y.Z-rc.N)"
+      if [ -z "$DIST_TAG" ]; then
+        echo "Unsupported version: $NPM_VERSION (expected X.Y.Z, X.Y.Z-beta.N, X.Y.Z-rc.N, or X.Y.Z-dev.N)"
         exit 1
       fi
 
       # Configure npm auth without committing credentials
       printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > ~/.npmrc
 
-      echo "Publishing postgresai@${NPM_VERSION} to dist-tag ${DIST_TAG}"
+      if [ -n "$EXTRA_TAG" ]; then
+        echo "Publishing postgresai@${NPM_VERSION} to dist-tags: ${DIST_TAG}, ${EXTRA_TAG}"
+      else
+        echo "Publishing postgresai@${NPM_VERSION} to dist-tag: ${DIST_TAG}"
+      fi
       cd cli
       # Use bun for faster install and build
       export BUN_INSTALL="$HOME/.bun" && export PATH="$BUN_INSTALL/bin:$PATH"
@@ -239,6 +253,10 @@ cli:npm:publish:
       bun run build
       npm publish --dry-run --tag "$DIST_TAG" --access public
       npm publish --tag "$DIST_TAG" --access public
+      # Add extra dist-tag if specified (e.g., @beta or @rc in addition to @latest)
+      if [ -n "$EXTRA_TAG" ]; then
+        npm dist-tag add "postgresai@${NPM_VERSION}" "$EXTRA_TAG"
+      fi
 
       # Wait until the registry sees the new postgresai version. This prevents the pgai step from
       # failing due to eventual consistency when verifying/pinning dependencies.
@@ -251,13 +269,21 @@ cli:npm:publish:
       done
       npm view "postgresai@${NPM_VERSION}" version >/dev/null
 
-      echo "Publishing pgai@${NPM_VERSION} (wrapper) to dist-tag ${DIST_TAG}"
+      if [ -n "$EXTRA_TAG" ]; then
+        echo "Publishing pgai@${NPM_VERSION} (wrapper) to dist-tags: ${DIST_TAG}, ${EXTRA_TAG}"
+      else
+        echo "Publishing pgai@${NPM_VERSION} (wrapper) to dist-tag: ${DIST_TAG}"
+      fi
       cd ../pgai
       # Update version + dependency so `npx pgai@<tag>` pulls the matching postgresai version.
       npm pkg set "dependencies.postgresai=$NPM_VERSION"
       npm version --no-git-tag-version "$NPM_VERSION"
       npm publish --dry-run --tag "$DIST_TAG" --access public
       npm publish --tag "$DIST_TAG" --access public
+      # Add extra dist-tag if specified
+      if [ -n "$EXTRA_TAG" ]; then
+        npm dist-tag add "pgai@${NPM_VERSION}" "$EXTRA_TAG"
+      fi
 
       for i in $(seq 1 30); do
         if npm view "pgai@${NPM_VERSION}" version >/dev/null 2>&1; then
