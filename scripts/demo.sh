@@ -20,7 +20,7 @@ type_it "npx postgresai checkup postgresql://user@host/db"
 printf "\n\n"
 sleep 0.3
 
-postgresai checkup "$DEMO_DB_URL" 2>&1
+npx postgresai checkup "$DEMO_DB_URL" 2>&1
 
 sleep 2
 
@@ -33,7 +33,7 @@ type_it "npx postgresai issues list"
 printf "\n\n"
 sleep 0.3
 
-postgresai issues list 2>&1 | head -20
+npx postgresai issues list 2>&1 | head -20
 
 sleep 2
 
@@ -47,7 +47,7 @@ printf "\n\n"
 sleep 0.3
 
 # Run real LLM command
-postgresai checkup --json --check-id H002 "$DEMO_DB_URL" 2>&1 | llm -s 'summarize the top 3 unused indexes by size, be brief'
+npx postgresai checkup --json --check-id H002 "$DEMO_DB_URL" 2>&1 | llm -s 'summarize the top 3 unused indexes by size, be brief'
 
 sleep 2
 
