@@ -158,9 +158,21 @@
                       {
                         "targetBlank": true,
                         "title": "Query Analysis",
-                        "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__value.queryid}﻿﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=﻿${__from:date}﻿&to=﻿${__to:date}"
+                        "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__value.queryid}\ufeff\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=\ufeff${__from:date}\ufeff&to=\ufeff${__to:date}"
                       }
                     ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Query text"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 300
                   }
                 ]
               }
@@ -198,6 +210,11 @@
                 {
                   "selector": "queryid",
                   "text": "Query ID",
+                  "type": "string"
+                },
+                {
+                  "selector": "query_text",
+                  "text": "Query text",
                   "type": "string"
                 },
                 {
@@ -380,6 +397,10 @@
                   {
                     "key": "db_name",
                     "value": "${db_name}"
+                  },
+                  {
+                    "key": "truncation_mode",
+                    "value": "${legend_label}"
                   }
                 ]
               }
@@ -395,37 +416,38 @@
                 },
                 "includeByName": {},
                 "indexByName": {
-                  "Block read time (ms)": 27,
-                  "Block read time/call (ms)": 29,
-                  "Block read time/sec (ms)": 28,
-                  "Block write time (ms)": 24,
-                  "Block write time/call (ms)": 26,
-                  "Block write time/sec (ms)": 25,
-                  "Calls": 1,
-                  "Calls/sec": 2,
-                  "Duration (seconds)": 30,
-                  "Exec time (ms)": 3,
-                  "Exec time/call (ms)": 5,
-                  "Exec time/sec (ms/s)": 4,
-                  "Planning time (ms)": 6,
-                  "Planning time/call (ms)": 8,
-                  "Planning time/sec (ms/s)": 7,
+                  "Block read time (ms)": 28,
+                  "Block read time/call (ms)": 30,
+                  "Block read time/sec (ms)": 29,
+                  "Block write time (ms)": 25,
+                  "Block write time/call (ms)": 27,
+                  "Block write time/sec (ms)": 26,
+                  "Calls": 2,
+                  "Calls/sec": 3,
+                  "Duration (seconds)": 31,
+                  "Exec time (ms)": 4,
+                  "Exec time/call (ms)": 6,
+                  "Exec time/sec (ms/s)": 5,
+                  "Planning time (ms)": 7,
+                  "Planning time/call (ms)": 9,
+                  "Planning time/sec (ms/s)": 8,
                   "Query ID": 0,
-                  "Rows": 9,
-                  "Rows/call": 11,
-                  "Rows/sec": 10,
-                  "Shared blocks dirtied": 21,
-                  "Shared blocks dirtied/call": 23,
-                  "Shared blocks dirtied/sec": 22,
-                  "Shared blocks hit": 12,
-                  "Shared blocks hit/call": 14,
-                  "Shared blocks hit/sec": 13,
-                  "Shared blocks read": 15,
-                  "Shared blocks read/call": 17,
-                  "Shared blocks read/sec": 16,
-                  "Shared blocks written": 18,
-                  "Shared blocks written/call": 20,
-                  "Shared blocks written/sec": 19
+                  "Query text": 1,
+                  "Rows": 10,
+                  "Rows/call": 12,
+                  "Rows/sec": 11,
+                  "Shared blocks dirtied": 22,
+                  "Shared blocks dirtied/call": 24,
+                  "Shared blocks dirtied/sec": 23,
+                  "Shared blocks hit": 13,
+                  "Shared blocks hit/call": 15,
+                  "Shared blocks hit/sec": 14,
+                  "Shared blocks read": 16,
+                  "Shared blocks read/call": 18,
+                  "Shared blocks read/sec": 17,
+                  "Shared blocks written": 19,
+                  "Shared blocks written/call": 21,
+                  "Shared blocks written/sec": 20
                 },
                 "renameByName": {}
               }
@@ -452,8 +474,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -523,7 +545,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -560,21 +582,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by calls per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -644,7 +671,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -679,21 +706,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by execution time per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -763,7 +795,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -800,21 +832,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_exec_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by execution time per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -884,7 +921,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -919,21 +956,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by planning time per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1003,7 +1045,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1040,21 +1082,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_plan_time_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by planning time per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1124,7 +1171,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1161,21 +1208,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by rows per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1244,7 +1296,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1281,21 +1333,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_rows{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by rows per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1365,7 +1422,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1400,21 +1457,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_hit per second (in bytes) (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1484,7 +1546,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1521,21 +1583,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_hit_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_hit (in bytes) per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1605,7 +1672,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1640,21 +1707,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_read per second (in bytes) (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1724,7 +1796,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1761,21 +1833,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_read_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_read (in bytes) per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1845,7 +1922,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -1880,21 +1957,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_written per second (in bytes) (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -1964,7 +2046,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2001,21 +2083,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_written_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_written (in bytes) per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2085,7 +2172,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2120,21 +2207,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_dirtied per second (in bytes) (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2204,7 +2296,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2241,21 +2333,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_shared_bytes_dirtied_total{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by shared_blks_dirtied (in bytes) per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2325,7 +2422,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2360,21 +2457,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by WAL bytes per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2444,7 +2546,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2479,21 +2581,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_bytes{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by WAL bytes per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2563,7 +2670,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2598,21 +2705,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by WAL fpi per second (in bytes) (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2681,7 +2793,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2716,21 +2828,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_wal_fpi{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by WAL fpi per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2800,7 +2917,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2835,21 +2952,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by temp bytes read per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -2919,7 +3041,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -2954,21 +3076,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_read{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by temp bytes read per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -3038,7 +3165,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -3073,21 +3200,26 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by temp bytes written per second (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "P7A0D6631BB10B34F"
+        "type": "datasource",
+        "uid": "-- Mixed --"
       },
       "fieldConfig": {
         "defaults": {
@@ -3157,7 +3289,7 @@
                     "oneClick": false,
                     "targetBlank": true,
                     "title": "Query Analysis",
-                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}﻿﻿&var-cluster_name=﻿$cluster_name﻿&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
+                    "url": "/d/db52944d-b025-4e18-b70b-89c0af3e7e41/tmp?orgId=1&var-query_id=${__field.labels.queryid}\ufeff\ufeff&var-cluster_name=\ufeff$cluster_name\ufeff&var-node_name=$node_name&var-db_name=$db_name&from=${__from:date}&to=${__to:date}"
                   }
                 ]
               }
@@ -3192,15 +3324,20 @@
       "pluginVersion": "12.0.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P7A0D6631BB10B34F"
+          },
           "editorMode": "code",
-          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval]))",
+          "expr": "topk($top_n, irate(pgwatch_pg_stat_statements_temp_bytes_written{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])/irate(pgwatch_pg_stat_statements_calls{cluster='$cluster_name', node_name='$node_name', datname=~\"$db_name\"}[$__rate_interval])) * on(queryid) group_left(displayname, displayname_medium, displayname_long, displayname_raw_short, displayname_raw_medium, displayname_raw_long, displayname_full, displayname_queryid) pgwatch_query_info",
           "interval": "20",
-          "legendFormat": "{{queryid}}",
+          "legendFormat": "{{$legend_label}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Top $top_n statements by temp bytes written per call (pg_stat_statements)",
+      "transformations": [],
       "type": "timeseries"
     },
     {
@@ -3234,32 +3371,6 @@
   "tags": [],
   "templating": {
     "list": [
-      {
-        "current": {
-          "text": "10",
-          "value": "10"
-        },
-        "name": "top_n",
-        "options": [
-          {
-            "selected": true,
-            "text": "10",
-            "value": "10"
-          },
-          {
-            "selected": false,
-            "text": "15",
-            "value": "15"
-          },
-          {
-            "selected": false,
-            "text": "20",
-            "value": "20"
-          }
-        ],
-        "query": "10, 15, 20",
-        "type": "custom"
-      },
       {
         "current": {
           "text": "local",
@@ -3300,7 +3411,9 @@
         "allowCustomValue": false,
         "current": {
           "text": "All",
-          "value": ["$__all"]
+          "value": [
+            "$__all"
+          ]
         },
         "definition": "label_values(pgwatch_db_size_size_b{cluster=\"$cluster_name\", node_name=\"$node_name\", datname!=\"template1\"},datname)",
         "includeAll": true,
@@ -3316,6 +3429,76 @@
         "refresh": 1,
         "regex": "",
         "type": "query"
+      },
+      {
+        "current": {
+          "text": "10",
+          "value": "10"
+        },
+        "label": "top_n",
+        "name": "top_n",
+        "options": [
+          {
+            "selected": false,
+            "text": "5",
+            "value": "5"
+          },
+          {
+            "selected": true,
+            "text": "10",
+            "value": "10"
+          },
+          {
+            "selected": false,
+            "text": "15",
+            "value": "15"
+          },
+          {
+            "selected": false,
+            "text": "20",
+            "value": "20"
+          },
+          {
+            "selected": false,
+            "text": "50",
+            "value": "50"
+          },
+          {
+            "selected": false,
+            "text": "100",
+            "value": "100"
+          },
+          {
+            "selected": false,
+            "text": "500",
+            "value": "500"
+          }
+        ],
+        "query": "5, 10, 15, 20, 50, 100, 500",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "Smart truncation",
+          "value": "displayname_long"
+        },
+        "description": "Smart truncation: shows 'SELECT ... FROM table_names'. Raw texts: shows beginning of query as-is.",
+        "label": "Query texts",
+        "name": "legend_label",
+        "options": [
+          {
+            "selected": true,
+            "text": "Smart truncation",
+            "value": "displayname_long"
+          },
+          {
+            "selected": false,
+            "text": "Raw texts",
+            "value": "displayname_raw_long"
+          }
+        ],
+        "query": "Smart truncation : displayname_long, Raw texts : displayname_raw_long",
+        "type": "custom"
       }
     ]
   },
@@ -3327,5 +3510,5 @@
   "timezone": "utc",
   "title": "02. Query performance analysis (top-N)",
   "uid": "3ceb2e98-639d-48df-8e1f-7686d2052170",
-  "version": 32
+  "version": 35
 }

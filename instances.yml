@@ -1,4 +1,4 @@
-- name: target-database
+- name: target_database
   conn_str: postgresql://monitor:monitor_pass@target-db:5432/target_database
   preset_metrics: full
   custom_metrics:

@@ -198,11 +198,13 @@ services:
     environment:
       - FLASK_ENV=production
       - PROMETHEUS_URL=http://sink-prometheus:9090
+      - POSTGRES_SINK_URL=postgresql://pgwatch@sink-postgres:5432/measurements
       # Optional overrides:
       # - ENABLE_AMP=true (enable Amazon Managed Prometheus support)
       # - AWS_REGION=us-east-1 (AWS region for Amazon Managed Prometheus)
     depends_on:
       - sink-prometheus
+      - sink-postgres
     restart: unless-stopped
 
   # PostgreSQL Reports Generator - Runs reports after 30 minutes

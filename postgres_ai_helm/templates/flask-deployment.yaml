@@ -27,6 +27,9 @@ spec:
         - name: wait-for-victoriametrics
           image: busybox:1.36
           command: ['sh', '-c', 'until nc -z {{ include "postgres-ai-monitoring.fullname" . }}-victoriametrics {{ .Values.victoriaMetrics.service.port }}; do echo waiting for victoriametrics; sleep 2; done']
+        - name: wait-for-sink-postgres
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z {{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres 5432; do echo waiting for sink-postgres; sleep 2; done']
       containers:
         - name: flask
           image: {{ .Values.flask.image }}
@@ -36,6 +39,13 @@ spec:
               value: "production"
             - name: PROMETHEUS_URL
               value: "http://{{ include "postgres-ai-monitoring.fullname" . }}-victoriametrics:{{ .Values.victoriaMetrics.service.port }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgres-ai-monitoring.secretName" . }}
+                  key: postgres-password
+            - name: POSTGRES_SINK_URL
+              value: "postgresql://{{ .Values.sinkPostgres.user }}:$(POSTGRES_PASSWORD)@{{ include "postgres-ai-monitoring.fullname" . }}-sink-postgres:5432/{{ .Values.sinkPostgres.database }}"
             {{- range $key, $value := .Values.flask.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}

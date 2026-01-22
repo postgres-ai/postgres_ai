@@ -2,7 +2,23 @@
 
 AI-native PostgreSQL observability — monitoring, health checks, and root cause analysis.
 
-## Commands
+## Development Guidelines
+
+### Rules and Standards
+
+This project uses shared rules from the `.cursor` submodule. Always follow these rules and keep the submodule updated:
+
+```bash
+# Update the rules submodule to latest
+git submodule update --remote .cursor
+```
+
+### Documentation
+
+- **README.md** — Project overview, features, and quick start
+- **CONTRIBUTING.md** — Local development workflow, Docker setup, debugging
+
+### Commands
 
 - `/pgai:issues [id]` — Work with Issues from console.postgres.ai
 - `/pgai:checkup <connection>` — Run health checks
