@@ -2115,10 +2115,10 @@ async function runCompose(args: string[], grafanaPassword?: string): Promise<num
     }
   }
 
-  // On macOS, node-exporter can't mount host root filesystem - skip it
+  // On macOS, self-node-exporter can't mount host root filesystem - skip it
   const finalArgs = [...args];
   if (process.platform === "darwin" && args.includes("up")) {
-    finalArgs.push("--scale", "node-exporter=0");
+    finalArgs.push("--scale", "self-node-exporter=0");
   }
 
   return new Promise<number>((resolve) => {
@@ -2496,15 +2496,15 @@ mon
 // Known container names for cleanup
 const MONITORING_CONTAINERS = [
   "postgres-ai-config-init",
-  "node-exporter",
-  "cadvisor",
+  "self-node-exporter",
+  "self-cadvisor",
   "grafana-with-datasources",
   "sink-postgres",
   "sink-prometheus",
   "target-db",
   "pgwatch-postgres",
   "pgwatch-prometheus",
-  "postgres-exporter-sink",
+  "self-postgres-exporter",
   "flask-pgss-api",
   "sources-generator",
   "postgres-reports",
