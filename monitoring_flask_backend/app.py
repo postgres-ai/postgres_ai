@@ -5,14 +5,184 @@ import io
 from datetime import datetime, timezone, timedelta
 import logging
 import os
+import re
 import boto3
 from requests_aws4auth import AWS4Auth
+import psycopg2
+import psycopg2.extras
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def smart_truncate_query(query: str, max_length: int = 40) -> str:
+    """
+    Smart SQL query truncation for display names.
+
+    Provides more informative truncation than simple character limits by:
+    1. Stripping leading comments (/* ... */ and -- ...)
+    2. For SELECT queries: showing "SELECT ... FROM <table_names>"
+    3. For CTEs: showing "WITH cte1, cte2 SELECT ... FROM ..."
+    4. Fallback to simple truncation on any parse error
+
+    Args:
+        query: The SQL query text
+        max_length: Maximum length for the result (default: 40)
+
+    Returns:
+        Truncated query string suitable for display
+    """
+    if not query:
+        return ''
+
+    # Store original for fallback (before try block to ensure it's always bound)
+    original_query = query
+
+    try:
+        # Step 1: Strip ALL block comments /* ... */ (not just leading ones)
+        # This handles inline comments like: SELECT /* comment */ FROM ...
+        query = re.sub(r'/\*.*?\*/', ' ', query, flags=re.DOTALL)
+
+        # Step 2: Strip ALL single-line comments -- ... to end of line
+        query = re.sub(r'--[^\n]*', ' ', query)
+
+        # Normalize whitespace
+        query = re.sub(r'\s+', ' ', query).strip()
+
+        # If already short enough, return it
+        if len(query) <= max_length:
+            return query
+
+        # Step 3: Parse CTEs (WITH clause)
+        cte_names = []
+        main_query = query  # The main SELECT statement (after CTEs)
+        cte_match = re.match(r'^WITH\s+(RECURSIVE\s+)?', query, re.IGNORECASE)
+        if cte_match:
+            # Find the main SELECT after CTEs by counting parentheses
+            # CTEs are: WITH name AS (...), name2 AS (...) SELECT ...
+            after_with = query[cte_match.end():]
+
+            # Extract CTE names from the section before the main SELECT
+            cte_name_matches = re.findall(r'(\w+)\s+AS\s*\(', after_with, re.IGNORECASE)
+            cte_names = cte_name_matches
+
+            # Find the main SELECT by tracking parentheses depth
+            # The main SELECT is at depth 0 after all CTE definitions
+            paren_depth = 0
+            main_select_pos = None
+            i = 0
+            while i < len(after_with):
+                if after_with[i] == '(':
+                    paren_depth += 1
+                elif after_with[i] == ')':
+                    paren_depth -= 1
+                elif paren_depth == 0:
+                    # Check if we're at a SELECT keyword at depth 0
+                    remaining = after_with[i:].upper()
+                    if remaining.startswith('SELECT'):
+                        main_select_pos = i
+                        break
+                i += 1
+
+            if main_select_pos is not None:
+                main_query = after_with[main_select_pos:]
+
+        # Step 4: Extract FROM clause tables from the main query
+        # Use a more robust approach: find FROM and extract until a SQL keyword
+        from_tables = []
+        from_match = re.search(r'\bFROM\s+', main_query, re.IGNORECASE)
+        if from_match:
+            # Get everything after FROM
+            after_from = main_query[from_match.end():]
+            # Find where the FROM clause ends (at a SQL keyword or end of string)
+            end_match = re.search(
+                r'\b(WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|FULL|NATURAL|ORDER|GROUP|HAVING|LIMIT|OFFSET|UNION|INTERSECT|EXCEPT|FOR|RETURNING)\b',
+                after_from, re.IGNORECASE
+            )
+            if end_match:
+                from_clause = after_from[:end_match.start()].strip()
+            else:
+                from_clause = after_from.strip()
+
+            # Extract table names (handle aliases, schemas, commas)
+            # Split by comma and extract first word of each (the table/alias)
+            table_parts = from_clause.split(',')
+            for part in table_parts:
+                part = part.strip()
+                if part:
+                    # Get the table name (first word, might include schema.table)
+                    table_name_match = re.match(r'^([\w.]+)', part)
+                    if table_name_match:
+                        table_name = table_name_match.group(1)
+                        # Skip subqueries (start with parentheses)
+                        if not part.startswith('('):
+                            from_tables.append(table_name)
+
+        # Step 5: Determine query type and build display string
+        query_upper = query.upper()
+
+        if query_upper.startswith('SELECT') or cte_names:
+            # Build the smart truncated version (lowercase to match pg_stat_statements)
+            if cte_names and from_tables:
+                result = f"with {', '.join(cte_names)} select ... from {', '.join(from_tables)}"
+            elif cte_names:
+                result = f"with {', '.join(cte_names)} select ..."
+            elif from_tables:
+                result = f"select ... from {', '.join(from_tables)}"
+            else:
+                # No FROM clause found, fall back to simple truncation
+                result = query[:max_length - 3] + '...'
+
+            # If result is still too long, truncate it
+            if len(result) > max_length:
+                result = result[:max_length - 3] + '...'
+
+            return result
+
+        elif query_upper.startswith('INSERT'):
+            # For INSERT, show the table name (lowercase to match pg_stat_statements)
+            insert_match = re.match(r'^INSERT\s+INTO\s+(\S+)', query, re.IGNORECASE)
+            if insert_match:
+                result = f"insert into {insert_match.group(1)} ..."
+                if len(result) > max_length:
+                    result = result[:max_length - 3] + '...'
+                return result
+
+        elif query_upper.startswith('UPDATE'):
+            # For UPDATE, show the table name (lowercase to match pg_stat_statements)
+            update_match = re.match(r'^UPDATE\s+(\S+)', query, re.IGNORECASE)
+            if update_match:
+                result = f"update {update_match.group(1)} ..."
+                if len(result) > max_length:
+                    result = result[:max_length - 3] + '...'
+                return result
+
+        elif query_upper.startswith('DELETE'):
+            # For DELETE, show the table name (lowercase to match pg_stat_statements)
+            delete_match = re.match(r'^DELETE\s+FROM\s+(\S+)', query, re.IGNORECASE)
+            if delete_match:
+                result = f"delete from {delete_match.group(1)} ..."
+                if len(result) > max_length:
+                    result = result[:max_length - 3] + '...'
+                return result
+
+        # Fallback: simple truncation
+        if len(query) > max_length:
+            return query[:max_length - 3] + '...'
+        return query
+
+    except Exception:
+        # On any error, fall back to simple truncation of original
+        if len(original_query) > max_length:
+            return original_query[:max_length - 3] + '...'
+        return original_query
+
+
 app = Flask(__name__)
+
+# PostgreSQL sink connection for query text lookups
+POSTGRES_SINK_URL = os.environ.get('POSTGRES_SINK_URL', 'postgresql://pgwatch@sink-postgres:5432/measurements')
 
 # Prometheus connection - use environment variable with fallback
 PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', 'http://localhost:8428')
@@ -58,6 +228,76 @@ def get_prometheus_client():
     except Exception as e:
         logger.error(f"Failed to connect to Prometheus: {e}")
         raise
+
+
+def get_query_texts_from_sink(db_name: str = None, truncation_mode: str = 'smart') -> dict:
+    """
+    Fetch queryid-to-query text mappings from the PostgreSQL sink database.
+
+    Args:
+        db_name: Optional database name to filter results
+        truncation_mode: 'smart' for smart truncation, 'raw' for simple truncation
+
+    Returns:
+        Dictionary mapping queryid to query text
+    """
+    query_texts = {}
+
+    conn = None
+    try:
+        conn = psycopg2.connect(POSTGRES_SINK_URL)
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            # Skip db_name filter if it's empty, "All", or contains special chars
+            use_db_filter = db_name and db_name.lower() not in ('all', '') and not db_name.startswith('$')
+            if use_db_filter:
+                query = """
+                    SELECT DISTINCT ON (data->>'queryid')
+                        data->>'queryid' as queryid,
+                        data->>'query' as query
+                    FROM public.pgss_queryid_queries
+                    WHERE
+                        dbname = %s
+                        AND data->>'queryid' IS NOT NULL
+                        AND data->>'query' IS NOT NULL
+                    ORDER BY data->>'queryid', time DESC
+                """
+                cursor.execute(query, (db_name,))
+            else:
+                query = """
+                    SELECT DISTINCT ON (data->>'queryid')
+                        data->>'queryid' as queryid,
+                        data->>'query' as query
+                    FROM public.pgss_queryid_queries
+                    WHERE
+                        data->>'queryid' IS NOT NULL
+                        AND data->>'query' IS NOT NULL
+                    ORDER BY data->>'queryid', time DESC
+                """
+                cursor.execute(query)
+
+            for row in cursor:
+                queryid = row['queryid']
+                query_text = row['query']
+                if queryid:
+                    if query_text:
+                        if truncation_mode == 'raw':
+                            # Raw truncation: normalize whitespace and truncate
+                            normalized = ' '.join(query_text.split())
+                            query_text = (normalized[:147] + '...') if len(normalized) > 150 else normalized
+                        else:
+                            # Smart truncation (extracts table names)
+                            query_text = smart_truncate_query(query_text, 150)
+                    else:
+                        query_text = ''
+                    query_texts[queryid] = query_text
+    except Exception as e:
+        logger.warning(f"Failed to fetch query texts from sink database: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+    return query_texts
+
 
 def read_version_file(filepath, default='unknown'):
     """Read version information from file"""
@@ -106,6 +346,7 @@ def get_pgss_metrics_csv():
     - cluster_name: Cluster name filter (optional)
     - node_name: Node name filter (optional)
     - db_name: Database name filter (optional)
+    - truncation_mode: 'smart' (default) or 'raw' for query text truncation
     """
     try:
         # Get query parameters
@@ -113,6 +354,7 @@ def get_pgss_metrics_csv():
         time_end = request.args.get('time_end')
         cluster_name = request.args.get('cluster_name')
         node_name = request.args.get('node_name')
+        truncation_mode = request.args.get('truncation_mode', 'smart')
         db_name = request.args.get('db_name')
 
         if not time_start or not time_end:
@@ -204,29 +446,35 @@ def get_pgss_metrics_csv():
                 logger.warning(f"Failed to query metric {metric}: {e}")
                 continue
 
+        # Fetch query texts from sink database
+        # Map legend_label values to truncation mode: displayname_raw_* -> raw, others -> smart
+        trunc_mode = 'raw' if 'raw' in truncation_mode.lower() else 'smart'
+        query_texts = get_query_texts_from_sink(db_name, truncation_mode=trunc_mode)
+        logger.info(f"Fetched {len(query_texts)} query texts from sink database (mode: {trunc_mode})")
+
         # Process the data to calculate differences
-        csv_data = process_pgss_data(start_data, end_data, start_dt, end_dt)
+        csv_data = process_pgss_data(start_data, end_data, start_dt, end_dt, query_texts)
 
         # Create CSV response
         output = io.StringIO()
         if csv_data:
-            # Define explicit field order with queryid first, then duration, then metrics with their rates
-            base_fields = ['queryid', 'duration_seconds']
+            # Define explicit field order with queryid first, query_text second, then duration, then metrics with their rates
+            base_fields = ['queryid', 'query_text', 'duration_seconds']
             all_metric_fields = []
-            
+
             # Get metric fields from the mapping in specific order with their rates
             desired_order = [
-                'calls', 'exec_time', 'plan_time', 'rows', 'shared_blks_hit', 
+                'calls', 'exec_time', 'plan_time', 'rows', 'shared_blks_hit',
                 'shared_blks_read', 'shared_blks_dirtied', 'shared_blks_written',
                 'blk_read_time', 'blk_write_time'
             ]
-            
+
             for display_name in desired_order:
                 if display_name in METRIC_NAME_MAPPING.values():
                     all_metric_fields.append(display_name)
                     all_metric_fields.append(f'{display_name}_per_sec')
                     all_metric_fields.append(f'{display_name}_per_call')
-            
+
             # Combine all fields in desired order
             all_fields = base_fields + all_metric_fields
             
@@ -248,10 +496,20 @@ def get_pgss_metrics_csv():
         logger.error(f"Error processing request: {e}")
         return jsonify({"error": str(e)}), 500
 
-def process_pgss_data(start_data, end_data, start_time, end_time):
+def process_pgss_data(start_data, end_data, start_time, end_time, query_texts=None):
     """
     Process pg_stat_statements data and calculate differences between start and end times
+
+    Args:
+        start_data: Prometheus data at start time
+        end_data: Prometheus data at end time
+        start_time: Start datetime
+        end_time: End datetime
+        query_texts: Optional dictionary mapping queryid to query text
     """
+    if query_texts is None:
+        query_texts = {}
+
     # Convert Prometheus data to dictionaries
     start_metrics = prometheus_to_dict(start_data, start_time)
     end_metrics = prometheus_to_dict(end_data, end_time)
@@ -286,9 +544,10 @@ def process_pgss_data(start_data, end_data, start_time, end_time):
             # Fallback to query parameter duration if timestamps are missing
             actual_duration = (end_time - start_time).total_seconds()
 
-        # Create result row
+        # Create result row with query text
         row = {
             'queryid': query_id,
+            'query_text': query_texts.get(query_id, ''),
             'duration_seconds': actual_duration
         }
 
@@ -877,5 +1136,257 @@ def prometheus_table_to_dict(prom_data, timestamp):
     
     return metrics_dict
 
+
+@app.route('/query_texts', methods=['GET'])
+def get_query_texts():
+    """
+    Get queryid-to-query text mappings for use in Grafana TopN chart legends.
+
+    Returns a JSON array of objects with 'queryid', 'query_text', and 'displayName' fields,
+    suitable for use with Grafana's Infinity datasource and "Config from query results" transformation.
+
+    The 'displayName' field contains a smart-truncated query string suitable for chart legends:
+    - Leading comments (/* ... */ and -- ...) are stripped
+    - SELECT queries show: "SELECT ... FROM <table_names>"
+    - CTEs show: "WITH cte1, cte2 SELECT ... FROM ..."
+    - INSERT/UPDATE/DELETE show the target table name
+    - Falls back to simple truncation on parse errors
+
+    Query parameters:
+    - db_name: Database name filter (optional)
+    - truncate: Max characters for query text (default: 40 for chart legends)
+    """
+    try:
+        db_name = request.args.get('db_name')
+
+        # Validate truncate parameter
+        try:
+            truncate_len = int(request.args.get('truncate', 40))
+            if truncate_len < 1 or truncate_len > 10000:
+                return jsonify({'error': 'truncate must be between 1 and 10000'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'truncate must be a valid integer'}), 400
+
+        query_texts = {}
+
+        conn = None
+        try:
+            conn = psycopg2.connect(POSTGRES_SINK_URL)
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Skip db_name filter if it's empty, "All", or contains special chars
+                use_db_filter = db_name and db_name.lower() not in ('all', '') and not db_name.startswith('$')
+                if use_db_filter:
+                    query = """
+                        SELECT DISTINCT ON (data->>'queryid')
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        FROM public.pgss_queryid_queries
+                        WHERE
+                            dbname = %s
+                            AND data->>'queryid' IS NOT NULL
+                            AND data->>'query' IS NOT NULL
+                        ORDER BY data->>'queryid', time DESC
+                    """
+                    cursor.execute(query, (db_name,))
+                else:
+                    query = """
+                        SELECT DISTINCT ON (data->>'queryid')
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        FROM public.pgss_queryid_queries
+                        WHERE
+                            data->>'queryid' IS NOT NULL
+                            AND data->>'query' IS NOT NULL
+                        ORDER BY data->>'queryid', time DESC
+                    """
+                    cursor.execute(query)
+
+                for row in cursor:
+                    queryid = row['queryid']
+                    query_text = row['query']
+                    if queryid:
+                        # Smart truncation for chart legend display
+                        # Use defensive check for None (despite SQL filter, drivers may return None)
+                        query_text = smart_truncate_query(query_text or '', truncate_len)
+                        query_texts[queryid] = query_text or ''
+        except Exception as e:
+            logger.warning(f"Failed to fetch query texts from sink database: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+        # Return as JSON array for Grafana Infinity datasource
+        # Include 'displayName' for use with "Config from query results" transformation
+        # displayName = query_text for legend series name (readable)
+        # queryid remains separate for navigation links to Dashboard 3
+        result = [
+            {
+                'queryid': qid,
+                'query_text': qtext,
+                'displayName': qtext if qtext else qid
+            }
+            for qid, qtext in query_texts.items()
+        ]
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error fetching query texts: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _escape_prometheus_label(value):
+    """Escape a string for use as a Prometheus label value.
+
+    Handles:
+    - Backslashes: \\ -> \\\\
+    - Double quotes: " -> \\"
+    - Newlines, carriage returns, tabs: replaced with space
+    """
+    if not value:
+        return ""
+    return (value
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('\n', ' ')
+            .replace('\r', ' ')
+            .replace('\t', ' '))
+
+
+@app.route('/query_info_metrics', methods=['GET'])
+def get_query_info_metrics():
+    """
+    Return query info metrics in Prometheus exposition format.
+
+    This endpoint is designed to be scraped by VictoriaMetrics/Prometheus
+    to create pgwatch_query_info{queryid="...", displayname="...", ...} metrics
+    that can be used with group_left() to add display names to chart legends.
+
+    The metrics include multiple truncation levels for dashboard flexibility:
+    - displayname: Short version (30 chars) - default for legends
+    - displayname_medium: Medium version (60 chars)
+    - displayname_long: Long version (100 chars)
+
+    Query parameters:
+    - db_name: Database name filter (optional)
+    """
+    try:
+        db_name = request.args.get('db_name')
+
+        # Truncation lengths for different display modes
+        TRUNCATE_SHORT = 30
+        TRUNCATE_MEDIUM = 60
+        TRUNCATE_LONG = 100
+
+        query_data = {}
+
+        conn = None
+        try:
+            conn = psycopg2.connect(POSTGRES_SINK_URL)
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Skip db_name filter if it's empty, "All", or contains special chars
+                use_db_filter = db_name and db_name.lower() not in ('all', '') and not db_name.startswith('$')
+                if use_db_filter:
+                    query = """
+                        SELECT DISTINCT ON (data->>'queryid')
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        FROM public.pgss_queryid_queries
+                        WHERE
+                            dbname = %s
+                            AND data->>'queryid' IS NOT NULL
+                            AND data->>'query' IS NOT NULL
+                        ORDER BY data->>'queryid', time DESC
+                    """
+                    cursor.execute(query, (db_name,))
+                else:
+                    query = """
+                        SELECT DISTINCT ON (data->>'queryid')
+                            data->>'queryid' as queryid,
+                            data->>'query' as query
+                        FROM public.pgss_queryid_queries
+                        WHERE
+                            data->>'queryid' IS NOT NULL
+                            AND data->>'query' IS NOT NULL
+                        ORDER BY data->>'queryid', time DESC
+                    """
+                    cursor.execute(query)
+
+                for row in cursor:
+                    queryid = row['queryid']
+                    query_text = row['query'] or ''  # Defensive check for None
+                    if queryid:
+                        # Normalize whitespace for raw truncation
+                        normalized_text = ' '.join(query_text.split()) if query_text else ''
+
+                        # Smart truncation (extracts table names, CTEs, etc.)
+                        short_text = smart_truncate_query(query_text, TRUNCATE_SHORT)
+                        medium_text = smart_truncate_query(query_text, TRUNCATE_MEDIUM)
+                        long_text = smart_truncate_query(query_text, TRUNCATE_LONG)
+
+                        # Format: "queryid | query text" - queryid prefix for easy copy-paste
+                        short = _escape_prometheus_label(f"{queryid} | {short_text}" if short_text else queryid)
+                        medium = _escape_prometheus_label(f"{queryid} | {medium_text}" if medium_text else queryid)
+                        long = _escape_prometheus_label(f"{queryid} | {long_text}" if long_text else queryid)
+
+                        # Raw truncation (simple character limit, no smart extraction)
+                        raw_short_text = (normalized_text[:TRUNCATE_SHORT-3] + '...') if len(normalized_text) > TRUNCATE_SHORT else normalized_text
+                        raw_medium_text = (normalized_text[:TRUNCATE_MEDIUM-3] + '...') if len(normalized_text) > TRUNCATE_MEDIUM else normalized_text
+                        raw_long_text = (normalized_text[:TRUNCATE_LONG-3] + '...') if len(normalized_text) > TRUNCATE_LONG else normalized_text
+
+                        raw_short = _escape_prometheus_label(f"{queryid} | {raw_short_text}" if raw_short_text else queryid)
+                        raw_medium = _escape_prometheus_label(f"{queryid} | {raw_medium_text}" if raw_medium_text else queryid)
+                        raw_long = _escape_prometheus_label(f"{queryid} | {raw_long_text}" if raw_long_text else queryid)
+
+                        # Full query text (no truncation) - limit to 500 chars for Prometheus label safety
+                        full_text = normalized_text[:500] if normalized_text else ''
+                        full = _escape_prometheus_label(f"{queryid} | {full_text}" if full_text else queryid)
+
+                        # Just queryid (for users who prefer numeric IDs)
+                        queryid_only = _escape_prometheus_label(queryid)
+
+                        query_data[queryid] = {
+                            'short': short,
+                            'medium': medium,
+                            'long': long,
+                            'raw_short': raw_short,
+                            'raw_medium': raw_medium,
+                            'raw_long': raw_long,
+                            'full': full,
+                            'queryid_only': queryid_only,
+                        }
+        except Exception as e:
+            logger.warning(f"Failed to fetch query texts from sink database: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+        # Generate Prometheus exposition format
+        lines = ['# HELP pgwatch_query_info Query ID to display name mapping for chart legends']
+        lines.append('# TYPE pgwatch_query_info gauge')
+
+        for queryid, names in query_data.items():
+            # Include all truncation levels as labels
+            lines.append(
+                f'pgwatch_query_info{{queryid="{queryid}",'
+                f'displayname="{names["short"]}",'
+                f'displayname_medium="{names["medium"]}",'
+                f'displayname_long="{names["long"]}",'
+                f'displayname_raw_short="{names["raw_short"]}",'
+                f'displayname_raw_medium="{names["raw_medium"]}",'
+                f'displayname_raw_long="{names["raw_long"]}",'
+                f'displayname_full="{names["full"]}",'
+                f'displayname_queryid="{names["queryid_only"]}"}} 1'
+            )
+
+        response = make_response('\n'.join(lines) + '\n')
+        response.headers['Content-Type'] = 'text/plain; charset=utf-8'
+        return response
+
+    except Exception as e:
+        logger.error(f"Error generating query info metrics: {e}")
+        return f"# Error: {str(e)}\n", 500
+
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=5000, debug=True)

@@ -39,3 +39,13 @@ scrape_configs:
     static_configs:
       - targets: ['self-postgres-exporter:9187']
     scrape_interval: 30s
+
+  # Query info metrics for chart legend display names
+  # Creates pgwatch_query_info{queryid, displayname} metrics used with group_left()
+  # Query texts are stable, so we scrape infrequently to reduce storage
+  - job_name: 'query-info'
+    static_configs:
+      - targets: ['monitoring_flask_backend:8000']
+    scrape_interval: 300s     # 5 minutes - query texts rarely change
+    scrape_timeout: 30s
+    metrics_path: /query_info_metrics

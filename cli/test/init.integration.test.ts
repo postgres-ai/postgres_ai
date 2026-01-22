@@ -215,7 +215,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 15000 });
 
   test("requires explicit monitoring password in non-interactive mode", async () => {
     pg = await createTempPostgres();
@@ -239,7 +239,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 15000 });
 
   test(
     "fixes slightly-off permissions idempotently",
@@ -375,6 +375,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     }
   );
 
+  // 15s timeout for PostgreSQL startup + two CLI init commands in slow CI
   test("--reset-password updates the monitoring role login password", async () => {
     pg = await createTempPostgres();
 
@@ -405,7 +406,7 @@ describe.skipIf(skipTests)("integration: prepare-db", () => {
     } finally {
       await pg.cleanup();
     }
-  });
+  }, { timeout: 15000 });
 
   // 60s timeout for PostgreSQL startup + multiple SQL queries in slow CI
   test("explain_generic validates input and prevents SQL injection", async () => {
