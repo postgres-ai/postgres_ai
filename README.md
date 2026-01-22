@@ -14,7 +14,7 @@
 
 [Live Demo](https://demo.postgres.ai) ·
 [Documentation](https://postgres.ai/docs) ·
-[Get Started](#quick-start)
+[Get Started](#get-started)
 
 </div>
 
@@ -30,31 +30,41 @@ Battle-tested in PostgresAI team's work with [companies like GitLab, Miro, Chewy
 Traditional monitoring tools give you dashboards. **`postgresai` gives AI agents the context they need to actually fix problems.**
 
 - **Structured for AI** — Reports and metrics designed for LLM consumption
+- **Issues workflow** — Track problems from detection to resolution
 - **45+ health checks** — Bloat, indexes, queries, settings, security
 - **Active Session History** — Postgres's answer to Oracle ASH
 - **Expert dashboards** — Four Golden Signals methodology
 
 Part of [Self-Driving Postgres](https://postgres.ai/blog/20250725-self-driving-postgres) — PostgresAI's open-source initiative to make Postgres autonomous.
 
-## Quick start
+## Get Started
 
-Run health checks on any Postgres database — no installation required:
+### 1. Sign up
+
+Create a free account at [postgres.ai](https://postgres.ai)
+
+### 2. Authenticate
+
+```bash
+npx postgresai auth
+```
+
+This opens your browser to log in and saves your API key locally.
+
+### 3. Run health checks
 
 ```bash
 PGPASSWORD=secret npx postgresai checkup postgresql://user@host:5432/dbname
 ```
 
-That's it. Get instant insights on indexes, bloat, settings, and more.
+### 4. View results
 
-```bash
-# Run a specific check (local JSON output, no upload)
-npx postgresai checkup --no-upload --check-id H002 postgresql://...
+Open [console.postgres.ai](https://console.postgres.ai) to see:
+- Detailed reports with suggested fixes
+- Issues workflow to track remediation
+- Historical data across all your projects
 
-# Upload results to console.postgres.ai for tracking
-npx postgresai checkup --check-id H002 postgresql://...
-```
-
-> `bunx postgresai` also works if you prefer Bun.
+> **Offline mode:** Add `--no-upload` to run locally without an account.
 
 <details open>
 <summary>See demo</summary>
@@ -62,6 +72,20 @@ npx postgresai checkup --check-id H002 postgresql://...
 <img src="assets/demo-checkup.gif" alt="postgresai checkup demo" width="700">
 </div>
 </details>
+
+## Express Checkup
+
+Run specific checks or work offline:
+
+```bash
+# Run a specific check
+npx postgresai checkup --check-id H002 postgresql://...
+
+# Local JSON output only (no upload)
+npx postgresai checkup --no-upload --check-id H002 postgresql://...
+```
+
+> **Tips:** `npx pgai checkup` also works. `bunx postgresai` if you prefer Bun.
 
 ## Full monitoring stack
 
@@ -73,9 +97,8 @@ npx postgresai mon local-install --demo
 # → Open http://localhost:3000
 
 # Production setup (Linux + Docker required)
-npm install -g postgresai
-postgresai prepare-db postgresql://admin@host:5432/dbname  # Create monitoring role with minimal permissions
-postgresai mon local-install --api-key=YOUR_TOKEN --db-url="postgresql://..."
+npx postgresai prepare-db postgresql://admin@host:5432/dbname  # Create monitoring role with minimal permissions
+npx postgresai mon local-install --api-key=YOUR_TOKEN --db-url="postgresql://..."
 ```
 
 Get your API key at [console.postgres.ai](https://console.postgres.ai) — or use the fully managed version there.
@@ -87,7 +110,7 @@ All diagnostic queries are carefully designed to avoid the [observer effect](htt
 Preview the setup SQL before running:
 
 ```bash
-postgresai prepare-db --print-sql postgresql://...   # Review what will be created
+npx postgresai prepare-db --print-sql postgresql://...   # Review what will be created
 ```
 
 The `prepare-db` step creates a read-only `postgres_ai_mon` user with minimal permissions, enables `pg_stat_statements`, and creates `postgres_ai` schema with a few helper views.
@@ -134,7 +157,7 @@ Work with Issues from [console.postgres.ai](https://console.postgres.ai):
 
 ```bash
 # Install MCP server for your AI coding tool
-postgresai mcp install
+npx postgresai mcp install
 ```
 
 <details>
@@ -150,10 +173,10 @@ This enables AI agents to work with Issues and Action Items from [console.postgr
 
 ```bash
 # Pipe checkup output to any LLM
-postgresai checkup --json postgresql://... | llm -s "analyze this Postgres health report"
+npx postgresai checkup --json postgresql://... | llm -s "analyze this Postgres health report"
 
 # Or use with Claude directly
-postgresai checkup --json postgresql://... | claude -p "find issues and suggest fixes"
+npx postgresai checkup --json postgresql://... | claude -p "find issues and suggest fixes"
 ```
 
 <details>
@@ -183,8 +206,10 @@ postgresai checkup --json postgresql://... | claude -p "find issues and suggest 
 ## Tips
 
 - **Short alias:** `npx pgai checkup` works too
+- **Can I use it without registration on console.postgres.ai?** Yes, both express checkup and full-fledged monitoring are open-source and can be used without any connection to console.postgres.ai. In instructions above, just skip `npx postgresai auth` and:
+    - Express checkup: use `--no-upload`
+    - Full monitoring: omit --api-key`
 - **Managed version:** Express checkup finds problems. The managed version at [console.postgres.ai](https://console.postgres.ai) also explains how to fix them and provides an Issues workflow to track fixes
-
 ## Links
 
 | | |
