@@ -103,6 +103,7 @@ services:
         "--metrics=/postgres_ai_configs/pgwatch/metrics.yml",
         "--sink=postgresql://pgwatch@sink-postgres:5432/measurements?sslmode=disable",
         "--web-addr=:8080",
+        "--log-level=error",
       ]
     depends_on:
       sources-generator:
@@ -123,6 +124,7 @@ services:
         "--metrics=/postgres_ai_configs/pgwatch-prometheus/metrics.yml",
         "--sink=prometheus://0.0.0.0:9091/pgwatch",
         "--web-addr=:8089",
+        "--log-level=error",
       ]
     depends_on:
       sources-generator:

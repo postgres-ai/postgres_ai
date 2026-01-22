@@ -53,11 +53,13 @@ victoriaMetrics:
 pgwatchPostgres:
   enabled: true
   image: cybertecpostgresql/pgwatch:3
+  logLevel: error
   resources: {}
 
 pgwatchPrometheus:
   enabled: true
   image: cybertecpostgresql/pgwatch:3
+  logLevel: error
   resources: {}
 
 flask:
