@@ -165,7 +165,7 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "expr": "count(up{job=~\"cadvisor|node-exporter|postgres-sink|victoriametrics|pgwatch-prometheus\"})",
+          "expr": "count(up{job=~\"self-cadvisor|self-node-exporter|self-postgres-exporter|victoriametrics|pgwatch-prometheus\"})",
           "refId": "A"
         }
       ],
@@ -2216,7 +2216,7 @@
             "type": "prometheus",
             "uid": "P7A0D6631BB10B34F"
           },
-          "expr": "avg(scrape_duration_seconds{job=~\"cadvisor|node-exporter|postgres-sink|pgwatch-prometheus\"}) by (job)",
+          "expr": "avg(scrape_duration_seconds{job=~\"self-cadvisor|self-node-exporter|self-postgres-exporter|pgwatch-prometheus\"}) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }

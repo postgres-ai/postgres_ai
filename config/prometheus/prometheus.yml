@@ -23,19 +23,19 @@ scrape_configs:
     scrape_interval: 15s
 
   # Self-monitoring: Docker container metrics via cAdvisor
-  - job_name: 'cadvisor'
+  - job_name: 'self-cadvisor'
     static_configs:
-      - targets: ['cadvisor:8080']
+      - targets: ['self-cadvisor:8080']
     scrape_interval: 30s
 
   # Self-monitoring: System metrics via Node Exporter
-  - job_name: 'node-exporter'
+  - job_name: 'self-node-exporter'
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ['self-node-exporter:9100']
     scrape_interval: 30s
 
   # Self-monitoring: Sink Postgres database metrics
-  - job_name: 'postgres-sink'
+  - job_name: 'self-postgres-exporter'
     static_configs:
-      - targets: ['postgres-exporter:9187']
+      - targets: ['self-postgres-exporter:9187']
     scrape_interval: 30s
