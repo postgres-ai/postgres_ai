@@ -1,6 +1,19 @@
 include:
   - local: 'components/index_pilot/.gitlab-ci.yml'
 
+# Auto-cancel redundant pipelines when new commits are pushed
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+
+# Make all jobs interruptible by default (deploy/publish jobs override this)
+default:
+  interruptible: true
+
 stages:
   - build
   - test
@@ -183,6 +196,7 @@ cli:node:tests:
 
 cli:npm:publish:
   stage: publish
+  interruptible: false  # Never cancel publish jobs
   image: node:20-bullseye
   variables:
     GIT_STRATEGY: fetch
@@ -303,6 +317,7 @@ cli:npm:publish:
 
 .docker-publish-base: &docker-publish-base
   stage: publish
+  interruptible: false  # Never cancel publish jobs
   image: docker:27.3
   services:
     - name: docker:27.3-dind
