@@ -1,0 +1,55 @@
+{
+  "spec_version": "1.0",
+  "function": "reporter.postgres_reports.PostgresReportGenerator._parse_memory_value",
+  "description": "Parses PostgreSQL memory configuration strings to bytes. Returns 0 for invalid/empty inputs (no exceptions).",
+  "python_verified": "2026-01-22",
+  "typescript_verified": null,
+
+  "constraints": {
+    "max_safe_value": 9007199254740991,
+    "note": "TS may enforce overflow; Python does not check overflow"
+  },
+
+  "valid_cases": [
+    {"id": "mem_valid_001", "input": "128MB", "expected": 134217728, "outcome": "success", "tags": ["basic", "mb"], "note": "128 * 1024 * 1024 = 134217728"},
+    {"id": "mem_valid_002", "input": "4GB", "expected": 4294967296, "outcome": "success", "tags": ["basic", "gb"], "note": "4 * 1024^3"},
+    {"id": "mem_valid_003", "input": "1TB", "expected": 1099511627776, "outcome": "success", "tags": ["basic", "tb"]},
+    {"id": "mem_valid_004", "input": "512KB", "expected": 524288, "outcome": "success", "tags": ["basic", "kb"]},
+    {"id": "mem_valid_005", "input": "1024B", "expected": 1024, "outcome": "success", "tags": ["basic", "bytes"]}
+  ],
+
+  "case_groups": {
+    "bare_numbers": [
+      {"id": "mem_bare_001", "input": "8192", "expected": 8388608, "outcome": "success", "note": "8192 * 1024 = 8388608 (assumes KB)"},
+      {"id": "mem_bare_002", "input": "1", "expected": 1024, "outcome": "success", "note": "1 * 1024 = 1024"},
+      {"id": "mem_bare_003", "input": "0", "expected": 0, "outcome": "success", "note": "0 * 1024 = 0"}
+    ],
+    "case_insensitive": [
+      {"id": "mem_case_001", "input": "128mb", "expected": 134217728, "outcome": "success", "tags": ["case"]},
+      {"id": "mem_case_002", "input": "128Mb", "expected": 134217728, "outcome": "success", "tags": ["case"]},
+      {"id": "mem_case_003", "input": "4gb", "expected": 4294967296, "outcome": "success", "tags": ["case"]}
+    ],
+    "whitespace": [
+      {"id": "mem_ws_001", "input": "  128MB  ", "expected": 134217728, "outcome": "success", "tags": ["whitespace"], "note": "Leading/trailing whitespace stripped"},
+      {"id": "mem_ws_002", "input": "\t4GB\n", "expected": 4294967296, "outcome": "success", "tags": ["whitespace"]}
+    ],
+    "special_values": [
+      {"id": "mem_spec_001", "input": "-1", "expected": 0, "outcome": "success", "note": "Special PostgreSQL value meaning 'use default'"},
+      {"id": "mem_spec_002", "input": "", "expected": 0, "outcome": "success", "note": "Empty string returns 0"},
+      {"id": "mem_spec_003", "input": "0MB", "expected": 0, "outcome": "success", "note": "Zero with unit"}
+    ],
+    "fractional": [
+      {"id": "mem_frac_001", "input": "1.5GB", "expected": 1610612736, "outcome": "success", "note": "1.5 * 1024^3 = 1610612736"},
+      {"id": "mem_frac_002", "input": "0.5MB", "expected": 524288, "outcome": "success", "note": "0.5 * 1024^2 = 524288"}
+    ],
+    "invalid_returns_zero": [
+      {"id": "mem_inv_001", "input": "invalid", "expected": 0, "outcome": "success", "note": "Python returns 0 for unrecognized input (no exception)"},
+      {"id": "mem_inv_002", "input": "abc123", "expected": 0, "outcome": "success", "note": "Mixed invalid input returns 0"},
+      {"id": "mem_inv_003", "input": "128XX", "expected": 0, "outcome": "success", "note": "No matching suffix, falls to try/except, returns 0"}
+    ]
+  },
+
+  "invalid_cases": [
+    {"id": "mem_err_001", "input": "128XB", "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Ends with B, tries to parse '128X' as float, raises ValueError"}
+  ]
+}
