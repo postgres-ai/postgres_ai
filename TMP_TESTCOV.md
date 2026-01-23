@@ -2,10 +2,13 @@
 
 | Version | Date | Changes | Breaking |
 |---------|------|---------|----------|
+| 2.3 | 2026-01-22 | **FINAL**: Fix schema bug, harness dispatches by outcome, rename legacy behavior tests, add Phase 0 spike | None |
 | 2.2 | 2026-01-22 | Fix contradiction: TS enforces overflow, Python unchanged. Add `outcome` to vectors. Sanitizer fixes. Schema allows invalid-only. Scope coverage targets. | Vectors now require `outcome` field |
 | 2.1 | 2026-01-22 | Error codes, snapshot sanitizers, DON'T refactor Python, shellcheck, vector schema, phase DoD, rollback plan | Error codes replace exception names |
 | 2.0 | 2026-01-22 | Migration-first approach, risk-based tiers, compliance vectors | New vector format |
 | 1.0 | 2026-01-22 | Initial draft | - |
+
+> **Breaking change impact (v2.2):** Schema validation will fail until all vectors include `outcome` field.
 
 ---
 
@@ -165,6 +168,12 @@ tests/
         {"$ref": "#/definitions/case_base"},
         {"required": ["error_code"]}
       ]
+    },
+    "case": {
+      "oneOf": [
+        {"$ref": "#/definitions/valid_case"},
+        {"$ref": "#/definitions/invalid_case"}
+      ]
     }
   }
 }
@@ -252,11 +261,18 @@ ERROR_MAP = {
     "ERR_OVERFLOW": ValueError,  # Python may not actually raise this
 }
 
-def get_all_cases(vectors: dict) -> list:
-    """Flatten valid_cases + case_groups into single list"""
+def get_valid_cases(vectors: dict) -> list:
+    """Get all cases expecting success (have 'expected' field)"""
     cases = list(vectors.get("valid_cases", []))
     for group_cases in vectors.get("case_groups", {}).values():
-        cases.extend(group_cases)
+        cases.extend(c for c in group_cases if "expected" in c)
+    return cases
+
+def get_invalid_cases(vectors: dict) -> list:
+    """Get all cases expecting failure (have 'error_code' field)"""
+    cases = list(vectors.get("invalid_cases", []))
+    for group_cases in vectors.get("case_groups", {}).values():
+        cases.extend(c for c in group_cases if "error_code" in c)
     return cases
 
 class TestVectorSchemaValid:
@@ -284,7 +300,7 @@ class TestVectorSchemaValid:
 class TestMemoryParsingCompliance:
     """Tests loaded from compliance_vectors/memory_parsing.json"""
 
-    @pytest.mark.parametrize("case", get_all_cases(MEMORY_VECTORS), ids=lambda c: c["id"])
+    @pytest.mark.parametrize("case", get_valid_cases(MEMORY_VECTORS), ids=lambda c: c["id"])
     def test_valid_cases(self, case):
         if case.get("python_skip"):
             pytest.skip(f"Skipped for Python: {case.get('note', '')}")
@@ -293,7 +309,7 @@ class TestMemoryParsingCompliance:
         # Outcome should be success for valid cases
         assert case["outcome"] == "success"
 
-    @pytest.mark.parametrize("case", MEMORY_VECTORS.get("invalid_cases", []), ids=lambda c: c["id"])
+    @pytest.mark.parametrize("case", get_invalid_cases(MEMORY_VECTORS), ids=lambda c: c["id"])
     def test_invalid_cases(self, case):
         if case.get("python_skip"):
             pytest.skip(f"Skipped for Python: {case.get('note', '')}")
@@ -513,18 +529,29 @@ class TestG001MemorySettingsReport:
         result = generator.generate_g001_memory_settings_report()
         assert SnapshotSanitizer.sanitize(result) == snapshot
 
-    def test_malformed_input(self, snapshot: SnapshotAssertion, mock_prometheus):
+
+class TestG001LegacyBehaviorContract:
+    """Legacy behavior contract tests - document current Python behavior without snapshots.
+
+    These tests assert that Python behaves a certain way (raises exception, returns None)
+    so that TS migration can decide whether to preserve or improve that behavior.
+    NOT snapshot tests - they verify exception types and return values.
+    """
+
+    def test_malformed_input_raises_keyerror(self, mock_prometheus):
         """Prometheus returns unexpected structure - document actual behavior"""
         mock_prometheus.return_value = {"status": "success", "data": None}
         # Actual behavior: raises KeyError (verified 2026-01-22)
+        # TS should return ReportResult with MALFORMED_RESPONSE instead
         with pytest.raises(KeyError):
             generator.generate_g001_memory_settings_report()
 
-    def test_prometheus_unavailable(self, snapshot: SnapshotAssertion, mock_prometheus):
+    def test_prometheus_unavailable_returns_none(self, mock_prometheus):
         """Prometheus connection fails"""
         mock_prometheus.side_effect = requests.exceptions.ConnectionError("connection refused")
         result = generator.generate_g001_memory_settings_report()
         # Actual behavior: returns None (verified 2026-01-22)
+        # TS should return ReportResult with PROM_UNAVAILABLE instead
         assert result is None
 ```
 
@@ -748,6 +775,21 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 
 > Week 1 starts when this doc is approved (target: 2026-01-27).
 
+### Phase 0: Spike (Day 0)
+
+**Goal:** Validate the approach before committing to full implementation.
+
+| Task | Owner | Deliverable |
+|------|-------|-------------|
+| Create single vector file (`memory_parsing.json`) | Python maintainer | 5-10 cases covering basic + edge |
+| Create minimal Python harness | Python maintainer | Runs 5-10 cases |
+| Verify harness catches real bugs | Python maintainer | Manually break parser, confirm test fails |
+| Review with TS migration lead | Both leads | Agreement on vector format |
+
+**Definition of Done:** Single vector file works end-to-end, both leads sign off on format.
+
+**Exit criteria:** If spike reveals fundamental issues with approach, revisit strategy before proceeding.
+
 ### Phase 1: Compliance Vectors (Days 1-3)
 
 | Task | Owner | Deliverable |
@@ -801,12 +843,12 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 ### Phase Dependencies
 
 ```
-Phase 1 ──────┬──────> Phase 2 ──────> Phase 4
-              │
-              └──────> Phase 3 ──────┘
+Phase 0 ──────> Phase 1 ──────┬──────> Phase 2 ──────> Phase 4
+                              │
+                              └──────> Phase 3 ──────┘
 ```
 
-Phase 2 can start when `memory_parsing.json` + harness merged. Phase 3 is independent.
+Phase 0 must complete before Phase 1. Phase 2 can start when `memory_parsing.json` + harness merged. Phase 3 is independent.
 
 ---
 
@@ -936,6 +978,6 @@ jsonschema>=4.0
 
 ---
 
-*Document version: 2.2*
+*Document version: 2.3 (FINAL)*
 *Updated: 2026-01-22*
-*Focus: Outcome-based vectors, TS enforces overflow, Python unchanged*
+*Focus: Schema complete, harness dispatches by outcome, legacy behavior tests separated*
