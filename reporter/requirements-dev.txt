@@ -1,5 +1,5 @@
 -r requirements.txt
-pytest==9.0.1
+pytest==8.3.5
 pytest-postgresql==7.0.2
 coverage==7.6.10
 pytest-cov==6.0.0
