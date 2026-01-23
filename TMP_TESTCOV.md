@@ -813,10 +813,10 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 | Property tests for `_parse_memory_value` | Python maintainer | 6 property tests | ✅ Done |
 | Property tests for `_build_qid_regex` | Python maintainer | 3 property tests | ✅ Done |
 | Property tests for `_densify` | Python maintainer | 4 property tests (length, fill, preserve, idempotent) | ✅ Done |
-| Golden snapshots for G001, K001, K003 | Python maintainer | Deferred - requires fixture infrastructure | ⏸️ Follow-up |
+| Golden snapshots for G001, K001, K003 | Python maintainer | 12 snapshot tests (4 per report) | ✅ Done |
 | Verify actual Python error behavior | Python maintainer | Documented in vectors (see `memory_parsing.json`) | ✅ Done |
 
-**Definition of Done:** Property tests verify invariants for all core methods. Snapshots deferred to follow-up MR with fixture infrastructure.
+**Definition of Done:** Property tests verify invariants for all core methods. Golden snapshots verify report output stability.
 
 ### Phase 3: Error Semantics + Contracts (Days 8-10) ✅ COMPLETE
 

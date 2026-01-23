@@ -1,0 +1,817 @@
+# serializer version: 1
+# name: TestG001MemorySettingsReport.test_empty_metrics
+  dict({
+    'build_ts': None,
+    'checkId': 'G001',
+    'checkTitle': 'Memory-related settings',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'analysis': dict({
+            'estimated_total_memory_usage': dict({
+              'effective_cache_size_bytes': 4294967296,
+              'effective_cache_size_pretty': '4.00 GiB',
+              'maintenance_work_mem_bytes': 67108864,
+              'maintenance_work_mem_pretty': '64.0 MiB',
+              'max_work_mem_usage_bytes': 419430400,
+              'max_work_mem_usage_pretty': '400 MiB',
+              'shared_buffers_bytes': 134217728,
+              'shared_buffers_pretty': '128 MiB',
+              'shared_memory_total_bytes': 150994944,
+              'shared_memory_total_pretty': '144 MiB',
+              'wal_buffers_bytes': 16777216,
+              'wal_buffers_pretty': '16.0 MiB',
+              'work_mem_per_connection_bytes': 4194304,
+              'work_mem_per_connection_pretty': '4.00 MiB',
+            }),
+          }),
+          'settings': dict({
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestG001MemorySettingsReport.test_error_response
+  dict({
+    'build_ts': None,
+    'checkId': 'G001',
+    'checkTitle': 'Memory-related settings',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'analysis': dict({
+            'estimated_total_memory_usage': dict({
+              'effective_cache_size_bytes': 4294967296,
+              'effective_cache_size_pretty': '4.00 GiB',
+              'maintenance_work_mem_bytes': 67108864,
+              'maintenance_work_mem_pretty': '64.0 MiB',
+              'max_work_mem_usage_bytes': 419430400,
+              'max_work_mem_usage_pretty': '400 MiB',
+              'shared_buffers_bytes': 134217728,
+              'shared_buffers_pretty': '128 MiB',
+              'shared_memory_total_bytes': 150994944,
+              'shared_memory_total_pretty': '144 MiB',
+              'wal_buffers_bytes': 16777216,
+              'wal_buffers_pretty': '16.0 MiB',
+              'work_mem_per_connection_bytes': 4194304,
+              'work_mem_per_connection_pretty': '4.00 MiB',
+            }),
+          }),
+          'settings': dict({
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestG001MemorySettingsReport.test_happy_path
+  dict({
+    'build_ts': None,
+    'checkId': 'G001',
+    'checkTitle': 'Memory-related settings',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'analysis': dict({
+            'estimated_total_memory_usage': dict({
+              'effective_cache_size_bytes': 4294967296,
+              'effective_cache_size_pretty': '4.00 GiB',
+              'maintenance_work_mem_bytes': 67108864,
+              'maintenance_work_mem_pretty': '64.0 MiB',
+              'max_work_mem_usage_bytes': 419430400,
+              'max_work_mem_usage_pretty': '400 MiB',
+              'shared_buffers_bytes': 134217728,
+              'shared_buffers_pretty': '128 MiB',
+              'shared_memory_total_bytes': 150994944,
+              'shared_memory_total_pretty': '144 MiB',
+              'wal_buffers_bytes': 16777216,
+              'wal_buffers_pretty': '16.0 MiB',
+              'work_mem_per_connection_bytes': 4194304,
+              'work_mem_per_connection_pretty': '4.00 MiB',
+            }),
+          }),
+          'settings': dict({
+            'effective_cache_size': dict({
+              'category': 'Memory',
+              'context': 'user',
+              'pretty_value': '4GB',
+              'setting': '4GB',
+              'unit': '8kB',
+              'vartype': 'integer',
+            }),
+            'maintenance_work_mem': dict({
+              'category': 'Memory',
+              'context': 'user',
+              'pretty_value': '64MB kB',
+              'setting': '64MB',
+              'unit': 'kB',
+              'vartype': 'integer',
+            }),
+            'max_connections': dict({
+              'category': 'Connections',
+              'context': 'postmaster',
+              'pretty_value': '100 connections',
+              'setting': '100',
+              'unit': '',
+              'vartype': 'integer',
+            }),
+            'shared_buffers': dict({
+              'category': 'Memory',
+              'context': 'postmaster',
+              'pretty_value': '128MB',
+              'setting': '128MB',
+              'unit': '8kB',
+              'vartype': 'integer',
+            }),
+            'work_mem': dict({
+              'category': 'Memory',
+              'context': 'user',
+              'pretty_value': '4MB kB',
+              'setting': '4MB',
+              'unit': 'kB',
+              'vartype': 'integer',
+            }),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestG001MemorySettingsReport.test_partial_data
+  dict({
+    'build_ts': None,
+    'checkId': 'G001',
+    'checkTitle': 'Memory-related settings',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'analysis': dict({
+            'estimated_total_memory_usage': dict({
+              'effective_cache_size_bytes': 4294967296,
+              'effective_cache_size_pretty': '4.00 GiB',
+              'maintenance_work_mem_bytes': 67108864,
+              'maintenance_work_mem_pretty': '64.0 MiB',
+              'max_work_mem_usage_bytes': 419430400,
+              'max_work_mem_usage_pretty': '400 MiB',
+              'shared_buffers_bytes': 268435456,
+              'shared_buffers_pretty': '256 MiB',
+              'shared_memory_total_bytes': 285212672,
+              'shared_memory_total_pretty': '272 MiB',
+              'wal_buffers_bytes': 16777216,
+              'wal_buffers_pretty': '16.0 MiB',
+              'work_mem_per_connection_bytes': 4194304,
+              'work_mem_per_connection_pretty': '4.00 MiB',
+            }),
+          }),
+          'settings': dict({
+            'shared_buffers': dict({
+              'category': 'Memory',
+              'context': 'postmaster',
+              'pretty_value': '256MB',
+              'setting': '256MB',
+              'unit': '8kB',
+              'vartype': 'integer',
+            }),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK001QueryCallsReport.test_empty_metrics
+  dict({
+    'build_ts': None,
+    'checkId': 'K001',
+    'checkTitle': 'Globally aggregated query metrics',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK001QueryCallsReport.test_happy_path
+  dict({
+    'build_ts': None,
+    'checkId': 'K001',
+    'checkTitle': 'Globally aggregated query metrics',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'app_db': dict({
+            'other_calls_hourly': list([
+              5.0,
+              10.0,
+              15.0,
+            ]),
+            'query_metrics': list([
+              dict({
+                'hourly_calls': list([
+                  500.0,
+                  600.0,
+                  700.0,
+                ]),
+                'queryid': '111222333',
+                'total_calls': 1800.0,
+              }),
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+                1704070800,
+                1704074400,
+              ]),
+              'time_range_hours': 3,
+              'total_calls': 1830.0,
+              'total_calls_other': 30.0,
+              'total_calls_tracked_queries': 1800.0,
+              'total_queries_tracked': 1,
+            }),
+          }),
+          'postgres': dict({
+            'other_calls_hourly': list([
+              10.0,
+              15.0,
+              20.0,
+            ]),
+            'query_metrics': list([
+              dict({
+                'hourly_calls': list([
+                  100.0,
+                  150.0,
+                  200.0,
+                ]),
+                'queryid': '123456789',
+                'total_calls': 450.0,
+              }),
+              dict({
+                'hourly_calls': list([
+                  50.0,
+                  75.0,
+                  100.0,
+                ]),
+                'queryid': '987654321',
+                'total_calls': 225.0,
+              }),
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+                1704070800,
+                1704074400,
+              ]),
+              'time_range_hours': 3,
+              'total_calls': 720.0,
+              'total_calls_other': 45.0,
+              'total_calls_tracked_queries': 675.0,
+              'total_queries_tracked': 2,
+            }),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK001QueryCallsReport.test_partial_data
+  dict({
+    'build_ts': None,
+    'checkId': 'K001',
+    'checkTitle': 'Globally aggregated query metrics',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'postgres': dict({
+            'other_calls_hourly': list([
+              5.0,
+              10.0,
+            ]),
+            'query_metrics': list([
+              dict({
+                'hourly_calls': list([
+                  100.0,
+                  200.0,
+                ]),
+                'queryid': '123456789',
+                'total_calls': 300.0,
+              }),
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+                1704070800,
+              ]),
+              'time_range_hours': 2,
+              'total_calls': 315.0,
+              'total_calls_other': 15.0,
+              'total_calls_tracked_queries': 300.0,
+              'total_queries_tracked': 1,
+            }),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK001QueryCallsReport.test_single_database
+  dict({
+    'build_ts': None,
+    'checkId': 'K001',
+    'checkTitle': 'Globally aggregated query metrics',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'main': dict({
+            'other_calls_hourly': list([
+              50.0,
+            ]),
+            'query_metrics': list([
+              dict({
+                'hourly_calls': list([
+                  1000.0,
+                ]),
+                'queryid': '111',
+                'total_calls': 1000.0,
+              }),
+              dict({
+                'hourly_calls': list([
+                  500.0,
+                ]),
+                'queryid': '222',
+                'total_calls': 500.0,
+              }),
+              dict({
+                'hourly_calls': list([
+                  250.0,
+                ]),
+                'queryid': '333',
+                'total_calls': 250.0,
+              }),
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+              ]),
+              'time_range_hours': 1,
+              'total_calls': 1800.0,
+              'total_calls_other': 50.0,
+              'total_calls_tracked_queries': 1750.0,
+              'total_queries_tracked': 3,
+            }),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK003TopQueriesReport.test_empty_metrics
+  dict({
+    'build_ts': None,
+    'checkId': 'K003',
+    'checkTitle': 'Top queries by total time (total_exec_time + total_plan_time)',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK003TopQueriesReport.test_exec_only_no_plan
+  dict({
+    'build_ts': None,
+    'checkId': 'K003',
+    'checkTitle': 'Top queries by total time (total_exec_time + total_plan_time)',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'legacy_db': dict({
+            'other_exec_time_hourly': list([
+              500.0,
+              600.0,
+            ]),
+            'other_plan_time_hourly': None,
+            'other_time_hourly': list([
+              500.0,
+              600.0,
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+                1704070800,
+              ]),
+              'limit': 100,
+              'note': 'Plan time unavailable, showing exec time only',
+              'plan_time_available': False,
+              'queries_returned': 2,
+              'time_range_hours': 2,
+              'total_time_ms': 16600.0,
+              'total_time_other_ms': 1100.0,
+              'total_time_tracked_queries_ms': 15500.0,
+            }),
+            'top_queries': list([
+              dict({
+                'hourly_exec_time_ms': list([
+                  5000.0,
+                  6000.0,
+                ]),
+                'hourly_plan_time_ms': None,
+                'hourly_time_ms': list([
+                  5000.0,
+                  6000.0,
+                ]),
+                'queryid': '111',
+                'total_exec_time_ms': 11000.0,
+                'total_plan_time_ms': 0,
+                'total_time_ms': 11000.0,
+              }),
+              dict({
+                'hourly_exec_time_ms': list([
+                  2000.0,
+                  2500.0,
+                ]),
+                'hourly_plan_time_ms': None,
+                'hourly_time_ms': list([
+                  2000.0,
+                  2500.0,
+                ]),
+                'queryid': '222',
+                'total_exec_time_ms': 4500.0,
+                'total_plan_time_ms': 0,
+                'total_time_ms': 4500.0,
+              }),
+            ]),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK003TopQueriesReport.test_happy_path
+  dict({
+    'build_ts': None,
+    'checkId': 'K003',
+    'checkTitle': 'Top queries by total time (total_exec_time + total_plan_time)',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'postgres': dict({
+            'other_exec_time_hourly': list([
+              100.0,
+              150.0,
+              200.0,
+            ]),
+            'other_plan_time_hourly': list([
+              10.0,
+              15.0,
+              20.0,
+            ]),
+            'other_time_hourly': list([
+              110.0,
+              165.0,
+              220.0,
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+                1704070800,
+                1704074400,
+              ]),
+              'limit': 100,
+              'note': 'Includes both exec and plan time',
+              'plan_time_available': True,
+              'queries_returned': 2,
+              'time_range_hours': 3,
+              'total_time_ms': 7920.0,
+              'total_time_other_ms': 495.0,
+              'total_time_tracked_queries_ms': 7425.0,
+            }),
+            'top_queries': list([
+              dict({
+                'hourly_exec_time_ms': list([
+                  1000.0,
+                  1500.0,
+                  2000.0,
+                ]),
+                'hourly_plan_time_ms': list([
+                  100.0,
+                  150.0,
+                  200.0,
+                ]),
+                'hourly_time_ms': list([
+                  1100.0,
+                  1650.0,
+                  2200.0,
+                ]),
+                'queryid': '123456789',
+                'total_exec_time_ms': 4500.0,
+                'total_plan_time_ms': 450.0,
+                'total_time_ms': 4950.0,
+              }),
+              dict({
+                'hourly_exec_time_ms': list([
+                  500.0,
+                  750.0,
+                  1000.0,
+                ]),
+                'hourly_plan_time_ms': list([
+                  50.0,
+                  75.0,
+                  100.0,
+                ]),
+                'hourly_time_ms': list([
+                  550.0,
+                  825.0,
+                  1100.0,
+                ]),
+                'queryid': '987654321',
+                'total_exec_time_ms': 2250.0,
+                'total_plan_time_ms': 225.0,
+                'total_time_ms': 2475.0,
+              }),
+            ]),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
+# name: TestK003TopQueriesReport.test_multiple_databases
+  dict({
+    'build_ts': None,
+    'checkId': 'K003',
+    'checkTitle': 'Top queries by total time (total_exec_time + total_plan_time)',
+    'generation_mode': 'full',
+    'nodes': dict({
+      'primary': 'node-01',
+      'standbys': list([
+      ]),
+    }),
+    'results': dict({
+      'node-01': dict({
+        'data': dict({
+          'db1': dict({
+            'other_exec_time_hourly': list([
+              100.0,
+            ]),
+            'other_plan_time_hourly': list([
+              10.0,
+            ]),
+            'other_time_hourly': list([
+              110.0,
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+              ]),
+              'limit': 100,
+              'note': 'Includes both exec and plan time',
+              'plan_time_available': True,
+              'queries_returned': 2,
+              'time_range_hours': 1,
+              'total_time_ms': 16610.0,
+              'total_time_other_ms': 110.0,
+              'total_time_tracked_queries_ms': 16500.0,
+            }),
+            'top_queries': list([
+              dict({
+                'hourly_exec_time_ms': list([
+                  10000.0,
+                ]),
+                'hourly_plan_time_ms': list([
+                  1000.0,
+                ]),
+                'hourly_time_ms': list([
+                  11000.0,
+                ]),
+                'queryid': 'q1',
+                'total_exec_time_ms': 10000.0,
+                'total_plan_time_ms': 1000.0,
+                'total_time_ms': 11000.0,
+              }),
+              dict({
+                'hourly_exec_time_ms': list([
+                  5000.0,
+                ]),
+                'hourly_plan_time_ms': list([
+                  500.0,
+                ]),
+                'hourly_time_ms': list([
+                  5500.0,
+                ]),
+                'queryid': 'q2',
+                'total_exec_time_ms': 5000.0,
+                'total_plan_time_ms': 500.0,
+                'total_time_ms': 5500.0,
+              }),
+            ]),
+          }),
+          'db2': dict({
+            'other_exec_time_hourly': list([
+              200.0,
+            ]),
+            'other_plan_time_hourly': list([
+              20.0,
+            ]),
+            'other_time_hourly': list([
+              220.0,
+            ]),
+            'summary': dict({
+              'hourly_timestamps': list([
+                1704067200,
+              ]),
+              'limit': 100,
+              'note': 'Includes both exec and plan time',
+              'plan_time_available': True,
+              'queries_returned': 1,
+              'time_range_hours': 1,
+              'total_time_ms': 22220.0,
+              'total_time_other_ms': 220.0,
+              'total_time_tracked_queries_ms': 22000.0,
+            }),
+            'top_queries': list([
+              dict({
+                'hourly_exec_time_ms': list([
+                  20000.0,
+                ]),
+                'hourly_plan_time_ms': list([
+                  2000.0,
+                ]),
+                'hourly_time_ms': list([
+                  22000.0,
+                ]),
+                'queryid': 'q3',
+                'total_exec_time_ms': 20000.0,
+                'total_plan_time_ms': 2000.0,
+                'total_time_ms': 22000.0,
+              }),
+            ]),
+          }),
+        }),
+        'postgres_version': dict({
+          'server_major_ver': 'Unknown',
+          'server_minor_ver': 'Unknown',
+          'server_version_num': 'Unknown',
+          'version': 'Unknown',
+        }),
+      }),
+    }),
+    'timestamptz': '2026-01-01T00:00:00Z',
+    'version': None,
+  })
+# ---
