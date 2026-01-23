@@ -1,5 +1,12 @@
 # Test Coverage Strategy: Regression Safety for TypeScript Migration
 
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.0 | 2026-01-22 | Major rewrite based on 3 reviewer feedback: migration-first approach, risk-based coverage tiers, compliance vectors, property testing, golden snapshots, error semantics, CI fixes |
+| 1.0 | 2026-01-22 | Initial draft: comprehensive coverage strategy with 12-step implementation plan |
+
+---
+
 ## Executive Summary
 
 This document outlines a **migration-first testing strategy** focused on **behavioral documentation** rather than coverage metrics. The goal is **100% regression safety for the TypeScript migration**, not vanity coverage numbers.
