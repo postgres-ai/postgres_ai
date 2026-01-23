@@ -1193,3 +1193,177 @@ class TestConstructorVariations:
             postgres_sink_url="postgresql://localhost/testdb",
         )
         assert gen.postgres_sink_url == "postgresql://localhost/testdb"
+
+
+# ============================================================================
+# Additional Format Methods Tests
+# ============================================================================
+
+class TestFormatEpochTimestampEdgeCases:
+    """Test format_epoch_timestamp edge cases."""
+
+    def test_format_epoch_timestamp_overflow(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Format timestamp that would overflow."""
+        # Very large value that might overflow
+        result = generator.format_epoch_timestamp(9999999999999999)
+        assert result is None
+
+    def test_format_epoch_timestamp_negative(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Format negative timestamp returns None."""
+        result = generator.format_epoch_timestamp(-1000)
+        assert result is None
+
+    def test_format_epoch_timestamp_float_string(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Format float value as string."""
+        result = generator.format_epoch_timestamp("1704067200.5")
+        assert result is not None
+        assert "2024" in result
+
+
+class TestFormatReportDataVariations:
+    """Test format_report_data with different structures."""
+
+    def test_format_report_data_with_all_hosts(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Format report data with all_hosts provided."""
+        all_hosts = {"primary": "node1", "standbys": ["node2", "node3"]}
+        result = generator.format_report_data(
+            "TEST001",
+            {"test_key": "test_value"},
+            host="ignored-host",
+            all_hosts=all_hosts
+        )
+        assert result["checkId"] == "TEST001"
+
+    def test_format_report_data_multi_node(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Format report data with multi-node structure."""
+        data = {
+            "node1": {"data": {"setting1": "value1"}},
+            "node2": {"data": {"setting1": "value2"}}
+        }
+        result = generator.format_report_data(
+            "TEST002",
+            data,
+            host="test-host"
+        )
+        assert "results" in result or "checkId" in result
+
+
+class TestQueryRangeNonSuccess:
+    """Test query_range with non-success responses."""
+
+    def test_query_range_non_200(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Query range with non-200 status."""
+        from datetime import datetime
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+
+        with patch("requests.get", return_value=mock_response):
+            start = datetime(2024, 1, 1, 0, 0, 0)
+            end = datetime(2024, 1, 1, 1, 0, 0)
+            result = generator.query_range("up", start, end)
+            assert result == []
+
+    def test_query_range_non_success_status(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Query range with 200 but non-success status."""
+        from datetime import datetime
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "error", "error": "bad query"}
+
+        with patch("requests.get", return_value=mock_response):
+            start = datetime(2024, 1, 1, 0, 0, 0)
+            end = datetime(2024, 1, 1, 1, 0, 0)
+            result = generator.query_range("up", start, end)
+            assert result == []
+
+
+class TestClusterMetricUnits:
+    """Test more cluster metric unit cases."""
+
+    def test_metric_unit_bytes(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Get unit for bytes metric."""
+        result = generator.get_cluster_metric_unit("bytes_read")
+        # Should return some unit or empty string
+        assert isinstance(result, str)
+
+    def test_metric_unit_count(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Get unit for count metric."""
+        result = generator.get_cluster_metric_unit("transaction_count")
+        assert isinstance(result, str)
+
+
+class TestParseMemoryValueNumeric:
+    """Test _parse_memory_value with pure numeric values."""
+
+    def test_parse_memory_value_pure_numeric(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Parse pure numeric value (no unit)."""
+        result = generator._parse_memory_value("8192")
+        assert isinstance(result, int)
+        assert result >= 0
+
+    def test_parse_memory_value_none_input(
+        self,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Parse None input."""
+        result = generator._parse_memory_value(None)
+        assert result == 0
+
+
+class TestGetAllClustersDebugPath:
+    """Test get_all_clusters debug logging paths."""
+
+    def test_get_all_clusters_non_success(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Get clusters with non-success status."""
+        response = {"status": "error", "data": {"result": []}}
+        monkeypatch.setattr(generator, "query_instant", lambda q: response)
+
+        result = generator.get_all_clusters()
+        assert result == []
+
+    def test_get_all_clusters_no_data(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Get clusters with success but no data."""
+        response = {"status": "success", "data": {}}
+        monkeypatch.setattr(generator, "query_instant", lambda q: response)
+
+        result = generator.get_all_clusters()
+        assert result == []
