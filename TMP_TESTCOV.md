@@ -925,21 +925,22 @@ def test_with_different_responses(prom_response):
 
 | Metric | Target | Current | Measured How |
 |--------|--------|---------|--------------|
-| Reporter line coverage | 85%+ | **77%** | pytest-cov |
+| Reporter line coverage | 85%+ | **78%** | pytest-cov |
 | Compliance vectors pass | 100% (non-skipped) | **100%** | pytest harness (44 tests) |
 | Golden snapshots stable | No unexpected diffs | **✅** | 3 CI runs on same commit |
 | Property tests | 13+ tests | **13** | Hypothesis |
-| Coverage boost tests | 50+ tests | **99** | test_coverage_boost.py |
-| Total test count | 250+ | **278** | pytest |
+| Coverage boost tests | 100+ tests | **112** | test_coverage_boost.py |
+| Total test count | 250+ | **291** | pytest |
 | Diff coverage on MRs | 90%+ | - | diff-cover JSON |
 | CI time (total) | <3min | - | GitLab metrics |
 | Flaky test rate | <1% of executions | - | 100 runs with `--count=3` |
 
 **Coverage Progress:**
 - Started at: ~70% (Phase 1)
-- Current: 77% (after test_coverage_boost.py)
-- Remaining gap: ~160 lines in `postgres_reports.py`
-- Primary uncovered: Report generation methods requiring complex Prometheus/DB mocks
+- Current: 78% (after test_coverage_boost.py with 112 tests)
+- Remaining gap: ~442 lines in `postgres_reports.py`
+- Primary uncovered: Report generation methods, DB sink operations, CLI main dispatch
+- These require complex Prometheus/DB mocking or integration tests to cover
 
 ### Qualitative
 
