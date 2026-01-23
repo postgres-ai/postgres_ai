@@ -792,16 +792,16 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 
 **Exit criteria:** If spike reveals fundamental issues with approach, revisit strategy before proceeding.
 
-### Phase 1: Compliance Vectors (Days 1-3)
+### Phase 1: Compliance Vectors (Days 1-3) ✅ COMPLETE
 
-| Task | Owner | Deliverable |
-|------|-------|-------------|
-| Create `tests/compliance_vectors/` structure | Python maintainer | Directory + schema.json |
-| Write `memory_parsing.json` | Python maintainer | 20+ cases with IDs, outcomes, error codes |
-| Write `query_id_validation.json` | Python maintainer | 15+ cases |
-| Create Python compliance harness | Python maintainer | `test_compliance.py` |
-| Add vector schema validation | Python maintainer | CI passes |
-| Add shellcheck to CI | DevOps | `.gitlab-ci.yml` |
+| Task | Owner | Deliverable | Status |
+|------|-------|-------------|--------|
+| Create `tests/compliance_vectors/` structure | Python maintainer | Directory + schema.json | ✅ Done |
+| Write `memory_parsing.json` | Python maintainer | 24 cases with IDs, outcomes, error codes | ✅ Done |
+| Write `query_id_validation.json` | Python maintainer | 20 cases (security-critical) | ✅ Done |
+| Create Python compliance harness | Python maintainer | `test_compliance.py` (44 tests) | ✅ Done |
+| Add vector schema validation | Python maintainer | CI passes | ✅ Done |
+| Add shellcheck to CI | DevOps | Already in `components/index_pilot/.gitlab-ci.yml` | ✅ Pre-existing |
 
 **Definition of Done:** Vectors schema validated in CI, Python harness runs all non-skipped cases, shellcheck passes.
 

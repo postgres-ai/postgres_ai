@@ -40,6 +40,7 @@ def get_invalid_cases(vectors: dict) -> list:
 
 # Load vectors at module level for parametrize
 MEMORY_VECTORS = load_vectors("memory_parsing")
+QUERY_ID_VECTORS = load_vectors("query_id_validation")
 
 
 class TestVectorSchemaValid:
@@ -117,3 +118,48 @@ class TestMemoryParsingCompliance:
         error_type = error_map.get(case["error_code"], Exception)
         with pytest.raises(error_type):
             generator._parse_memory_value(case["input"])
+
+
+class TestQueryIdValidationCompliance:
+    """Tests loaded from compliance_vectors/query_id_validation.json
+
+    These tests verify that _build_qid_regex validates query IDs properly.
+    Security-critical: prevents regex injection in PromQL queries.
+    """
+
+    @pytest.fixture
+    def generator(self):
+        """Create a PostgresReportGenerator instance for testing."""
+        return PostgresReportGenerator(
+            prometheus_url="http://localhost:9090",
+            postgres_sink_url=None
+        )
+
+    @pytest.mark.parametrize("case", get_valid_cases(QUERY_ID_VECTORS), ids=lambda c: c["id"])
+    def test_valid_cases(self, generator, case):
+        """Test that valid query IDs produce expected regex patterns."""
+        if case.get("python_skip"):
+            pytest.skip(f"Skipped for Python: {case.get('note', '')}")
+
+        result = generator._build_qid_regex(case["input"])
+        assert result == case["expected"], f"Input: {case['input']!r}, Expected: {case['expected']!r}, Got: {result!r}"
+        assert case["outcome"] == "success"
+
+    @pytest.mark.parametrize(
+        "case",
+        get_invalid_cases(QUERY_ID_VECTORS),
+        ids=lambda c: c["id"] if isinstance(c, dict) else "empty"
+    )
+    def test_invalid_cases(self, generator, case):
+        """Test that invalid query IDs raise ValueError.
+
+        Security-critical: ensures regex injection attempts are rejected.
+        """
+        if case.get("python_skip"):
+            pytest.skip(f"Skipped for Python: {case.get('note', '')}")
+
+        assert case["outcome"] == "failure"
+
+        # All invalid query ID cases should raise ValueError
+        with pytest.raises(ValueError):
+            generator._build_qid_regex(case["input"])
