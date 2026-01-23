@@ -77,4 +77,4 @@ data/
 volumes/
 .pgwatch-config
 
-.env
+.env.hypothesis/

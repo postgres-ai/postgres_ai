@@ -805,15 +805,16 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 
 **Definition of Done:** Vectors schema validated in CI, Python harness runs all non-skipped cases, shellcheck passes.
 
-### Phase 2: Property Tests + Snapshots (Days 4-7)
+### Phase 2: Property Tests + Snapshots (Days 4-7) 🔄 IN PROGRESS
 
-| Task | Owner | Deliverable |
-|------|-------|-------------|
-| Add Hypothesis + syrupy | Python maintainer | `requirements-dev.txt` |
-| Property tests for `_parse_memory_value` | Python maintainer | 3 property tests |
-| Property tests for `_densify` | Python maintainer | Idempotence test |
-| Golden snapshots for G001, K001, K003 | Python maintainer | 4 snapshots each with sanitizer |
-| Verify actual Python error behavior | Python maintainer | Update behavior matrix |
+| Task | Owner | Deliverable | Status |
+|------|-------|-------------|--------|
+| Add Hypothesis + syrupy | Python maintainer | `requirements-dev.txt` | ✅ Done |
+| Property tests for `_parse_memory_value` | Python maintainer | 6 property tests | ✅ Done |
+| Property tests for `_build_qid_regex` | Python maintainer | 3 property tests | ✅ Done |
+| Property tests for `_densify` | Python maintainer | Idempotence test | ⏳ Pending |
+| Golden snapshots for G001, K001, K003 | Python maintainer | 4 snapshots each with sanitizer | ⏳ Pending |
+| Verify actual Python error behavior | Python maintainer | Update behavior matrix | ⏳ Pending |
 
 **Definition of Done:** Snapshots stable across 3 CI runs on same commit. Sanitizer handles only identity fields.
 
