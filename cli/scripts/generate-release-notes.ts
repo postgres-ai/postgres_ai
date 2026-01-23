@@ -4,6 +4,7 @@
  *
  * Generates release notes from git commit history using conventional commits.
  * Analyzes commits between two references (tags, commits, or branches).
+ * Fetches MR numbers from GitLab API and includes links.
  *
  * Usage:
  *   bun run scripts/generate-release-notes.ts [options]
@@ -14,10 +15,15 @@
  *   --version <ver>   Version string for the release (e.g., "0.14.0")
  *   --format <fmt>    Output format: markdown (default), json
  *   --output <file>   Write to file instead of stdout
+ *   --gitlab-project  GitLab project path (default: postgres-ai/postgresai)
  */
 
 import { execFileSync } from "child_process";
 import * as fs from "fs";
+
+// GitLab project configuration
+const GITLAB_PROJECT = "postgres-ai/postgresai";
+const GITLAB_MR_URL = `https://gitlab.com/${GITLAB_PROJECT}/-/merge_requests`;
 
 // Valid git ref pattern: alphanumeric, dots, hyphens, underscores, slashes, tildes, carets
 const GIT_REF_PATTERN = /^[a-zA-Z0-9._~^/+-]+$/;
@@ -65,6 +71,23 @@ function isExcludedAuthor(author: string): boolean {
   return EXCLUDED_AUTHORS.some((excluded) => author.toLowerCase().includes(excluded.toLowerCase()));
 }
 
+interface GitLabMR {
+  iid: number;
+  title: string;
+  source_branch: string;
+  merged_at: string | null;
+  labels?: string[];
+}
+
+interface ChangelogEntry {
+  mrNumber: number;
+  title: string;
+  type: string;
+  scope: string | null;
+  breaking: boolean;
+  authors: Set<string>;
+}
+
 interface ParsedCommit {
   hash: string;
   shortHash: string;
@@ -75,6 +98,7 @@ interface ParsedCommit {
   breaking: boolean;
   date: string;
   author: string;
+  mrNumber?: number;
 }
 
 interface ReleaseNotes {
@@ -83,8 +107,9 @@ interface ReleaseNotes {
   sinceRef: string;
   untilRef: string;
   commits: ParsedCommit[];
-  categories: Record<string, ParsedCommit[]>;
-  breaking: ParsedCommit[];
+  entries: ChangelogEntry[];
+  categories: Record<string, ChangelogEntry[]>;
+  breaking: ChangelogEntry[];
   stats: {
     total: number;
     features: number;
@@ -100,6 +125,55 @@ function gitExec(args: string[]): string {
   } catch (err) {
     return "";
   }
+}
+
+// Cache for GitLab MRs
+let mrCache: GitLabMR[] | null = null;
+
+async function fetchMergedMRs(sinceDate: string): Promise<GitLabMR[]> {
+  if (mrCache) return mrCache;
+
+  const mrs: GitLabMR[] = [];
+  const projectEncoded = encodeURIComponent(GITLAB_PROJECT);
+
+  try {
+    // Fetch merged MRs, paginate through all results
+    let page = 1;
+    const perPage = 100;
+
+    while (true) {
+      const url = `https://gitlab.com/api/v4/projects/${projectEncoded}/merge_requests?state=merged&per_page=${perPage}&page=${page}&updated_after=${sinceDate}`;
+      const response = await fetch(url);
+
+      if (!response.ok) break;
+
+      const pageMrs: GitLabMR[] = await response.json();
+      if (pageMrs.length === 0) break;
+
+      mrs.push(...pageMrs);
+
+      if (pageMrs.length < perPage) break;
+      page++;
+    }
+  } catch (err) {
+    // Silently fail - MR links are optional
+  }
+
+  mrCache = mrs;
+  return mrs;
+}
+
+function buildBranchToMRMap(mrs: GitLabMR[]): Map<string, GitLabMR> {
+  const map = new Map<string, GitLabMR>();
+  for (const mr of mrs) {
+    map.set(mr.source_branch, mr);
+  }
+  return map;
+}
+
+function getMRNumberFromBranch(branch: string, mrMap: Map<string, GitLabMR>): number | undefined {
+  const mr = mrMap.get(branch);
+  return mr?.iid;
 }
 
 function parseArgs(): { since: string; until: string; version: string; format: string; output: string | null } {
@@ -264,6 +338,127 @@ function categorizeCommits(commits: ParsedCommit[]): Record<string, ParsedCommit
   return categories;
 }
 
+function parseMRTitle(title: string): { type: string; scope: string | null; subject: string; breaking: boolean } {
+  // Parse conventional commit format from MR title: type(scope): subject
+  const match = title.match(/^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
+
+  if (match) {
+    let type = match[1]?.toLowerCase() || "other";
+    if (type === "feature") type = "feat";
+    if (type === "bugfix") type = "fix";
+
+    return {
+      type,
+      scope: match[2] || null,
+      subject: match[4] || title,
+      breaking: !!match[3],
+    };
+  }
+
+  // If not conventional commit format, try to infer type from title
+  const lowerTitle = title.toLowerCase();
+  let inferredType = "other";
+  if (lowerTitle.startsWith("fix") || lowerTitle.includes("fix:") || lowerTitle.includes("bugfix")) {
+    inferredType = "fix";
+  } else if (lowerTitle.startsWith("feat") || lowerTitle.startsWith("add ") || lowerTitle.startsWith("implement")) {
+    inferredType = "feat";
+  } else if (lowerTitle.startsWith("docs") || lowerTitle.startsWith("doc:")) {
+    inferredType = "docs";
+  } else if (lowerTitle.startsWith("refactor")) {
+    inferredType = "refactor";
+  } else if (lowerTitle.startsWith("perf") || lowerTitle.includes("performance")) {
+    inferredType = "perf";
+  } else if (lowerTitle.startsWith("chore") || lowerTitle.startsWith("ci") || lowerTitle.startsWith("build")) {
+    inferredType = "chore";
+  } else if (lowerTitle.startsWith("test")) {
+    inferredType = "test";
+  }
+
+  return {
+    type: inferredType,
+    scope: null,
+    subject: title,
+    breaking: false,
+  };
+}
+
+interface GroupResult {
+  entries: Map<number, ChangelogEntry>;
+  orphanedCommits: ParsedCommit[];
+}
+
+function groupCommitsByMR(commits: ParsedCommit[], mrMap: Map<string, GitLabMR>): GroupResult {
+  const entries = new Map<number, ChangelogEntry>();
+  const orphanedCommits: ParsedCommit[] = [];
+
+  for (const commit of commits) {
+    if (!commit.mrNumber) {
+      orphanedCommits.push(commit);
+      continue;
+    }
+
+    if (entries.has(commit.mrNumber)) {
+      // Add author to existing entry
+      const entry = entries.get(commit.mrNumber)!;
+      if (commit.author && !isExcludedAuthor(commit.author)) {
+        entry.authors.add(normalizeAuthor(commit.author));
+      }
+    } else {
+      // Find MR data to get the title
+      let mrTitle = commit.subject;
+      for (const [, mr] of mrMap) {
+        if (mr.iid === commit.mrNumber) {
+          mrTitle = mr.title;
+          break;
+        }
+      }
+
+      const parsed = parseMRTitle(mrTitle);
+      entries.set(commit.mrNumber, {
+        mrNumber: commit.mrNumber,
+        title: parsed.subject,
+        type: parsed.type,
+        scope: parsed.scope,
+        breaking: parsed.breaking,
+        authors: new Set(commit.author && !isExcludedAuthor(commit.author) ? [normalizeAuthor(commit.author)] : []),
+      });
+    }
+  }
+
+  return { entries, orphanedCommits };
+}
+
+function categorizeEntries(entries: Map<number, ChangelogEntry>): Record<string, ChangelogEntry[]> {
+  const categories: Record<string, ChangelogEntry[]> = {};
+
+  for (const [, entry] of entries) {
+    const type = COMMIT_TYPES[entry.type] ? entry.type : "other";
+    if (!categories[type]) {
+      categories[type] = [];
+    }
+    categories[type].push(entry);
+  }
+
+  return categories;
+}
+
+function formatMRLink(mrNumber: number | undefined): string {
+  if (!mrNumber) return "";
+  // Use HTML link so copy-pasting to GitHub shows "!XXX" not the full URL
+  return ` (<a href="${GITLAB_MR_URL}/${mrNumber}">!${mrNumber}</a>)`;
+}
+
+function formatTitle(title: string): string {
+  // Wrap CLI flags (--something) in backticks
+  let formatted = title.replace(/\s(--[\w-]+)/g, " `$1`");
+  // Wrap CLI commands like "postgresai init", "postgresai checkup" in backticks
+  // Only match known subcommands, not arbitrary words
+  formatted = formatted.replace(/\b(postgresai\s+(?:init|checkup|mon|auth|prepare-db|unprepare-db))\b/g, "`$1`");
+  // Wrap PostgreSQL technical terms
+  formatted = formatted.replace(/\b(pg_stat_statements|pg_statistic|pg_catalog)\b/g, "`$1`");
+  return formatted;
+}
+
 function generateMarkdown(notes: ReleaseNotes): string {
   const lines: string[] = [];
 
@@ -284,11 +479,12 @@ function generateMarkdown(notes: ReleaseNotes): string {
 
   // Breaking changes (if any)
   if (notes.breaking.length > 0) {
-    lines.push("## Breaking Changes");
+    lines.push("## ⚠️ Breaking Changes");
     lines.push("");
-    for (const commit of notes.breaking) {
-      const scopeStr = commit.scope ? `**${commit.scope}:** ` : "";
-      lines.push(`- ${scopeStr}${commit.subject}`);
+    for (const entry of notes.breaking) {
+      const scopeStr = entry.scope ? `**${entry.scope}:** ` : "";
+      const mrLink = formatMRLink(entry.mrNumber);
+      lines.push(`- ${scopeStr}${entry.title}${mrLink}`);
     }
     lines.push("");
   }
@@ -301,43 +497,28 @@ function generateMarkdown(notes: ReleaseNotes): string {
   });
 
   for (const type of sortedTypes) {
-    const commits = notes.categories[type];
-    if (!commits || commits.length === 0) continue;
+    const entries = notes.categories[type];
+    if (!entries || entries.length === 0) continue;
 
     const typeInfo = COMMIT_TYPES[type] || { title: "Other Changes", emoji: "📝", priority: 99 };
     lines.push(`## ${typeInfo.emoji} ${typeInfo.title}`);
     lines.push("");
 
-    // Group by scope within each type
-    const byScope: Record<string, ParsedCommit[]> = {};
-    for (const commit of commits) {
-      const scope = commit.scope || "_general";
-      if (!byScope[scope]) byScope[scope] = [];
-      byScope[scope].push(commit);
-    }
-
-    // Sort scopes: known scopes first, then alphabetically
-    const scopes = Object.keys(byScope).sort((a, b) => {
-      if (a === "_general") return 1;
-      if (b === "_general") return -1;
-      const aKnown = KNOWN_SCOPES.includes(a);
-      const bKnown = KNOWN_SCOPES.includes(b);
-      if (aKnown && !bKnown) return -1;
-      if (!aKnown && bKnown) return 1;
-      return a.localeCompare(b);
-    });
-
-    for (const scope of scopes) {
-      const scopeCommits = byScope[scope] || [];
-      if (scope !== "_general" && scopeCommits.length > 0) {
-        lines.push(`### ${scope}`);
-        lines.push("");
+    // Flat list with scope prefix (no sub-headers)
+    for (const entry of entries) {
+      const mrLink = formatMRLink(entry.mrNumber);
+      // Format scope: uppercase CLI, MCP; title case others
+      let scopeStr = "";
+      if (entry.scope) {
+        const upperScopes = ["cli", "mcp", "api", "sql", "ci"];
+        const formattedScope = upperScopes.includes(entry.scope.toLowerCase())
+          ? entry.scope.toUpperCase()
+          : entry.scope;
+        scopeStr = `**${formattedScope}:** `;
       }
-      for (const commit of scopeCommits) {
-        lines.push(`- ${commit.subject} (\`${commit.shortHash}\`)`);
-      }
-      lines.push("");
+      lines.push(`- ${scopeStr}${formatTitle(entry.title)}${mrLink}`);
     }
+    lines.push("");
   }
 
   // Contributors
@@ -369,30 +550,83 @@ async function main() {
   const log = (msg: string) => process.stderr.write(msg + "\n");
   log(`Analyzing commits from ${since} to ${until}...`);
 
+  // Get the date of the since ref for MR filtering
+  const sinceDate = gitExec(["log", "-1", "--format=%aI", since]) || "2024-01-01T00:00:00Z";
+
+  // Fetch MRs from GitLab API
+  log("Fetching MR data from GitLab...");
+  const mrs = await fetchMergedMRs(sinceDate);
+  const mrBranchMap = buildBranchToMRMap(mrs);
+  log(`Found ${mrs.length} merged MRs`);
+
   // Get and parse commits
   const hashes = getCommitsBetween(since, until);
   log(`Found ${hashes.length} commits to analyze`);
+
+  // Build a map of commit hash to branch name from merge commits
+  const commitToBranch = new Map<string, string>();
+  const mergeLog = gitExec(["log", `${since}..${until}`, "--merges", "--format=%H|%P|%s"]);
+  for (const line of mergeLog.split("\n").filter(Boolean)) {
+    const [mergeHash, parents, subject] = line.split("|");
+    const branchMatch = subject?.match(/Merge branch '([^']+)'/);
+    if (branchMatch && parents) {
+      const branch = branchMatch[1];
+      // The second parent is the merged branch
+      const mergedParent = parents.split(" ")[1];
+      if (mergedParent && branch) {
+        // Get all commits that are ancestors of mergedParent but not of first parent
+        const firstParent = parents.split(" ")[0];
+        if (firstParent) {
+          const branchCommits = gitExec(["log", "--format=%H", `${firstParent}..${mergedParent}`]);
+          for (const hash of branchCommits.split("\n").filter(Boolean)) {
+            commitToBranch.set(hash, branch);
+          }
+        }
+      }
+    }
+  }
 
   const commits: ParsedCommit[] = [];
   for (const hash of hashes) {
     const parsed = parseCommit(hash);
     if (parsed) {
+      // Try to find MR number from branch name
+      const branch = commitToBranch.get(hash);
+      if (branch) {
+        parsed.mrNumber = getMRNumberFromBranch(branch, mrBranchMap);
+      }
       commits.push(parsed);
     }
   }
 
-  // Build release notes structure
-  const categories = categorizeCommits(commits);
-  const breaking = commits.filter((c) => c.breaking);
+  // Group commits by MR and build changelog entries
+  const { entries: entriesMap, orphanedCommits } = groupCommitsByMR(commits, mrBranchMap);
+  const entries = Array.from(entriesMap.values());
+  log(`Grouped into ${entries.length} changelog entries`);
 
-  // Normalize author names and exclude bots/AI
-  const contributors = [
-    ...new Set(
-      commits
-        .map((c) => normalizeAuthor(c.author))
-        .filter((author) => author && !isExcludedAuthor(author))
-    ),
-  ];
+  // Warn about orphaned commits (no MR association found)
+  if (orphanedCommits.length > 0) {
+    log(`Warning: ${orphanedCommits.length} commits have no MR association:`);
+    for (const commit of orphanedCommits.slice(0, 10)) {
+      log(`  - ${commit.shortHash}: ${commit.subject}`);
+    }
+    if (orphanedCommits.length > 10) {
+      log(`  ... and ${orphanedCommits.length - 10} more`);
+    }
+  }
+
+  // Categorize entries by type
+  const categories = categorizeEntries(entriesMap as Map<number, ChangelogEntry>);
+  const breaking = entries.filter((e) => e.breaking);
+
+  // Collect all contributors from entries
+  const contributorSet = new Set<string>();
+  for (const entry of entries) {
+    for (const author of entry.authors) {
+      contributorSet.add(author);
+    }
+  }
+  const contributors = Array.from(contributorSet);
 
   const notes: ReleaseNotes = {
     version: args.version || "",
@@ -400,10 +634,11 @@ async function main() {
     sinceRef: since,
     untilRef: until,
     commits,
+    entries,
     categories,
     breaking,
     stats: {
-      total: commits.length,
+      total: entries.length,
       features: categories["feat"]?.length || 0,
       fixes: categories["fix"]?.length || 0,
       contributors,
