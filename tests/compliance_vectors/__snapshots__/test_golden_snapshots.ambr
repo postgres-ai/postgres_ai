@@ -1,4 +1,84 @@
 # serializer version: 1
+# name: TestAnalyzeMemorySettings.test_empty_config
+  dict({
+    'estimated_total_memory_usage': dict({
+      'effective_cache_size_bytes': 4294967296,
+      'effective_cache_size_pretty': '4.00 GiB',
+      'maintenance_work_mem_bytes': 67108864,
+      'maintenance_work_mem_pretty': '64.0 MiB',
+      'max_work_mem_usage_bytes': 419430400,
+      'max_work_mem_usage_pretty': '400 MiB',
+      'shared_buffers_bytes': 134217728,
+      'shared_buffers_pretty': '128 MiB',
+      'shared_memory_total_bytes': 150994944,
+      'shared_memory_total_pretty': '144 MiB',
+      'wal_buffers_bytes': 16777216,
+      'wal_buffers_pretty': '16.0 MiB',
+      'work_mem_per_connection_bytes': 4194304,
+      'work_mem_per_connection_pretty': '4.00 MiB',
+    }),
+  })
+# ---
+# name: TestAnalyzeMemorySettings.test_high_memory_config
+  dict({
+    'estimated_total_memory_usage': dict({
+      'effective_cache_size_bytes': 25769803776,
+      'effective_cache_size_pretty': '24.0 GiB',
+      'maintenance_work_mem_bytes': 2147483648,
+      'maintenance_work_mem_pretty': '2.00 GiB',
+      'max_work_mem_usage_bytes': 134217728000,
+      'max_work_mem_usage_pretty': '125 GiB',
+      'shared_buffers_bytes': 8589934592,
+      'shared_buffers_pretty': '8.00 GiB',
+      'shared_memory_total_bytes': 8657043456,
+      'shared_memory_total_pretty': '8.06 GiB',
+      'wal_buffers_bytes': 67108864,
+      'wal_buffers_pretty': '64.0 MiB',
+      'work_mem_per_connection_bytes': 268435456,
+      'work_mem_per_connection_pretty': '256 MiB',
+    }),
+  })
+# ---
+# name: TestAnalyzeMemorySettings.test_minimal_config
+  dict({
+    'estimated_total_memory_usage': dict({
+      'effective_cache_size_bytes': 4294967296,
+      'effective_cache_size_pretty': '4.00 GiB',
+      'maintenance_work_mem_bytes': 67108864,
+      'maintenance_work_mem_pretty': '64.0 MiB',
+      'max_work_mem_usage_bytes': 419430400,
+      'max_work_mem_usage_pretty': '400 MiB',
+      'shared_buffers_bytes': 33554432,
+      'shared_buffers_pretty': '32.0 MiB',
+      'shared_memory_total_bytes': 50331648,
+      'shared_memory_total_pretty': '48.0 MiB',
+      'wal_buffers_bytes': 16777216,
+      'wal_buffers_pretty': '16.0 MiB',
+      'work_mem_per_connection_bytes': 4194304,
+      'work_mem_per_connection_pretty': '4.00 MiB',
+    }),
+  })
+# ---
+# name: TestAnalyzeMemorySettings.test_standard_config
+  dict({
+    'estimated_total_memory_usage': dict({
+      'effective_cache_size_bytes': 4294967296,
+      'effective_cache_size_pretty': '4.00 GiB',
+      'maintenance_work_mem_bytes': 67108864,
+      'maintenance_work_mem_pretty': '64.0 MiB',
+      'max_work_mem_usage_bytes': 419430400,
+      'max_work_mem_usage_pretty': '400 MiB',
+      'shared_buffers_bytes': 134217728,
+      'shared_buffers_pretty': '128 MiB',
+      'shared_memory_total_bytes': 150994944,
+      'shared_memory_total_pretty': '144 MiB',
+      'wal_buffers_bytes': 16777216,
+      'wal_buffers_pretty': '16.0 MiB',
+      'work_mem_per_connection_bytes': 4194304,
+      'work_mem_per_connection_pretty': '4.00 MiB',
+    }),
+  })
+# ---
 # name: TestG001MemorySettingsReport.test_empty_metrics
   dict({
     'build_ts': None,

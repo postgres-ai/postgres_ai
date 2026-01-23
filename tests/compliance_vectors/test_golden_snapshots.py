@@ -434,3 +434,175 @@ class TestK003TopQueriesReport:
         result = generator.generate_k003_top_queries_report("test-cluster", "node-01", time_range_minutes=60)
         sanitized = SnapshotSanitizer.sanitize(result)
         assert sanitized == snapshot
+
+
+# ============================================================================
+# _analyze_memory_settings Tests (P0 requirement)
+# ============================================================================
+
+class TestAnalyzeMemorySettings:
+    """Tests for _analyze_memory_settings() - P0 function.
+
+    Tests memory analysis calculations with various input configurations.
+    """
+
+    def test_standard_config(
+        self,
+        snapshot: SnapshotAssertion,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Standard PostgreSQL memory configuration."""
+        memory_data = {
+            "shared_buffers": {"setting": "128MB"},
+            "work_mem": {"setting": "4MB"},
+            "maintenance_work_mem": {"setting": "64MB"},
+            "effective_cache_size": {"setting": "4GB"},
+            "max_connections": {"setting": "100"},
+            "wal_buffers": {"setting": "16MB"},
+        }
+        result = generator._analyze_memory_settings(memory_data)
+        assert result == snapshot
+
+    def test_high_memory_config(
+        self,
+        snapshot: SnapshotAssertion,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """High-memory production configuration."""
+        memory_data = {
+            "shared_buffers": {"setting": "8GB"},
+            "work_mem": {"setting": "256MB"},
+            "maintenance_work_mem": {"setting": "2GB"},
+            "effective_cache_size": {"setting": "24GB"},
+            "max_connections": {"setting": "500"},
+            "wal_buffers": {"setting": "64MB"},
+        }
+        result = generator._analyze_memory_settings(memory_data)
+        assert result == snapshot
+
+    def test_minimal_config(
+        self,
+        snapshot: SnapshotAssertion,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Minimal/default configuration with missing values."""
+        memory_data = {
+            "shared_buffers": {"setting": "32MB"},
+        }
+        result = generator._analyze_memory_settings(memory_data)
+        assert result == snapshot
+
+    def test_empty_config(
+        self,
+        snapshot: SnapshotAssertion,
+        generator: PostgresReportGenerator,
+    ) -> None:
+        """Empty configuration - uses defaults."""
+        result = generator._analyze_memory_settings({})
+        assert result == snapshot
+
+
+# ============================================================================
+# get_all_nodes Contract Tests (P0 requirement)
+# ============================================================================
+
+class TestGetAllNodesContract:
+    """Contract tests for get_all_nodes() - P0 function.
+
+    Verifies return shape and edge case handling rather than exact values.
+    """
+
+    def test_single_primary(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        generator: PostgresReportGenerator,
+        prom_result: Callable,
+    ) -> None:
+        """Single primary node, no replicas."""
+        # Mock query_instant to return one node
+        def mock_query(query: str) -> Dict:
+            if "pgwatch_settings_configured" in query:
+                return prom_result([{"metric": {"node_name": "node-01"}}])
+            if "in_recovery_int" in query:
+                return prom_result([{"value": [0, "0"]}])  # Not in recovery = primary
+            return prom_result([])
+
+        monkeypatch.setattr(generator, "query_instant", mock_query)
+
+        result = generator.get_all_nodes("test-cluster")
+
+        # Contract: returns dict with 'primary' and 'standbys' keys
+        assert "primary" in result
+        assert "standbys" in result
+        assert result["primary"] == "node-01"
+        assert result["standbys"] == []
+
+    def test_primary_with_replicas(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        generator: PostgresReportGenerator,
+        prom_result: Callable,
+    ) -> None:
+        """Primary with multiple standbys."""
+        def mock_query(query: str) -> Dict:
+            if "pgwatch_settings_configured" in query:
+                return prom_result([
+                    {"metric": {"node_name": "primary-01"}},
+                    {"metric": {"node_name": "replica-01"}},
+                    {"metric": {"node_name": "replica-02"}},
+                ])
+            if "in_recovery_int" in query:
+                if "primary-01" in query:
+                    return prom_result([{"value": [0, "0"]}])  # Primary
+                else:
+                    return prom_result([{"value": [0, "1"]}])  # Standby
+            return prom_result([])
+
+        monkeypatch.setattr(generator, "query_instant", mock_query)
+
+        result = generator.get_all_nodes("test-cluster")
+
+        assert result["primary"] == "primary-01"
+        assert len(result["standbys"]) == 2
+        assert "replica-01" in result["standbys"]
+        assert "replica-02" in result["standbys"]
+
+    def test_empty_cluster(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        generator: PostgresReportGenerator,
+        prom_result: Callable,
+    ) -> None:
+        """No nodes found in cluster."""
+        monkeypatch.setattr(generator, "query_instant", lambda q: prom_result([]))
+
+        result = generator.get_all_nodes("empty-cluster")
+
+        # Contract: returns valid structure even when empty
+        assert result["primary"] is None
+        assert result["standbys"] == []
+
+    def test_multiple_primaries_handled(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        generator: PostgresReportGenerator,
+        prom_result: Callable,
+    ) -> None:
+        """Edge case: multiple nodes report as primary (split-brain scenario)."""
+        def mock_query(query: str) -> Dict:
+            if "pgwatch_settings_configured" in query:
+                return prom_result([
+                    {"metric": {"node_name": "node-01"}},
+                    {"metric": {"node_name": "node-02"}},
+                ])
+            if "in_recovery_int" in query:
+                return prom_result([{"value": [0, "0"]}])  # Both report as primary
+            return prom_result([])
+
+        monkeypatch.setattr(generator, "query_instant", mock_query)
+
+        result = generator.get_all_nodes("test-cluster")
+
+        # Contract: first becomes primary, others go to standbys
+        assert result["primary"] is not None
+        assert len(result["standbys"]) == 1  # Second "primary" treated as standby

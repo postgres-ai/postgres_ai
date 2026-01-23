@@ -376,9 +376,10 @@ describe('Memory Parsing Compliance', () => {
 | Function | Vector File | Python | TypeScript | Notes |
 |----------|-------------|--------|------------|-------|
 | `_parse_memory_value()` | memory_parsing.json | ✅ | ⬜ | Overflow is TS-only |
-| `_analyze_memory_settings()` | memory_analysis.json | ⬜ | ⬜ | |
-| `_build_qid_regex()` | query_id_validation.json | ⬜ | ⬜ | Security-critical |
-| `get_all_nodes()` | - | ⬜ | ⬜ | Contract test only (shape, not computation) |
+| `_analyze_memory_settings()` | - | ✅ | ⬜ | Golden snapshots (4 tests) |
+| `_build_qid_regex()` | query_id_validation.json | ✅ | ⬜ | Security-critical |
+| `get_all_nodes()` | - | ✅ | ⬜ | Contract tests (4 tests) |
+| `_densify()` | - | ✅ | ⬜ | Property tests |
 
 ## Review Process
 - Vector changes require review from Python maintainer AND TS migration lead
