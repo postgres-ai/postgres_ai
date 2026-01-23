@@ -940,7 +940,7 @@ def test_with_different_responses(prom_response):
 - [x] TS error codes defined with `.code` property
 - [x] Compliance vectors work for both harnesses (Python complete, TS pending migration)
 - [x] Shellcheck passes for index_pilot (pre-existing)
-- [ ] `pytest-socket` blocks network in unit tests (optional, deferred)
+- [x] `pytest-socket` blocks network in unit tests
 
 ---
 

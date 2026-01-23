@@ -7,3 +7,4 @@ jsonschema==4.23.0
 PyYAML==6.0.2
 hypothesis==6.122.3
 syrupy==4.8.1
+pytest-socket==0.7.0
