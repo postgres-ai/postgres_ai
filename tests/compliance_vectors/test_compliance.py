@@ -90,12 +90,15 @@ class TestMemoryParsingCompliance:
         # Outcome should be success for valid cases
         assert case["outcome"] == "success"
 
-    @pytest.mark.parametrize("case", get_invalid_cases(MEMORY_VECTORS), ids=lambda c: c["id"])
+    @pytest.mark.parametrize(
+        "case",
+        get_invalid_cases(MEMORY_VECTORS),
+        ids=lambda c: c["id"] if isinstance(c, dict) else "empty"
+    )
     def test_invalid_cases(self, generator, case):
         """Test that invalid inputs produce documented error behavior.
 
-        Note: Current Python implementation returns 0 for invalid inputs,
-        it does NOT raise exceptions. This documents legacy behavior.
+        These test cases document inputs that raise exceptions in Python.
         """
         if case.get("python_skip"):
             pytest.skip(f"Skipped for Python: {case.get('note', '')}")
@@ -103,16 +106,14 @@ class TestMemoryParsingCompliance:
         # Assert outcome is failure
         assert case["outcome"] == "failure"
 
-        # Python behavior: raises exception for these error codes
-        # (This section is currently empty since our vectors don't have invalid_cases)
-        error_code = case.get("error_code")
-        if error_code:
-            # Map error codes to Python exceptions
-            error_map = {
-                "ERR_EMPTY_INPUT": ValueError,
-                "ERR_NULL_INPUT": TypeError,
-                "ERR_INVALID_FORMAT": ValueError,
-            }
-            error_type = error_map.get(error_code, Exception)
-            with pytest.raises(error_type):
-                generator._parse_memory_value(case["input"])
+        # Map error codes to Python exceptions
+        error_map = {
+            "ERR_EMPTY_INPUT": ValueError,
+            "ERR_NULL_INPUT": TypeError,
+            "ERR_INVALID_FORMAT": ValueError,
+            "ERR_NEGATIVE_VALUE": ValueError,
+            "ERR_UNKNOWN_UNIT": ValueError,
+        }
+        error_type = error_map.get(case["error_code"], Exception)
+        with pytest.raises(error_type):
+            generator._parse_memory_value(case["input"])

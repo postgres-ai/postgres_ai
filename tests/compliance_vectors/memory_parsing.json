@@ -2,7 +2,7 @@
   "spec_version": "1.0",
   "function": "reporter.postgres_reports.PostgresReportGenerator._parse_memory_value",
   "description": "Parses PostgreSQL memory configuration strings to bytes. Returns 0 for invalid/empty inputs (no exceptions).",
-  "python_verified": null,
+  "python_verified": "2026-01-22",
   "typescript_verified": null,
 
   "constraints": {
@@ -45,7 +45,11 @@
     "invalid_returns_zero": [
       {"id": "mem_inv_001", "input": "invalid", "expected": 0, "outcome": "success", "note": "Python returns 0 for unrecognized input (no exception)"},
       {"id": "mem_inv_002", "input": "abc123", "expected": 0, "outcome": "success", "note": "Mixed invalid input returns 0"},
-      {"id": "mem_inv_003", "input": "128XB", "expected": 0, "outcome": "success", "note": "Unknown unit returns 0 (falls through to try/except)"}
+      {"id": "mem_inv_003", "input": "128XX", "expected": 0, "outcome": "success", "note": "No matching suffix, falls to try/except, returns 0"}
     ]
-  }
+  },
+
+  "invalid_cases": [
+    {"id": "mem_err_001", "input": "128XB", "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Ends with B, tries to parse '128X' as float, raises ValueError"}
+  ]
 }

@@ -775,18 +775,20 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 
 > Week 1 starts when this doc is approved (target: 2026-01-27).
 
-### Phase 0: Spike (Day 0)
+### Phase 0: Spike (Day 0) ✅ COMPLETE
 
 **Goal:** Validate the approach before committing to full implementation.
 
-| Task | Owner | Deliverable |
-|------|-------|-------------|
-| Create single vector file (`memory_parsing.json`) | Python maintainer | 5-10 cases covering basic + edge |
-| Create minimal Python harness | Python maintainer | Runs 5-10 cases |
-| Verify harness catches real bugs | Python maintainer | Manually break parser, confirm test fails |
-| Review with TS migration lead | Both leads | Agreement on vector format |
+| Task | Owner | Deliverable | Status |
+|------|-------|-------------|--------|
+| Create single vector file (`memory_parsing.json`) | Python maintainer | 24 cases covering basic + edge | ✅ Done |
+| Create minimal Python harness | Python maintainer | `test_compliance.py` runs all cases | ✅ Done |
+| Verify harness catches real bugs | Python maintainer | Found `128XB` raises ValueError (documented) | ✅ Done |
+| Review with TS migration lead | Both leads | Agreement on vector format | ⏳ Pending |
 
 **Definition of Done:** Single vector file works end-to-end, both leads sign off on format.
+
+**Key Discovery:** Python `_parse_memory_value` returns 0 for most invalid inputs but raises `ValueError` when input ends with 'B' and the prefix isn't a valid float (e.g., `128XB`). This nuance validates the compliance vector approach.
 
 **Exit criteria:** If spike reveals fundamental issues with approach, revisit strategy before proceeding.
 
