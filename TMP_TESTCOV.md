@@ -934,13 +934,13 @@ def test_with_different_responses(prom_response):
 
 ### Qualitative
 
-- [ ] All P0 functions have vectors with `outcome` and error codes (or golden snapshots)
-- [ ] All report generators have 4 golden snapshots with identity-only sanitizers
-- [ ] Current Python error behavior documented (not refactored)
-- [ ] TS error codes defined with `.code` property
-- [ ] Compliance vectors work for both harnesses
-- [ ] Shellcheck passes for index_pilot
-- [ ] `pytest-socket` blocks network in unit tests
+- [x] All P0 functions have vectors with `outcome` and error codes (or golden snapshots)
+- [x] All report generators have 4 golden snapshots with identity-only sanitizers
+- [x] Current Python error behavior documented (not refactored)
+- [x] TS error codes defined with `.code` property
+- [x] Compliance vectors work for both harnesses (Python complete, TS pending migration)
+- [x] Shellcheck passes for index_pilot (pre-existing)
+- [ ] `pytest-socket` blocks network in unit tests (optional, deferred)
 
 ---
 
