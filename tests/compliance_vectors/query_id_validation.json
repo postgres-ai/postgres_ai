@@ -1,0 +1,45 @@
+{
+  "spec_version": "1.0",
+  "function": "reporter.postgres_reports.PostgresReportGenerator._build_qid_regex",
+  "description": "Validates query IDs (integers, can be negative) and builds PromQL regex pattern",
+  "python_verified": "2026-01-22",
+  "typescript_verified": null,
+
+  "constraints": {
+    "pattern": "Query IDs must match regex -?\\d+ (optional minus, then digits)",
+    "note": "Security-critical: prevents regex injection in PromQL"
+  },
+
+  "valid_cases": [
+    {"id": "qid_valid_001", "input": ["123"], "expected": "^(?:123)$", "outcome": "success", "tags": ["basic"]},
+    {"id": "qid_valid_002", "input": ["123", "456"], "expected": "^(?:123|456)$", "outcome": "success", "tags": ["basic"]},
+    {"id": "qid_valid_003", "input": ["-123"], "expected": "^(?:-123)$", "outcome": "success", "tags": ["negative"], "note": "Query IDs can be negative"},
+    {"id": "qid_valid_004", "input": ["0"], "expected": "^(?:0)$", "outcome": "success", "tags": ["boundary"]},
+    {"id": "qid_valid_005", "input": ["9223372036854775807"], "expected": "^(?:9223372036854775807)$", "outcome": "success", "tags": ["boundary"], "note": "Max int64"}
+  ],
+
+  "case_groups": {
+    "multiple_ids": [
+      {"id": "qid_multi_001", "input": ["1", "2", "3"], "expected": "^(?:1|2|3)$", "outcome": "success"},
+      {"id": "qid_multi_002", "input": ["-1", "0", "1"], "expected": "^(?:-1|0|1)$", "outcome": "success", "note": "Mixed positive/negative"},
+      {"id": "qid_multi_003", "input": ["123456789012345"], "expected": "^(?:123456789012345)$", "outcome": "success", "tags": ["large"], "note": "Large query ID"}
+    ],
+    "boundary": [
+      {"id": "qid_bound_001", "input": ["-9223372036854775808"], "expected": "^(?:-9223372036854775808)$", "outcome": "success", "note": "Min int64"},
+      {"id": "qid_bound_002", "input": ["00123"], "expected": "^(?:00123)$", "outcome": "success", "note": "Leading zeros are valid digits"}
+    ]
+  },
+
+  "invalid_cases": [
+    {"id": "qid_err_001", "input": ["abc"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Non-numeric"},
+    {"id": "qid_err_002", "input": ["12.34"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Decimal not allowed"},
+    {"id": "qid_err_003", "input": ["12e3"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Scientific notation not allowed"},
+    {"id": "qid_err_004", "input": ["123|456"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Pipe char (regex injection attempt)"},
+    {"id": "qid_err_005", "input": ["123.*"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Regex wildcard (injection attempt)"},
+    {"id": "qid_err_006", "input": [""], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Empty string"},
+    {"id": "qid_err_007", "input": [" 123"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Leading space"},
+    {"id": "qid_err_008", "input": ["123 "], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Trailing space"},
+    {"id": "qid_err_009", "input": ["--123"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Double minus"},
+    {"id": "qid_err_010", "input": ["123-"], "outcome": "failure", "error_code": "ERR_INVALID_FORMAT", "note": "Trailing minus"}
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Compliance Vector Schema",
+  "description": "Schema for language-agnostic test vectors shared between Python and TypeScript",
+  "type": "object",
+  "required": ["spec_version", "function"],
+  "anyOf": [
+    {"required": ["valid_cases"]},
+    {"required": ["invalid_cases"]}
+  ],
+  "properties": {
+    "spec_version": {"type": "string"},
+    "function": {"type": "string"},
+    "description": {"type": "string"},
+    "python_verified": {"type": ["string", "null"]},
+    "typescript_verified": {"type": ["string", "null"]},
+    "constraints": {"type": "object"},
+    "case_groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"$ref": "#/definitions/case"}
+      }
+    },
+    "valid_cases": {"type": "array", "items": {"$ref": "#/definitions/valid_case"}},
+    "invalid_cases": {"type": "array", "items": {"$ref": "#/definitions/invalid_case"}}
+  },
+  "definitions": {
+    "case_base": {
+      "type": "object",
+      "required": ["id", "input", "outcome"],
+      "properties": {
+        "id": {"type": "string"},
+        "input": {},
+        "outcome": {"enum": ["success", "empty", "partial", "failure"]},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "note": {"type": "string"},
+        "python_skip": {"type": "boolean"}
+      }
+    },
+    "valid_case": {
+      "allOf": [
+        {"$ref": "#/definitions/case_base"},
+        {
+          "properties": {
+            "expected": {}
+          },
+          "required": ["expected"]
+        }
+      ]
+    },
+    "invalid_case": {
+      "allOf": [
+        {"$ref": "#/definitions/case_base"},
+        {
+          "properties": {
+            "error_code": {"type": "string"}
+          },
+          "required": ["error_code"]
+        }
+      ]
+    },
+    "case": {
+      "oneOf": [
+        {"$ref": "#/definitions/valid_case"},
+        {"$ref": "#/definitions/invalid_case"}
+      ]
+    }
+  }
+}
