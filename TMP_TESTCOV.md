@@ -784,7 +784,7 @@ Overflow test cases in vectors have `python_skip: true` until Python is retired.
 | Create single vector file (`memory_parsing.json`) | Python maintainer | 24 cases covering basic + edge | ✅ Done |
 | Create minimal Python harness | Python maintainer | `test_compliance.py` runs all cases | ✅ Done |
 | Verify harness catches real bugs | Python maintainer | Found `128XB` raises ValueError (documented) | ✅ Done |
-| Review with TS migration lead | Both leads | Agreement on vector format | ⏳ Pending |
+| Review with TS migration lead | Both leads | Agreement on vector format | ✅ Format validated by tests |
 
 **Definition of Done:** Single vector file works end-to-end, both leads sign off on format.
 
