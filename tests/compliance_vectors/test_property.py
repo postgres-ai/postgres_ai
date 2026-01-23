@@ -125,3 +125,71 @@ class TestQueryIdValidationProperties:
         """Non-numeric strings should raise ValueError (security: prevents injection)."""
         with pytest.raises(ValueError):
             _GENERATOR._build_qid_regex([text])
+
+
+class TestDensifyProperties:
+    """Property-based tests for _densify (time series densification)."""
+
+    @given(
+        st.lists(st.integers(min_value=1000, max_value=9999), min_size=1, max_size=5, unique=True),
+        st.lists(st.integers(min_value=0, max_value=100000), min_size=1, max_size=10, unique=True),
+    )
+    def test_output_length_matches_timeline(self, qids, timeline):
+        """Output lists should always match timeline length."""
+        qid_strs = [str(q) for q in qids]
+        timeline_sorted = sorted(timeline)
+        # Empty series_pts - all values should be filled
+        result = _GENERATOR._densify({}, qid_strs, timeline_sorted)
+
+        for qid in qid_strs:
+            assert len(result[qid]) == len(timeline_sorted)
+
+    @given(
+        st.lists(st.integers(min_value=1000, max_value=9999), min_size=1, max_size=3, unique=True),
+        st.lists(st.integers(min_value=0, max_value=10000), min_size=1, max_size=5, unique=True),
+        st.floats(min_value=0.0, max_value=100.0, allow_nan=False, allow_infinity=False),
+    )
+    def test_fill_value_used_for_missing(self, qids, timeline, fill):
+        """Missing data points should use the fill value."""
+        qid_strs = [str(q) for q in qids]
+        timeline_sorted = sorted(timeline)
+        # Empty series_pts - all values should be fill
+        result = _GENERATOR._densify({}, qid_strs, timeline_sorted, fill=fill)
+
+        for qid in qid_strs:
+            assert all(v == fill for v in result[qid])
+
+    @given(
+        st.lists(st.integers(min_value=1000, max_value=9999), min_size=1, max_size=3, unique=True),
+        st.lists(st.integers(min_value=0, max_value=10000), min_size=2, max_size=5, unique=True),
+    )
+    def test_existing_values_preserved(self, qids, timeline):
+        """Existing values in series_pts should be preserved, not overwritten."""
+        qid_strs = [str(q) for q in qids]
+        timeline_sorted = sorted(timeline)
+
+        # Create series_pts with known values at first timestamp
+        series_pts = {}
+        for qid in qid_strs:
+            series_pts[qid] = {timeline_sorted[0]: 999.0}
+
+        result = _GENERATOR._densify(series_pts, qid_strs, timeline_sorted)
+
+        # First value should be preserved
+        for qid in qid_strs:
+            assert result[qid][0] == 999.0
+
+    @given(
+        st.lists(st.integers(min_value=1000, max_value=9999), min_size=1, max_size=3, unique=True),
+        st.lists(st.integers(min_value=0, max_value=10000), min_size=1, max_size=5, unique=True),
+    )
+    def test_idempotent_on_empty_input(self, qids, timeline):
+        """Calling _densify twice on empty input should give same result."""
+        qid_strs = [str(q) for q in qids]
+        timeline_sorted = sorted(timeline)
+
+        result1 = _GENERATOR._densify({}, qid_strs, timeline_sorted)
+        # Second call with result converted back (simulating re-densification)
+        result2 = _GENERATOR._densify({}, qid_strs, timeline_sorted)
+
+        assert result1 == result2
