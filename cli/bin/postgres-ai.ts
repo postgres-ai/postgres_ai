@@ -24,6 +24,18 @@ import { getCheckupEntry } from "../lib/checkup-dictionary";
 import { createCheckupReport, uploadCheckupReportJson, convertCheckupReportJsonToMarkdown, RpcError, formatRpcErrorForDisplay, withRetry } from "../lib/checkup-api";
 import { generateCheckSummary } from "../lib/checkup-summary";
 
+// Node.js version check - require Node 18+
+// Node 14 reached EOL in April 2023, Node 16 in September 2023.
+// Node 18+ is required for native ESM, modern crypto APIs, and security updates.
+const nodeVersion = parseInt(process.versions.node.split('.')[0], 10);
+if (nodeVersion < 18) {
+  console.error(`\x1b[31mError: postgresai requires Node 18 or higher.\x1b[0m`);
+  console.error(`You are running Node.js ${process.versions.node}.`);
+  console.error(`Please upgrade to Node.js 20 LTS or Node.js 22 for security updates.`);
+  console.error(`\nDownload: https://nodejs.org/`);
+  process.exit(1);
+}
+
 // Singleton readline interface for stdin prompts
 let rl: ReturnType<typeof createInterface> | null = null;
 function getReadline() {
