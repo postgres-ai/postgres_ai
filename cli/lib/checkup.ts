@@ -1243,6 +1243,230 @@ async function generateF001(client: Client, nodeName: string): Promise<Report> {
 }
 
 /**
+ * Generate F004 report - Autovacuum: heap bloat (estimated)
+ *
+ * Estimates table bloat based on statistical analysis of table pages vs expected pages.
+ * Uses pg_stats for column statistics to estimate row sizes.
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (pg_table_bloat metric).
+ */
+async function generateF004(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("F004", "Autovacuum: heap bloat (estimated)", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10);
+
+  interface BloatedTable {
+    schema_name: string;
+    table_name: string;
+    real_size: number;
+    extra_size: number;
+    extra_pct: number;
+    bloat_size: number;
+    bloat_pct: number;
+    fillfactor: number;
+    last_vacuum: string | null;
+    last_vacuum_epoch: number;
+    real_size_pretty: string;
+    extra_size_pretty: string;
+    bloat_size_pretty: string;
+  }
+
+  let bloatedTables: BloatedTable[] = [];
+
+  try {
+    // Get bloat data
+    const sql = getMetricSql(METRIC_NAMES.F004, pgMajorVersion);
+    const bloatResult = await client.query(sql);
+
+    // Get vacuum stats for all tables
+    const vacuumStatsResult = await client.query(`
+      SELECT schemaname, relname, last_vacuum, last_autovacuum
+      FROM pg_stat_user_tables
+    `);
+    const vacuumStats = new Map<string, { last_vacuum: string | null; last_vacuum_epoch: number }>();
+    for (const row of vacuumStatsResult.rows) {
+      const key = `${row.schemaname}.${row.relname}`;
+      // Use last_autovacuum if last_vacuum is null, otherwise prefer last_vacuum
+      const vacuumTime = row.last_vacuum || row.last_autovacuum;
+      vacuumStats.set(key, {
+        last_vacuum: vacuumTime ? new Date(vacuumTime).toISOString() : null,
+        last_vacuum_epoch: vacuumTime ? Math.floor(new Date(vacuumTime).getTime() / 1000) : 0,
+      });
+    }
+
+    bloatedTables = bloatResult.rows.map((row) => {
+      const t = transformMetricRow(row);
+      const schemaName = String(t.schemaname || "");
+      const tableName = String(t.tblname || "");
+      const realSizeBytes = Math.round((parseFloat(String(t.real_size_mib)) || 0) * 1024 * 1024);
+      const extraSize = parseInt(String(t.extra_size || 0), 10);
+      const bloatSize = parseInt(String(t.bloat_size || 0), 10);
+
+      const vacuumInfo = vacuumStats.get(`${schemaName}.${tableName}`) || {
+        last_vacuum: null,
+        last_vacuum_epoch: 0,
+      };
+
+      return {
+        schema_name: schemaName,
+        table_name: tableName,
+        real_size: realSizeBytes,
+        extra_size: extraSize,
+        extra_pct: parseFloat(String(t.extra_pct)) || 0,
+        bloat_size: bloatSize,
+        bloat_pct: parseFloat(String(t.bloat_pct)) || 0,
+        fillfactor: parseInt(String(t.fillfactor || 100), 10),
+        last_vacuum: vacuumInfo.last_vacuum,
+        last_vacuum_epoch: vacuumInfo.last_vacuum_epoch,
+        real_size_pretty: formatBytes(realSizeBytes),
+        extra_size_pretty: formatBytes(extraSize),
+        bloat_size_pretty: formatBytes(bloatSize),
+      };
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[F004] Error estimating table bloat: ${errorMsg}`);
+  }
+
+  // Get database info
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
+
+  // Calculate totals
+  const totalCount = bloatedTables.length;
+  const totalBloatSizeBytes = bloatedTables.reduce((sum, t) => sum + t.bloat_size, 0);
+
+  const dbEntry = {
+    bloated_tables: bloatedTables,
+    total_count: totalCount,
+    total_bloat_size_bytes: totalBloatSizeBytes,
+    total_bloat_size_pretty: formatBytes(totalBloatSizeBytes),
+    database_size_bytes: dbSizeBytes,
+    database_size_pretty: formatBytes(dbSizeBytes),
+  };
+
+  report.results[nodeName] = {
+    data: { [dbName]: dbEntry },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
+ * Generate F005 report - Autovacuum: index bloat (estimated)
+ *
+ * Estimates B-tree index bloat based on statistical analysis of index pages vs expected pages.
+ * SQL loaded from config/pgwatch-prometheus/metrics.yml (pg_btree_bloat metric).
+ */
+async function generateF005(client: Client, nodeName: string): Promise<Report> {
+  const report = createBaseReport("F005", "Autovacuum: index bloat (estimated)", nodeName);
+  const postgresVersion = await getPostgresVersion(client);
+  const pgMajorVersion = parseInt(postgresVersion.server_major_ver, 10);
+
+  interface BloatedIndex {
+    schema_name: string;
+    table_name: string;
+    index_name: string;
+    real_size: number;
+    table_size: number;
+    extra_size: number;
+    extra_pct: number;
+    bloat_size: number;
+    bloat_pct: number;
+    fillfactor: number;
+    last_vacuum: string | null;
+    last_vacuum_epoch: number;
+    real_size_pretty: string;
+    table_size_pretty: string;
+    extra_size_pretty: string;
+    bloat_size_pretty: string;
+  }
+
+  let bloatedIndexes: BloatedIndex[] = [];
+
+  try {
+    // Get bloat data
+    const sql = getMetricSql(METRIC_NAMES.F005, pgMajorVersion);
+    const bloatResult = await client.query(sql);
+
+    // Get vacuum stats for all tables (indexes inherit vacuum time from their table)
+    const vacuumStatsResult = await client.query(`
+      SELECT schemaname, relname, last_vacuum, last_autovacuum
+      FROM pg_stat_user_tables
+    `);
+    const vacuumStats = new Map<string, { last_vacuum: string | null; last_vacuum_epoch: number }>();
+    for (const row of vacuumStatsResult.rows) {
+      const key = `${row.schemaname}.${row.relname}`;
+      const vacuumTime = row.last_vacuum || row.last_autovacuum;
+      vacuumStats.set(key, {
+        last_vacuum: vacuumTime ? new Date(vacuumTime).toISOString() : null,
+        last_vacuum_epoch: vacuumTime ? Math.floor(new Date(vacuumTime).getTime() / 1000) : 0,
+      });
+    }
+
+    bloatedIndexes = bloatResult.rows.map((row) => {
+      const t = transformMetricRow(row);
+      const schemaName = String(t.schemaname || "");
+      const tableName = String(t.tblname || "");
+      const indexName = String(t.idxname || "");
+      const realSizeBytes = Math.round((parseFloat(String(t.real_size_mib)) || 0) * 1024 * 1024);
+      const tableSizeBytes = Math.round((parseFloat(String(t.table_size_mib)) || 0) * 1024 * 1024);
+      const extraSize = parseInt(String(t.extra_size || 0), 10);
+      const bloatSize = parseInt(String(t.bloat_size || 0), 10);
+
+      const vacuumInfo = vacuumStats.get(`${schemaName}.${tableName}`) || {
+        last_vacuum: null,
+        last_vacuum_epoch: 0,
+      };
+
+      return {
+        schema_name: schemaName,
+        table_name: tableName,
+        index_name: indexName,
+        real_size: realSizeBytes,
+        table_size: tableSizeBytes,
+        extra_size: extraSize,
+        extra_pct: parseFloat(String(t.extra_pct)) || 0,
+        bloat_size: bloatSize,
+        bloat_pct: parseFloat(String(t.bloat_pct)) || 0,
+        fillfactor: parseInt(String(t.fillfactor || 90), 10),
+        last_vacuum: vacuumInfo.last_vacuum,
+        last_vacuum_epoch: vacuumInfo.last_vacuum_epoch,
+        real_size_pretty: formatBytes(realSizeBytes),
+        table_size_pretty: formatBytes(tableSizeBytes),
+        extra_size_pretty: formatBytes(extraSize),
+        bloat_size_pretty: formatBytes(bloatSize),
+      };
+    });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.log(`[F005] Error estimating index bloat: ${errorMsg}`);
+  }
+
+  // Get database info
+  const { datname: dbName, size_bytes: dbSizeBytes } = await getCurrentDatabaseInfo(client, pgMajorVersion);
+
+  // Calculate totals
+  const totalCount = bloatedIndexes.length;
+  const totalBloatSizeBytes = bloatedIndexes.reduce((sum, idx) => sum + idx.bloat_size, 0);
+
+  const dbEntry = {
+    bloated_indexes: bloatedIndexes,
+    total_count: totalCount,
+    total_bloat_size_bytes: totalBloatSizeBytes,
+    total_bloat_size_pretty: formatBytes(totalBloatSizeBytes),
+    database_size_bytes: dbSizeBytes,
+    database_size_pretty: formatBytes(dbSizeBytes),
+  };
+
+  report.results[nodeName] = {
+    data: { [dbName]: dbEntry },
+    postgres_version: postgresVersion,
+  };
+
+  return report;
+}
+
+/**
  * Generate G001 report - Memory-related settings
  */
 async function generateG001(client: Client, nodeName: string): Promise<Report> {
@@ -1446,6 +1670,8 @@ export const REPORT_GENERATORS: Record<string, (client: Client, nodeName: string
   D001: generateD001,
   D004: generateD004,
   F001: generateF001,
+  F004: generateF004,
+  F005: generateF005,
   G001: generateG001,
   G003: generateG003,
   H001: generateH001,
