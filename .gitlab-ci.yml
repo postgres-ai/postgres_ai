@@ -1,5 +1,6 @@
 include:
   - local: 'components/index_pilot/.gitlab-ci.yml'
+  - template: Security/SAST.gitlab-ci.yml
 
 # Auto-cancel redundant pipelines when new commits are pushed
 workflow:
@@ -529,3 +530,10 @@ cli:node:integration:
       node ./cli/dist/bin/postgres-ai.js --help
   rules:
     - if: '$PGAI_API_KEY'
+
+# GitLab SAST (Static Application Security Testing)
+# Scans code for security vulnerabilities using GitLab's managed analyzers.
+# Results appear in the Security tab of merge requests and pipelines.
+# https://docs.gitlab.com/ee/user/application_security/sast/
+sast:
+  stage: test
