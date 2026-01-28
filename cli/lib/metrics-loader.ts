@@ -65,6 +65,9 @@ export const METRIC_NAMES = {
   H001: "pg_invalid_indexes",
   H002: "unused_indexes", 
   H004: "redundant_indexes",
+  // Bloat estimation
+  F004: "pg_table_bloat",
+  F005: "pg_btree_bloat",
   // Settings and version info (A002, A003, A007, A013)
   settings: "settings",
   // Database statistics (A004)

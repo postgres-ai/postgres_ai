@@ -46,6 +46,9 @@ const REQUIRED_METRICS = [
   "redundant_indexes",
   // Stats reset info (H002)
   "stats_reset",
+  // Bloat estimation (F004, F005)
+  "pg_table_bloat",
+  "pg_btree_bloat",
 ];
 
 function main() {
