@@ -409,14 +409,14 @@ cli:node:e2e:dind:
   stage: test
   image: node:20-alpine
   services:
-    - name: docker:24-dind
+    - name: docker:27.3-dind
       command: ["--tls=false"]
   needs:
     - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-    DOCKER_API_VERSION: "1.43"
+    DOCKER_API_VERSION: "1.45"
     GIT_STRATEGY: fetch
     PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
@@ -450,14 +450,14 @@ cli:node:full:dind:
   stage: test
   image: node:20-alpine
   services:
-    - name: docker:24-dind
+    - name: docker:27.3-dind
       command: ["--tls=false"]
   needs:
     - job: build:test:images
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
-    DOCKER_API_VERSION: "1.43"
+    DOCKER_API_VERSION: "1.45"
     GIT_STRATEGY: fetch
     PGAI_TAG: ${CI_COMMIT_REF_SLUG}
   before_script:
