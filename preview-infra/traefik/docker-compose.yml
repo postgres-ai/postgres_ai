@@ -1,0 +1,20 @@
+services:
+  traefik:
+    image: traefik:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"  # Dashboard on localhost ONLY
+    env_file:
+      - .env  # Contains CF_DNS_API_TOKEN
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./acme.json:/acme.json
+    networks:
+      - traefik-public
+
+networks:
+  traefik-public:
+    external: true
