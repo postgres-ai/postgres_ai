@@ -351,4 +351,79 @@ postgresai mon stop
 postgresai mon start
 ```
 
+## Preview Environments
+
+Preview environments allow you to test monitoring changes in isolated, publicly-accessible deployments before merging.
+
+### Overview
+
+- Each preview runs at `https://preview-{branch-slug}.pgai.watch`
+- Includes: PostgreSQL target database, pgwatch collector, VictoriaMetrics, Grafana, and variable workload generator
+- Auto-expires after 3 days of inactivity
+- Maximum 2 concurrent previews
+
+### Creating a Preview
+
+1. Push your branch to GitLab
+2. Open the merge request pipeline
+3. Click the **Play** button on `preview:deploy` (manual trigger)
+4. Wait for deployment to complete (~2-3 minutes)
+5. Access the preview URL shown in the job output
+
+### Accessing Grafana
+
+**URL:** `https://preview-{branch-slug}.pgai.watch`
+
+**Credentials:** The password is generated per-preview and stored on the VM. To retrieve it:
+
+```bash
+# SSH to the preview VM (requires access)
+ssh deploy@<PREVIEW_VM_HOST> "cat /opt/postgres-ai-previews/previews/{branch-slug}/.env"
+```
+
+Username: `monitor`
+
+### Updating a Preview
+
+When you push new commits to a branch with an active preview:
+
+- The `preview:update` job runs automatically
+- Grafana dashboards and configs are refreshed
+- No need to destroy and recreate
+
+### Destroying a Preview
+
+Previews are automatically cleaned up when:
+
+- The branch is merged or deleted
+- The 3-day TTL expires
+
+To manually destroy:
+
+1. Open the merge request pipeline
+2. Click `preview:destroy`
+
+### Branch Name Sanitization
+
+Branch names are sanitized for DNS compatibility:
+
+| Original | Sanitized |
+|----------|-----------|
+| `claude/feature-x` | `claude-feature-x` |
+| `feature_test` | `feature-test` |
+| `UPPERCASE-Branch` | `uppercase-branch` |
+
+### Troubleshooting Previews
+
+**Preview won't deploy:**
+- Check if the maximum concurrent previews limit (2) is reached
+- Verify disk/memory on the preview VM
+
+**Grafana shows "No Data":**
+- Wait 1-2 minutes for metrics to be collected
+- Check if pgwatch container is running
+
+**Can't access the preview URL:**
+- DNS propagation may take a few minutes
+- Verify the SSL certificate is valid (Let's Encrypt DNS-01 challenge)
 

@@ -19,6 +19,7 @@ stages:
   - build
   - test
   - publish
+  - preview
 
 # Build images from current code for e2e tests
 # Images are pushed to GitLab Container Registry and pulled by test jobs
@@ -530,6 +531,172 @@ cli:node:integration:
       node ./cli/dist/bin/postgres-ai.js --help
   rules:
     - if: '$PGAI_API_KEY'
+
+# =============================================================================
+# Preview Environment Jobs
+# =============================================================================
+
+# Variables for preview environment (set in GitLab CI/CD settings)
+# - PREVIEW_SSH_PRIVATE_KEY: SSH key for deploy user on preview VM
+# - PREVIEW_VM_HOST: Hostname/IP of preview VM (e.g., 178.156.234.54)
+# - PREVIEW_VM_USER: Username on preview VM (default: deploy)
+
+.preview_base:
+  stage: preview
+  image: alpine:3.19
+  variables:
+    PREVIEW_VM_USER: deploy
+    PREVIEW_BASE_DIR: /opt/postgres-ai-previews
+  before_script:
+    - apk add --no-cache openssh-client rsync bash coreutils
+    - eval $(ssh-agent -s)
+    # PREVIEW_SSH_PRIVATE_KEY can be either:
+    # - File type variable (contains path to key file)
+    # - Regular variable with base64-encoded key content
+    - |
+      # Pipe to ssh-add to avoid exposing key in process arguments (ps aux)
+      # Note: Using pipe instead of process substitution for POSIX sh compatibility
+      if [ -f "$PREVIEW_SSH_PRIVATE_KEY" ]; then
+        tr -d '\r' < "$PREVIEW_SSH_PRIVATE_KEY" | ssh-add -
+      else
+        printf '%s' "$PREVIEW_SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+      fi
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - echo "StrictHostKeyChecking no" > ~/.ssh/config
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+
+preview:deploy:
+  extends: .preview_base
+  environment:
+    name: preview/$CI_COMMIT_REF_SLUG
+    url: https://preview-$CI_COMMIT_REF_SLUG.pgai.watch
+    on_stop: preview:destroy
+    auto_stop_in: 3 days
+  resource_group: preview-deploy
+  script:
+    - |
+      set -euo pipefail
+      : "${PREVIEW_SSH_PRIVATE_KEY:?PREVIEW_SSH_PRIVATE_KEY is required}"
+      : "${PREVIEW_VM_HOST:?PREVIEW_VM_HOST is required}"
+      
+      # Sanitize branch name
+      BRANCH_SLUG=$(echo "$CI_COMMIT_REF_SLUG" | tr '[:upper:]' '[:lower:]' | \
+        sed 's/[\/\_]/-/g' | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | \
+        sed 's/^-//;s/-$//' | cut -c1-63)
+      
+      echo "Deploying preview: $BRANCH_SLUG"
+      echo "PREVIEW_URL=https://preview-${BRANCH_SLUG}.pgai.watch" >> deploy.env
+      
+      # Sync scripts to VM
+      rsync -avz --delete -e "ssh" \
+        preview-infra/scripts/ \
+        ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST}:${PREVIEW_BASE_DIR}/scripts/
+
+      rsync -avz --delete -e "ssh" \
+        preview-infra/shared/ \
+        ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST}:${PREVIEW_BASE_DIR}/shared/
+
+      rsync -avz --delete -e "ssh" \
+        preview-infra/manager/ \
+        ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST}:${PREVIEW_BASE_DIR}/manager/
+
+      # Setup Docker registry login on VM (for pulling CI-built images)
+      ssh ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST} \
+        "echo '${CI_REGISTRY_PASSWORD}' | docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password-stdin"
+
+      # Deploy preview with CI registry settings
+      ssh ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST} \
+        "BRANCH_SLUG=${BRANCH_SLUG} COMMIT_SHA=${CI_COMMIT_SHA} BRANCH_NAME='${CI_COMMIT_REF_NAME}' \
+         PGAI_REGISTRY=${CI_REGISTRY_IMAGE} PGAI_TAG=${CI_COMMIT_REF_SLUG} \
+         ${PREVIEW_BASE_DIR}/manager/deploy.sh"
+      
+      echo ""
+      echo "Preview deployed successfully!"
+      echo "URL: https://preview-${BRANCH_SLUG}.pgai.watch"
+      echo "Username: monitor"
+      echo "Password: SSH to VM and run: cat ${PREVIEW_BASE_DIR}/previews/${BRANCH_SLUG}/.env"
+  artifacts:
+    reports:
+      dotenv: deploy.env
+
+preview:update:
+  extends: .preview_base
+  resource_group: preview-deploy
+  script:
+    - |
+      set -euo pipefail
+      : "${PREVIEW_SSH_PRIVATE_KEY:?PREVIEW_SSH_PRIVATE_KEY is required}"
+      : "${PREVIEW_VM_HOST:?PREVIEW_VM_HOST is required}"
+      
+      BRANCH_SLUG=$(echo "$CI_COMMIT_REF_SLUG" | tr '[:upper:]' '[:lower:]' | \
+        sed 's/[\/\_]/-/g' | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | \
+        sed 's/^-//;s/-$//' | cut -c1-63)
+      
+      # Check if preview exists
+      EXISTS=$(ssh ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST} \
+        "test -d ${PREVIEW_BASE_DIR}/previews/${BRANCH_SLUG} && echo yes || echo no")
+      
+      if [ "$EXISTS" = "yes" ]; then
+        echo "Updating preview: $BRANCH_SLUG"
+
+        rsync -avz --delete -e "ssh" \
+          preview-infra/scripts/ \
+          ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST}:${PREVIEW_BASE_DIR}/scripts/
+
+        rsync -avz --delete -e "ssh" \
+          preview-infra/shared/ \
+          ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST}:${PREVIEW_BASE_DIR}/shared/
+
+        rsync -avz --delete -e "ssh" \
+          preview-infra/manager/ \
+          ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST}:${PREVIEW_BASE_DIR}/manager/
+
+        # Setup Docker registry login on VM
+        ssh ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST} \
+          "echo '${CI_REGISTRY_PASSWORD}' | docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password-stdin"
+
+        ssh ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST} \
+          "BRANCH_SLUG=${BRANCH_SLUG} COMMIT_SHA=${CI_COMMIT_SHA} \
+           PGAI_REGISTRY=${CI_REGISTRY_IMAGE} PGAI_TAG=${CI_COMMIT_REF_SLUG} \
+           ${PREVIEW_BASE_DIR}/manager/deploy.sh --update"
+
+        echo "Preview updated: https://preview-${BRANCH_SLUG}.pgai.watch"
+      else
+        echo "Preview does not exist, skipping update"
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+
+preview:destroy:
+  extends: .preview_base
+  environment:
+    name: preview/$CI_COMMIT_REF_SLUG
+    action: stop
+  script:
+    - |
+      set -euo pipefail
+      : "${PREVIEW_SSH_PRIVATE_KEY:?PREVIEW_SSH_PRIVATE_KEY is required}"
+      : "${PREVIEW_VM_HOST:?PREVIEW_VM_HOST is required}"
+      
+      BRANCH_SLUG=$(echo "$CI_COMMIT_REF_SLUG" | tr '[:upper:]' '[:lower:]' | \
+        sed 's/[\/\_]/-/g' | sed 's/[^a-z0-9-]//g' | sed 's/--*/-/g' | \
+        sed 's/^-//;s/-$//' | cut -c1-63)
+      
+      echo "Destroying preview: $BRANCH_SLUG"
+      
+      ssh ${PREVIEW_VM_USER}@${PREVIEW_VM_HOST} \
+        "BRANCH_SLUG=${BRANCH_SLUG} ${PREVIEW_BASE_DIR}/manager/destroy.sh" || true
+      
+      echo "Preview destroyed"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
 
 # GitLab SAST (Static Application Security Testing)
 # Scans code for security vulnerabilities using GitLab's managed analyzers.

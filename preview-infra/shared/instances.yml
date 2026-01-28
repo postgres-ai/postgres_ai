@@ -1,0 +1,13 @@
+# Preview environment instances.yml
+# Target database is enabled for demo workload monitoring
+# Format: flat list for pgwatch (no `instances:` wrapper)
+
+- name: target-database
+  conn_str: postgresql://postgres:postgres@target-db:5432/target_database
+  preset_metrics: full
+  is_enabled: true
+  group: default
+  custom_tags:
+    env: preview
+    cluster: local
+    node_name: node-01
