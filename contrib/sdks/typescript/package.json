@@ -1,0 +1,60 @@
+{
+  "name": "postgresai-checkup",
+  "version": "0.1.0",
+  "description": "PostgreSQL health checks - unused indexes, bloat, and more",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "postgresql",
+    "postgres",
+    "health-check",
+    "database",
+    "index",
+    "bloat",
+    "monitoring"
+  ],
+  "author": "PostgresAI <team@postgres.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/postgres-ai/postgresai"
+  },
+  "homepage": "https://github.com/postgres-ai/postgresai",
+  "bugs": {
+    "url": "https://github.com/postgres-ai/postgresai/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "pg": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
