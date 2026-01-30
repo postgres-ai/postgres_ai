@@ -94,6 +94,9 @@ reporter:tests:
     - apt-get update
     - apt-get install -y --no-install-recommends postgresql postgresql-client && rm -rf /var/lib/apt/lists/*
     - pip install -r reporter/requirements-dev.txt
+    # Start PostgreSQL for integration tests
+    - service postgresql start
+    - su - postgres -c "psql -c 'SELECT version();'" || echo "PostgreSQL started"
   script:
     - chown -R postgres:postgres "$CI_PROJECT_DIR"
     - su - postgres -c "cd \"$CI_PROJECT_DIR\" && python -m pytest --run-integration --cov=reporter --cov-report=term --cov-report=xml:coverage/reporter-coverage.xml tests/reporter"
