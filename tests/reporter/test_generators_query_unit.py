@@ -122,3 +122,172 @@ def test_generate_per_query_jsons_write_immediately_prefixes_cluster_and_writes_
     assert last_key_line.lstrip().startswith('"timestamptz"')
 
 
+@pytest.mark.unit
+def test_generate_per_query_jsons_returns_empty_when_no_queryids(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    """Test that generate_per_query_jsons returns empty list when no queryids found."""
+    monkeypatch.setattr(
+        generator,
+        "extract_queryids_from_reports",
+        lambda reports: {},  # No queryids
+    )
+
+    out = generator.generate_per_query_jsons(
+        reports={"K001": {}},
+        cluster="prod",
+        node_name=None,
+        hours=24,
+        write_immediately=False,
+    )
+
+    assert out == []
+
+
+@pytest.mark.unit
+def test_generate_per_query_jsons_handles_missing_query_text(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    """Test that missing query text doesn't crash generation."""
+    monkeypatch.setattr(
+        generator,
+        "extract_queryids_from_reports",
+        lambda reports: {"db1": {"qid_1"}},
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_queryid_queries_from_sink",
+        lambda *args, **kwargs: {},  # No query texts found
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_all_nodes",
+        lambda cluster: {"primary": "main", "standbys": []},
+    )
+    monkeypatch.setattr(generator, "get_query_metrics_from_prometheus", _fake_metrics)
+
+    out = generator.generate_per_query_jsons(
+        reports={"K001": {}},
+        cluster="prod",
+        node_name=None,
+        hours=24,
+        write_immediately=False,
+    )
+
+    # Should still generate the file, just with None query_text
+    assert len(out) == 1
+    assert out[0]["data"]["query_text"] is None
+
+
+@pytest.mark.unit
+def test_generate_per_query_jsons_without_cluster_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    """Test that include_cluster_prefix=False removes cluster prefix from filenames."""
+    monkeypatch.setattr(
+        generator,
+        "extract_queryids_from_reports",
+        lambda reports: {"db1": {"qid_1"}},
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_queryid_queries_from_sink",
+        lambda *args, **kwargs: {"db1": {"qid_1": "SELECT 1"}},
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_all_nodes",
+        lambda cluster: {"primary": "main", "standbys": []},
+    )
+    monkeypatch.setattr(generator, "get_query_metrics_from_prometheus", _fake_metrics)
+
+    out = generator.generate_per_query_jsons(
+        reports={"K001": {}},
+        cluster="prod",
+        node_name=None,
+        hours=24,
+        write_immediately=False,
+        include_cluster_prefix=False,
+    )
+
+    # Filename should not have cluster prefix
+    assert out[0]["filename"] == "query_qid_1.json"
+
+
+@pytest.mark.unit
+def test_generate_per_query_jsons_with_single_node(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    """Test generate_per_query_jsons with explicit node_name (backward compatibility)."""
+    monkeypatch.setattr(
+        generator,
+        "extract_queryids_from_reports",
+        lambda reports: {"db1": {"qid_1"}},
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_queryid_queries_from_sink",
+        lambda *args, **kwargs: {"db1": {"qid_1": "SELECT 1"}},
+    )
+    monkeypatch.setattr(generator, "get_query_metrics_from_prometheus", _fake_metrics)
+
+    out = generator.generate_per_query_jsons(
+        reports={"K001": {}},
+        cluster="prod",
+        node_name="node-01",  # Explicit node
+        hours=24,
+        write_immediately=False,
+    )
+
+    assert len(out) == 1
+    data = out[0]["data"]
+
+    # Should have only the specified node
+    assert set(data["results"].keys()) == {"node-01"}
+    assert data["nodes"]["primary"] == "node-01"
+    assert data["nodes"]["standbys"] == []
+
+
+@pytest.mark.unit
+def test_generate_per_query_jsons_uses_default_node_when_none_found(
+    monkeypatch: pytest.MonkeyPatch,
+    generator: PostgresReportGenerator,
+) -> None:
+    """Test that default node-01 is used when no nodes are found."""
+    monkeypatch.setattr(
+        generator,
+        "extract_queryids_from_reports",
+        lambda reports: {"db1": {"qid_1"}},
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_queryid_queries_from_sink",
+        lambda *args, **kwargs: {"db1": {"qid_1": "SELECT 1"}},
+    )
+    monkeypatch.setattr(
+        generator,
+        "get_all_nodes",
+        lambda cluster: {"primary": None, "standbys": []},  # No nodes found
+    )
+    monkeypatch.setattr(generator, "get_query_metrics_from_prometheus", _fake_metrics)
+
+    out = generator.generate_per_query_jsons(
+        reports={"K001": {}},
+        cluster="prod",
+        node_name=None,
+        hours=24,
+        write_immediately=False,
+    )
+
+    assert len(out) == 1
+    data = out[0]["data"]
+
+    # Should fall back to node-01
+    assert set(data["results"].keys()) == {"node-01"}
+    assert data["nodes"]["primary"] == "node-01"
+
+
