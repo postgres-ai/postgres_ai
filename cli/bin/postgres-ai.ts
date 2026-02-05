@@ -2074,6 +2074,85 @@ function checkRunningContainers(): { running: boolean; containers: string[] } {
 }
 
 /**
+ * Register monitoring instance with the API (non-blocking).
+ * Returns immediately, logs result in background.
+ */
+function registerMonitoringInstance(
+  apiKey: string,
+  projectName: string,
+  opts?: { apiBaseUrl?: string; debug?: boolean }
+): void {
+  const { apiBaseUrl } = resolveBaseUrls(opts);
+  const url = `${apiBaseUrl}/rpc/monitoring_instance_register`;
+  const debug = opts?.debug;
+
+  if (debug) {
+    console.log(`\nDebug: Registering monitoring instance...`);
+    console.log(`Debug: POST ${url}`);
+    console.log(`Debug: project_name=${projectName}`);
+  }
+
+  // Fire and forget - don't block the main flow
+  fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      api_token: apiKey,
+      project_name: projectName,
+    }),
+  })
+    .then(async (res) => {
+      const body = await res.text().catch(() => "");
+      if (!res.ok) {
+        if (debug) {
+          console.log(`Debug: Monitoring registration failed: HTTP ${res.status}`);
+          console.log(`Debug: Response: ${body}`);
+        }
+        return;
+      }
+      if (debug) {
+        console.log(`Debug: Monitoring registration response: ${body}`);
+      }
+    })
+    .catch((err) => {
+      if (debug) {
+        console.log(`Debug: Monitoring registration error: ${err.message}`);
+      }
+    });
+}
+
+/**
+ * Update .pgwatch-config file with key=value pairs.
+ * Preserves existing values not being updated.
+ */
+function updatePgwatchConfig(configPath: string, updates: Record<string, string>): void {
+  let lines: string[] = [];
+
+  // Read existing config if it exists
+  if (fs.existsSync(configPath)) {
+    const stats = fs.statSync(configPath);
+    if (!stats.isDirectory()) {
+      const content = fs.readFileSync(configPath, "utf8");
+      lines = content.split(/\r?\n/).filter(l => l.trim() !== "");
+    }
+  }
+
+  // Update or add each key
+  for (const [key, value] of Object.entries(updates)) {
+    const existingIndex = lines.findIndex(l => l.startsWith(key + "="));
+    if (existingIndex >= 0) {
+      lines[existingIndex] = `${key}=${value}`;
+    } else {
+      lines.push(`${key}=${value}`);
+    }
+  }
+
+  fs.writeFileSync(configPath, lines.join("\n") + "\n", { encoding: "utf8", mode: 0o600 });
+}
+
+/**
  * Run docker compose command
  */
 async function runCompose(args: string[], grafanaPassword?: string): Promise<number> {
@@ -2157,12 +2236,13 @@ mon
   .option("--api-key <key>", "Postgres AI API key for automated report uploads")
   .option("--db-url <url>", "PostgreSQL connection URL to monitor")
   .option("--tag <tag>", "Docker image tag to use (e.g., 0.14.0, 0.14.0-dev.33)")
+  .option("--project <name>", "Docker Compose project name (default: postgres_ai)")
   .option("-y, --yes", "accept all defaults and skip interactive prompts", false)
-  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; yes: boolean }) => {
+  .action(async (opts: { demo: boolean; apiKey?: string; dbUrl?: string; tag?: string; project?: string; yes: boolean }) => {
     // Get apiKey from global program options (--api-key is defined globally)
     // This is needed because Commander.js routes --api-key to the global option, not the subcommand's option
     const globalOpts = program.opts<CliOptions>();
-    const apiKey = opts.apiKey || globalOpts.apiKey;
+    let apiKey = opts.apiKey || globalOpts.apiKey;
 
     console.log("\n=================================");
     console.log("  PostgresAI monitoring local install");
@@ -2172,6 +2252,13 @@ mon
     // Ensure we have a project directory with docker-compose.yml even if running from elsewhere
     const { projectDir } = await resolveOrInitPaths();
     console.log(`Project directory: ${projectDir}\n`);
+
+    // Save project name to .pgwatch-config if provided (used by reporter container)
+    if (opts.project) {
+      const cfgPath = path.resolve(projectDir, ".pgwatch-config");
+      updatePgwatchConfig(cfgPath, { project_name: opts.project });
+      console.log(`Using project name: ${opts.project}\n`);
+    }
 
     // Update .env with custom tag if provided
     const envFile = path.resolve(projectDir, ".env");
@@ -2242,10 +2329,7 @@ mon
         console.log("Using API key provided via --api-key parameter");
         config.writeConfig({ apiKey });
         // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
-        fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${apiKey}\n`, {
-          encoding: "utf8",
-          mode: 0o600
-        });
+        updatePgwatchConfig(path.resolve(projectDir, ".pgwatch-config"), { api_key: apiKey });
         console.log("✓ API key saved\n");
       } else if (opts.yes) {
         // Auto-yes mode without API key - skip API key setup
@@ -2264,10 +2348,8 @@ mon
             if (trimmedKey) {
               config.writeConfig({ apiKey: trimmedKey });
               // Keep reporter compatibility (docker-compose mounts .pgwatch-config)
-              fs.writeFileSync(path.resolve(projectDir, ".pgwatch-config"), `api_key=${trimmedKey}\n`, {
-                encoding: "utf8",
-                mode: 0o600
-              });
+              updatePgwatchConfig(path.resolve(projectDir, ".pgwatch-config"), { api_key: trimmedKey });
+              apiKey = trimmedKey;  // Update for later use in registerMonitoringInstance
               console.log("✓ API key saved\n");
               break;
             }
@@ -2453,6 +2535,15 @@ mon
       return;
     }
     console.log("✓ Services started\n");
+
+    // Register monitoring instance with API (non-blocking, only if API key is configured)
+    if (apiKey && !opts.demo) {
+      const projectName = opts.project || "postgres-ai-monitoring";
+      registerMonitoringInstance(apiKey, projectName, {
+        apiBaseUrl: globalOpts.apiBaseUrl,
+        debug: !!process.env.DEBUG,
+      });
+    }
 
     // Final summary
     console.log("=================================");

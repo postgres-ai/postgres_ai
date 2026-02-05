@@ -11,7 +11,8 @@ use_current_time="${USE_CURRENT_TIME:-false}"
 
 pgwatch_config_path="${REPORTER_PGWATCH_CONFIG_PATH:-/app/.pgwatch-config}"
 api_url="${REPORTER_API_URL:-https://postgres.ai/api/general}"
-project_name="${REPORTER_PROJECT_NAME:-postgres-ai-monitoring}"
+# Project name: env var takes priority, then config file, then default
+project_name="${REPORTER_PROJECT_NAME:-}"
 
 sleep_seconds() {
   local s
@@ -40,6 +41,33 @@ read_api_key() {
   fi
   return 1
 }
+
+read_project_name() {
+  local name
+  if [[ ! -f "${pgwatch_config_path}" ]]; then
+    return 1
+  fi
+  name="$(
+    grep -E '^project_name=' "${pgwatch_config_path}" 2>/dev/null \
+      | head -n 1 \
+      | cut -d'=' -f2- \
+      | tr -d '\r'
+  )"
+  if [[ -n "${name:-}" ]]; then
+    printf '%s' "${name}"
+    return 0
+  fi
+  return 1
+}
+
+# Resolve project name: env var > config file > default
+if [[ -z "${project_name}" ]]; then
+  if config_project_name="$(read_project_name)"; then
+    project_name="${config_project_name}"
+  else
+    project_name="postgres-ai-monitoring"
+  fi
+fi
 
 echo "postgres-reports: initial_delay_seconds=${initial_delay_seconds}, interval_seconds=${interval_seconds}"
 sleep_seconds "$initial_delay_seconds"
