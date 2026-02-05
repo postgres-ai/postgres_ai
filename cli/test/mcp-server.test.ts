@@ -77,6 +77,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("list_issues"));
@@ -93,6 +94,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       // Mock fetch to verify API key is used
@@ -121,6 +123,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedHeaders: Record<string, string> | undefined;
@@ -150,6 +153,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedHeaders: Record<string, string> | undefined;
@@ -184,6 +188,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -211,6 +216,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -238,6 +244,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("view_issue", { issue_id: "" }));
@@ -254,6 +261,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("view_issue", { issue_id: "   " }));
@@ -270,6 +278,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       // Return null for issue (not found)
@@ -299,6 +308,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let callCount = 0;
@@ -339,6 +349,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -357,6 +368,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -375,6 +387,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -408,6 +421,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -445,6 +459,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: 1,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("create_issue", { title: "" }));
@@ -461,6 +476,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: 1,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("create_issue", { title: "   " }));
@@ -477,6 +493,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("create_issue", { title: "Test Issue" }));
@@ -493,6 +510,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: 42,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -521,6 +539,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: 1,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -555,6 +574,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -598,6 +618,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -616,6 +637,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("update_issue", { issue_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }));
@@ -632,6 +654,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -650,6 +673,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -668,6 +692,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -703,6 +728,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -729,6 +755,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -760,6 +787,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -791,6 +819,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -824,6 +853,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -842,6 +872,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -860,6 +891,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -893,6 +925,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -926,6 +959,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("view_action_item", {}));
@@ -942,6 +976,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "" }));
@@ -958,6 +993,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("view_action_item", { action_item_ids: [] }));
@@ -974,6 +1010,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("view_action_item", { action_item_id: "invalid-id-format" }));
@@ -990,6 +1027,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -1027,6 +1065,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -1061,6 +1100,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedUrl: string | undefined;
@@ -1095,6 +1135,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("list_action_items", { issue_id: "" }));
@@ -1111,6 +1152,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("list_action_items", { issue_id: "   " }));
@@ -1132,6 +1174,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -1161,6 +1204,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -1179,6 +1223,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -1197,6 +1242,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -1232,6 +1278,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -1273,6 +1320,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -1310,6 +1358,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -1328,6 +1377,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -1346,6 +1396,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(
@@ -1364,6 +1415,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -1396,6 +1448,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -1427,6 +1480,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       let capturedBody: string | undefined;
@@ -1465,6 +1519,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: null,
         defaultProject: null,
+        projectName: null,
       });
 
       const response = await handleToolCall(createRequest("nonexistent_tool"));
@@ -1483,6 +1538,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: 1,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() =>
@@ -1510,6 +1566,7 @@ describe("MCP Server", () => {
         baseUrl: null,
         orgId: 1,
         defaultProject: null,
+        projectName: null,
       });
 
       globalThis.fetch = mock(() => Promise.reject(new Error("Network error"))) as unknown as typeof fetch;
