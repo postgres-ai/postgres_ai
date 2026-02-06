@@ -343,7 +343,8 @@ function writeReportFiles(reports: Record<string, any>, outputPath: string): voi
   for (const [checkId, report] of Object.entries(reports)) {
     const filePath = path.join(outputPath, `${checkId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(report, null, 2), "utf8");
-    console.log(`✓ ${checkId}: ${filePath}`);
+    const title = report.checkTitle || checkId;
+    console.log(`✓ ${checkId} ${title}: ${filePath}`);
   }
 }
 
@@ -1925,8 +1926,8 @@ program
         }
       }
 
-      // Output JSON to stdout
-      if (shouldPrintJson) {
+      // Output JSON to stdout (unless --output is specified, in which case files are written instead)
+      if (shouldPrintJson && !outputPath) {
         console.log(JSON.stringify(reports, null, 2));
       }
 

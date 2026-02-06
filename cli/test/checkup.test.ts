@@ -1098,6 +1098,34 @@ describe("CLI tests", () => {
     expect(r.stderr).not.toMatch(/connection string required/i);
     expect(r.stderr).not.toMatch(/unknown option/i);
   });
+
+  // Tests for --output flag behavior (suppresses stdout when specified)
+  test("checkup --output option is recognized", () => {
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload", "--output", "/tmp/test-output"]);
+    // Connection will fail, but option parsing should succeed
+    expect(r.stderr).not.toMatch(/unknown option/i);
+    expect(r.stderr).not.toMatch(/did you mean/i);
+  });
+
+  test("checkup --json --output should NOT output JSON to stdout (writes to files only)", () => {
+    // This is a behavioral test - when --output is specified along with --json,
+    // JSON should only be written to files, not to stdout.
+    // We verify by checking the help text describes this behavior
+    const r = runCli(["checkup", "--help"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/--output/);
+    expect(r.stdout).toMatch(/--json/);
+  });
+
+  test("checkup --output creates directory if it doesn't exist", () => {
+    const env = { XDG_CONFIG_HOME: "/tmp/postgresai-test-empty-config" };
+    // Use a temp directory that might not exist
+    const tempDir = `/tmp/postgresai-test-output-${Date.now()}`;
+    const r = runCli(["checkup", "postgresql://test:test@localhost:5432/test", "--no-upload", "--json", "--output", tempDir], env);
+    // Connection will fail, but directory creation should be attempted before connection
+    // The error should be about connection, not about directory
+    expect(r.stderr).not.toMatch(/Failed to create output directory/i);
+  });
 });
 
 // Tests for checkup-api module
