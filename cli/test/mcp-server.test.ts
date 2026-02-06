@@ -1531,6 +1531,396 @@ describe("MCP Server", () => {
     });
   });
 
+  describe("list_reports tool", () => {
+    test("successfully returns reports list as JSON", async () => {
+      const mockReports = [
+        { id: 1, org_id: 1, org_name: "TestOrg", project_id: 10, project_name: "prod-db", status: "completed" },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(mockReports), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      ) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("list_reports"));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].status).toBe("completed");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("passes filters to API", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await handleToolCall(createRequest("list_reports", {
+        project_id: 5,
+        status: "completed",
+        limit: 10,
+      }));
+
+      expect(capturedUrl).toContain("project_id=eq.5");
+      expect(capturedUrl).toContain("status=eq.completed");
+      expect(capturedUrl).toContain("limit=10");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("handles API errors gracefully", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response('{"message": "Unauthorized"}', {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      ) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("list_reports"));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toContain("401");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("passes before_date to API as created_at filter", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await handleToolCall(createRequest("list_reports", {
+        before_date: "2025-01-15",
+      }));
+
+      expect(capturedUrl).toContain("created_at=lt.2025-01-15");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("fetches all reports when all=true", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      const mockReports = [
+        { id: 10, org_id: 1, org_name: "O", project_id: 1, project_name: "P", status: "completed" },
+      ];
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(mockReports), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      ) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("list_reports", {
+        all: true,
+      }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].id).toBe(10);
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
+  describe("list_report_files tool", () => {
+    test("returns error when neither report_id nor check_id is provided", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      const response = await handleToolCall(createRequest("list_report_files", {}));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toContain("Either report_id or check_id is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("works with only check_id (no report_id)", async () => {
+      const mockFiles = [
+        { id: 100, checkup_report_id: 1, filename: "H002.md", check_id: "H002", type: "md" },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify(mockFiles), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("list_report_files", {
+        check_id: "H002",
+      }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed[0].filename).toBe("H002.md");
+      expect(capturedUrl).toContain("check_id=eq.H002");
+      expect(capturedUrl).not.toContain("checkup_report_id");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully returns report files", async () => {
+      const mockFiles = [
+        { id: 100, checkup_report_id: 1, filename: "H002.md", check_id: "H002", type: "md" },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify(mockFiles), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("list_report_files", {
+        report_id: 1,
+        type: "md",
+        check_id: "H002",
+      }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed[0].filename).toBe("H002.md");
+      expect(capturedUrl).toContain("checkup_report_id=eq.1");
+      expect(capturedUrl).toContain("type=eq.md");
+      expect(capturedUrl).toContain("check_id=eq.H002");
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
+  describe("get_report_data tool", () => {
+    test("returns error when neither report_id nor check_id is provided", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      const response = await handleToolCall(createRequest("get_report_data", {}));
+
+      expect(response.isError).toBe(true);
+      expect(getResponseText(response)).toContain("Either report_id or check_id is required");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("works with only check_id (no report_id)", async () => {
+      const mockData = [
+        {
+          id: 100,
+          checkup_report_id: 1,
+          filename: "H002.md",
+          check_id: "H002",
+          type: "md",
+          data: "# H002\n\nUnused indexes found.",
+        },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify(mockData), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("get_report_data", {
+        check_id: "H002",
+      }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed[0].data).toContain("# H002");
+      expect(capturedUrl).toContain("check_id=eq.H002");
+      expect(capturedUrl).not.toContain("checkup_report_id");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("successfully returns report data with content", async () => {
+      const mockData = [
+        {
+          id: 100,
+          checkup_report_id: 1,
+          filename: "H002.md",
+          check_id: "H002",
+          type: "md",
+          data: "# H002\n\nUnused indexes found.",
+        },
+      ];
+
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(mockData), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      ) as unknown as typeof fetch;
+
+      const response = await handleToolCall(createRequest("get_report_data", {
+        report_id: 1,
+        type: "md",
+        check_id: "H002",
+      }));
+
+      expect(response.isError).toBeUndefined();
+      const parsed = JSON.parse(getResponseText(response));
+      expect(parsed[0].data).toContain("# H002");
+
+      readConfigSpy.mockRestore();
+    });
+
+    test("passes filters to API", async () => {
+      const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
+        apiKey: "test-key",
+        baseUrl: null,
+        orgId: null,
+        defaultProject: null,
+        projectName: null,
+      });
+
+      let capturedUrl: string | undefined;
+      globalThis.fetch = mock((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await handleToolCall(createRequest("get_report_data", {
+        report_id: 42,
+        type: "json",
+        check_id: "F004",
+      }));
+
+      expect(capturedUrl).toContain("checkup_report_id=eq.42");
+      expect(capturedUrl).toContain("type=eq.json");
+      expect(capturedUrl).toContain("check_id=eq.F004");
+
+      readConfigSpy.mockRestore();
+    });
+  });
+
   describe("error propagation", () => {
     test("propagates API errors through MCP layer", async () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({

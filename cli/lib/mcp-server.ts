@@ -14,6 +14,7 @@ import {
   updateActionItem,
   type ConfigChange,
 } from "./issues";
+import { fetchReports, fetchAllReports, fetchReportFiles, fetchReportFileData, parseFlexibleDate } from "./reports";
 import { resolveBaseUrls } from "./util";
 
 // MCP SDK imports - Bun handles these directly
@@ -250,6 +251,50 @@ export async function handleToolCall(
       return { content: [{ type: "text", text: JSON.stringify({ success: true }, null, 2) }] };
     }
 
+    // Reports Tools
+    if (toolName === "list_reports") {
+      const projectId = args.project_id !== undefined ? Number(args.project_id) : undefined;
+      const status = args.status ? String(args.status) : undefined;
+      const limit = args.limit !== undefined ? Number(args.limit) : undefined;
+      const beforeDate = args.before_date ? parseFlexibleDate(String(args.before_date)) : undefined;
+      const all = args.all === true;
+      let reports;
+      if (all) {
+        reports = await fetchAllReports({ apiKey, apiBaseUrl, projectId, status, limit, debug });
+      } else {
+        reports = await fetchReports({ apiKey, apiBaseUrl, projectId, status, limit, beforeDate, debug });
+      }
+      return { content: [{ type: "text", text: JSON.stringify(reports, null, 2) }] };
+    }
+
+    if (toolName === "list_report_files") {
+      const reportId = args.report_id !== undefined ? Number(args.report_id) : undefined;
+      if (reportId !== undefined && isNaN(reportId)) {
+        return { content: [{ type: "text", text: "report_id must be a number" }], isError: true };
+      }
+      const type = args.type ? String(args.type) as "json" | "md" : undefined;
+      const checkId = args.check_id ? String(args.check_id) : undefined;
+      if (reportId === undefined && !checkId) {
+        return { content: [{ type: "text", text: "Either report_id or check_id is required" }], isError: true };
+      }
+      const files = await fetchReportFiles({ apiKey, apiBaseUrl, reportId, type, checkId, debug });
+      return { content: [{ type: "text", text: JSON.stringify(files, null, 2) }] };
+    }
+
+    if (toolName === "get_report_data") {
+      const reportId = args.report_id !== undefined ? Number(args.report_id) : undefined;
+      if (reportId !== undefined && isNaN(reportId)) {
+        return { content: [{ type: "text", text: "report_id must be a number" }], isError: true };
+      }
+      const type = args.type ? String(args.type) as "json" | "md" : undefined;
+      const checkId = args.check_id ? String(args.check_id) : undefined;
+      if (reportId === undefined && !checkId) {
+        return { content: [{ type: "text", text: "Either report_id or check_id is required" }], isError: true };
+      }
+      const files = await fetchReportFileData({ apiKey, apiBaseUrl, reportId, type, checkId, debug });
+      return { content: [{ type: "text", text: JSON.stringify(files, null, 2) }] };
+    }
+
     throw new Error(`Unknown tool: ${toolName}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -439,6 +484,51 @@ export async function startMcpServer(rootOpts?: RootOptsLike, extra?: { debug?: 
               debug: { type: "boolean", description: "Enable verbose debug logs" },
             },
             required: ["action_item_id"],
+            additionalProperties: false,
+          },
+        },
+        // Reports Tools
+        {
+          name: "list_reports",
+          description: "List checkup reports. Returns report metadata: id, project, status, timestamps. Use get_report_data to fetch actual report content. Supports date-based filtering with before_date.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              project_id: { type: "number", description: "Filter by project ID" },
+              status: { type: "string", description: "Filter by status (e.g., 'completed')" },
+              limit: { type: "number", description: "Max number of reports to return (default: 20)" },
+              before_date: { type: "string", description: "Show reports created before this date (YYYY-MM-DD, DD.MM.YYYY, YYYY-MM-DD HH:mm, etc.)" },
+              all: { type: "boolean", description: "Fetch all reports (paginated automatically)" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "list_report_files",
+          description: "List files in a checkup report (metadata only, no content). Each report contains json (raw data) and md (markdown analysis) files per check. Either report_id or check_id must be provided.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              report_id: { type: "number", description: "Checkup report ID (optional if check_id is provided)" },
+              type: { type: "string", description: "Filter by file type: 'json' or 'md'" },
+              check_id: { type: "string", description: "Filter by check ID (e.g., 'H002', 'F004')" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
+            additionalProperties: false,
+          },
+        },
+        {
+          name: "get_report_data",
+          description: "Get checkup report file content. Returns files with a 'data' field containing the actual content: markdown analysis or JSON raw data. Use type='md' for human-readable analysis with recommendations, type='json' for raw check data. Either report_id or check_id must be provided.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              report_id: { type: "number", description: "Checkup report ID (optional if check_id is provided)" },
+              type: { type: "string", description: "Filter by file type: 'json' for raw data, 'md' for markdown analysis" },
+              check_id: { type: "string", description: "Filter by check ID (e.g., 'H002', 'F004')" },
+              debug: { type: "boolean", description: "Enable verbose debug logs" },
+            },
             additionalProperties: false,
           },
         },
