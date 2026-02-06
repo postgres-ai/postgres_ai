@@ -299,6 +299,90 @@ describe("CLI reports command group", () => {
     }
   });
 
+  test("reports list --limit caps at 100", async () => {
+    const api = await startFakeApi();
+    try {
+      await runCliAsync(
+        ["reports", "list", "--limit", "200"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+
+      const req = api.requests.find((x) =>
+        x.pathname.endsWith("/checkup_reports")
+      );
+      expect(req).toBeTruthy();
+      expect(req!.searchParams.limit).toBe("100");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("reports list --limit below cap passes through", async () => {
+    const api = await startFakeApi();
+    try {
+      await runCliAsync(
+        ["reports", "list", "--limit", "50"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+
+      const req = api.requests.find((x) =>
+        x.pathname.endsWith("/checkup_reports")
+      );
+      expect(req).toBeTruthy();
+      expect(req!.searchParams.limit).toBe("50");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("reports list --limit with invalid value falls back to default", async () => {
+    const api = await startFakeApi();
+    try {
+      await runCliAsync(
+        ["reports", "list", "--limit", "abc"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+
+      const req = api.requests.find((x) =>
+        x.pathname.endsWith("/checkup_reports")
+      );
+      expect(req).toBeTruthy();
+      expect(req!.searchParams.limit).toBe("20");
+    } finally {
+      api.stop();
+    }
+  });
+
+  test("reports list --limit with negative value clamps to 1", async () => {
+    const api = await startFakeApi();
+    try {
+      await runCliAsync(
+        ["reports", "list", "--limit", "-5"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_API_BASE_URL: api.baseUrl,
+        })
+      );
+
+      const req = api.requests.find((x) =>
+        x.pathname.endsWith("/checkup_reports")
+      );
+      expect(req).toBeTruthy();
+      expect(req!.searchParams.limit).toBe("1");
+    } finally {
+      api.stop();
+    }
+  });
+
   test("reports files succeeds against a fake API", async () => {
     const api = await startFakeApi();
     try {

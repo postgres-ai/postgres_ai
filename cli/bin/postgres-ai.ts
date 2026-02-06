@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import pkg from "../package.json";
 import * as config from "../lib/config";
 import * as yaml from "js-yaml";
@@ -4198,11 +4198,11 @@ reports
   .command("list")
   .description("list checkup reports")
   .option("--project-id <id>", "filter by project id", (v: string) => parseInt(v, 10))
-  .option("--status <status>", "filter by status (e.g., completed)")
-  .option("--limit <n>", "max number of reports to return (default: 20)", (v: string) => parseInt(v, 10))
+  .addOption(new Option("--status <status>", "filter by status (e.g., completed)").hideHelp())
+  .option("--limit <n>", "max number of reports to return (default: 20, max: 100)", (v: string) => { const n = parseInt(v, 10); return Number.isNaN(n) ? 20 : Math.max(1, Math.min(n, 100)); })
   .option("--before <date>", "show reports created before this date (YYYY-MM-DD, DD.MM.YYYY, etc.)")
   .option("--all", "fetch all reports (paginated automatically)")
-  .option("--debug", "enable debug output")
+  .addOption(new Option("--debug", "enable debug output").hideHelp())
   .option("--json", "output raw JSON")
   .action(async (opts: { projectId?: number; status?: string; limit?: number; before?: string; all?: boolean; debug?: boolean; json?: boolean }) => {
     const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching reports...");
@@ -4260,7 +4260,7 @@ reports
   .description("list files of a checkup report (metadata only, no content)")
   .option("--type <type>", "filter by file type: json, md")
   .option("--check-id <id>", "filter by check ID (e.g., H002)")
-  .option("--debug", "enable debug output")
+  .addOption(new Option("--debug", "enable debug output").hideHelp())
   .option("--json", "output raw JSON")
   .action(async (reportId: string | undefined, opts: { type?: "json" | "md"; checkId?: string; debug?: boolean; json?: boolean }) => {
     const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching report files...");
@@ -4317,7 +4317,7 @@ reports
   .option("--check-id <id>", "filter by check ID (e.g., H002)")
   .option("--formatted", "render markdown with ANSI styling (experimental)")
   .option("-o, --output <dir>", "save files to directory (uses original filenames)")
-  .option("--debug", "enable debug output")
+  .addOption(new Option("--debug", "enable debug output").hideHelp())
   .option("--json", "output raw JSON")
   .action(async (reportId: string | undefined, opts: { type?: "json" | "md"; checkId?: string; formatted?: boolean; output?: string; debug?: boolean; json?: boolean }) => {
     const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching report data...");
