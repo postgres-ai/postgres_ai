@@ -11,6 +11,7 @@ import * as crypto from "node:crypto";
 import { Client } from "pg";
 import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment, fetchActionItem, fetchActionItems, createActionItem, updateActionItem, type ConfigChange } from "../lib/issues";
+import { fetchReports, fetchAllReports, fetchReportFiles, fetchReportFileData, renderMarkdownForTerminal, parseFlexibleDate } from "../lib/reports";
 import { resolveBaseUrls } from "../lib/util";
 import { applyInitPlan, applyUninitPlan, buildInitPlan, buildUninitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
 import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, fetchPoolerDatabaseUrl, type PgCompatibleError } from "../lib/supabase";
@@ -4189,6 +4190,228 @@ issues
       process.exitCode = 1;
     }
   });
+
+// Reports management
+const reports = program.command("reports").description("checkup reports management");
+
+reports
+  .command("list")
+  .description("list checkup reports")
+  .option("--project-id <id>", "filter by project id", (v: string) => parseInt(v, 10))
+  .option("--status <status>", "filter by status (e.g., completed)")
+  .option("--limit <n>", "max number of reports to return (default: 20)", (v: string) => parseInt(v, 10))
+  .option("--before <date>", "show reports created before this date (YYYY-MM-DD, DD.MM.YYYY, etc.)")
+  .option("--all", "fetch all reports (paginated automatically)")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (opts: { projectId?: number; status?: string; limit?: number; before?: string; all?: boolean; debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching reports...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+      if (opts.all && opts.before) {
+        spinner.stop();
+        console.error("--all and --before cannot be used together");
+        process.exitCode = 1;
+        return;
+      }
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      let result;
+      if (opts.all) {
+        result = await fetchAllReports({
+          apiKey,
+          apiBaseUrl,
+          projectId: opts.projectId,
+          status: opts.status,
+          limit: opts.limit,
+          debug: !!opts.debug,
+        });
+      } else {
+        result = await fetchReports({
+          apiKey,
+          apiBaseUrl,
+          projectId: opts.projectId,
+          status: opts.status,
+          limit: opts.limit,
+          beforeDate: opts.before ? parseFlexibleDate(opts.before) : undefined,
+          debug: !!opts.debug,
+        });
+      }
+      spinner.stop();
+      printResult(result, opts.json);
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+reports
+  .command("files [reportId]")
+  .description("list files of a checkup report (metadata only, no content)")
+  .option("--type <type>", "filter by file type: json, md")
+  .option("--check-id <id>", "filter by check ID (e.g., H002)")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (reportId: string | undefined, opts: { type?: "json" | "md"; checkId?: string; debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching report files...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+      let numericId: number | undefined;
+      if (reportId !== undefined) {
+        numericId = parseInt(reportId, 10);
+        if (isNaN(numericId)) {
+          spinner.stop();
+          console.error("reportId must be a number");
+          process.exitCode = 1;
+          return;
+        }
+      }
+      if (numericId === undefined && !opts.checkId) {
+        spinner.stop();
+        console.error("Either reportId or --check-id is required");
+        process.exitCode = 1;
+        return;
+      }
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await fetchReportFiles({
+        apiKey,
+        apiBaseUrl,
+        reportId: numericId,
+        type: opts.type,
+        checkId: opts.checkId,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
+      printResult(result, opts.json);
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+reports
+  .command("data [reportId]")
+  .description("get checkup report file data (includes content)")
+  .option("--type <type>", "filter by file type: json, md")
+  .option("--check-id <id>", "filter by check ID (e.g., H002)")
+  .option("--formatted", "render markdown with ANSI styling (experimental)")
+  .option("-o, --output <dir>", "save files to directory (uses original filenames)")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (reportId: string | undefined, opts: { type?: "json" | "md"; checkId?: string; formatted?: boolean; output?: string; debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Fetching report data...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+      let numericId: number | undefined;
+      if (reportId !== undefined) {
+        numericId = parseInt(reportId, 10);
+        if (isNaN(numericId)) {
+          spinner.stop();
+          console.error("reportId must be a number");
+          process.exitCode = 1;
+          return;
+        }
+      }
+      if (numericId === undefined && !opts.checkId) {
+        spinner.stop();
+        console.error("Either reportId or --check-id is required");
+        process.exitCode = 1;
+        return;
+      }
+      const { apiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      // Default to "md" for terminal output (human-readable); --json and --output get all types
+      const effectiveType = opts.type ?? (!opts.json && !opts.output ? "md" as const : undefined);
+      const result = await fetchReportFileData({
+        apiKey,
+        apiBaseUrl,
+        reportId: numericId,
+        type: effectiveType,
+        checkId: opts.checkId,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
+
+      if (opts.output) {
+        const dir = path.resolve(opts.output);
+        fs.mkdirSync(dir, { recursive: true });
+        for (const f of result) {
+          const safeName = path.basename(f.filename);
+          const filePath = path.join(dir, safeName);
+          const content = f.type === "json"
+            ? JSON.stringify(tryParseJson(f.data), null, 2)
+            : f.data;
+          fs.writeFileSync(filePath, content, "utf-8");
+          console.log(filePath);
+        }
+      } else if (opts.json) {
+        const processed = result.map((f) => ({
+          ...f,
+          data: f.type === "json" ? tryParseJson(f.data) : f.data,
+        }));
+        printResult(processed, true);
+      } else if (opts.formatted && process.stdout.isTTY) {
+        for (const f of result) {
+          if (result.length > 1) {
+            console.log(`\x1b[1m--- ${f.filename} (${f.check_id}, ${f.type}) ---\x1b[0m`);
+          }
+          if (f.type === "md") {
+            console.log(renderMarkdownForTerminal(f.data));
+          } else if (f.type === "json") {
+            const parsed = tryParseJson(f.data);
+            console.log(typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2));
+          } else {
+            console.log(f.data);
+          }
+        }
+      } else {
+        for (const f of result) {
+          if (result.length > 1) {
+            console.log(`--- ${f.filename} (${f.check_id}, ${f.type}) ---`);
+          }
+          console.log(f.data);
+        }
+      }
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+function tryParseJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return s; }
+}
 
 // MCP server
 const mcp = program.command("mcp").description("MCP server integration");
