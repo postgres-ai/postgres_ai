@@ -149,7 +149,7 @@ export async function connectWithSslFallback(
     }
 
     if (verbose) {
-      console.log("SSL connection failed, retrying without SSL...");
+      console.error("SSL connection failed, retrying without SSL...");
     }
 
     // Retry without SSL

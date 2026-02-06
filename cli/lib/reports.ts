@@ -143,15 +143,15 @@ export async function fetchReports(params: FetchReportsParams): Promise<CheckupR
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), { method: "GET", headers });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response status: ${response.status}`);
   }
 
   const data = await response.text();
@@ -220,15 +220,15 @@ export async function fetchReportFiles(params: FetchReportFilesParams): Promise<
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), { method: "GET", headers });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response status: ${response.status}`);
   }
 
   const data = await response.text();
@@ -275,15 +275,15 @@ export async function fetchReportFileData(params: FetchReportFileDataParams): Pr
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), { method: "GET", headers });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response status: ${response.status}`);
   }
 
   const data = await response.text();

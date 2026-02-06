@@ -206,7 +206,7 @@ describe("fetchReports", () => {
   });
 
   test("logs debug info when debug is true", async () => {
-    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     globalThis.fetch = mock(() =>
       Promise.resolve(
@@ -578,7 +578,7 @@ describe("fetchReportFiles", () => {
   });
 
   test("logs debug info when debug is true", async () => {
-    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     globalThis.fetch = mock(() =>
       Promise.resolve(
@@ -796,7 +796,7 @@ describe("fetchReportFileData", () => {
   });
 
   test("logs debug info when debug is true", async () => {
-    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
 
     globalThis.fetch = mock(() =>
       Promise.resolve(
