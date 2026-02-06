@@ -841,8 +841,8 @@ program
             } else {
               console.log("✓ prepare-db verify: OK");
               if (v.missingOptional.length > 0) {
-                console.log("⚠ Optional items missing:");
-                for (const m of v.missingOptional) console.log(`- ${m}`);
+                console.error("⚠ Optional items missing:");
+                for (const m of v.missingOptional) console.error(`- ${m}`);
               }
             }
             return;
@@ -973,8 +973,8 @@ program
         } else {
           console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
           if (skippedOptional.length > 0) {
-            console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
-            for (const s of skippedOptional) console.log(`- ${s}`);
+            console.error("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+            for (const s of skippedOptional) console.error(`- ${s}`);
           }
           if (process.stdout.isTTY) {
             console.log(`Applied ${applied.length} steps`);
@@ -1155,8 +1155,8 @@ program
           } else {
             console.log(`✓ prepare-db verify: OK${opts.provider ? ` (provider: ${opts.provider})` : ""}`);
             if (v.missingOptional.length > 0) {
-              console.log("⚠ Optional items missing:");
-              for (const m of v.missingOptional) console.log(`- ${m}`);
+              console.error("⚠ Optional items missing:");
+              for (const m of v.missingOptional) console.error(`- ${m}`);
             }
           }
           return;
@@ -1283,8 +1283,8 @@ program
       } else {
         console.log(opts.resetPassword ? "✓ prepare-db password reset completed" : "✓ prepare-db completed");
         if (skippedOptional.length > 0) {
-          console.log("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
-          for (const s of skippedOptional) console.log(`- ${s}`);
+          console.error("⚠ Some optional steps were skipped (not supported or insufficient privileges):");
+          for (const s of skippedOptional) console.error(`- ${s}`);
         }
         // Keep output compact but still useful
         if (process.stdout.isTTY) {
@@ -1600,11 +1600,11 @@ program
           console.log("✓ unprepare-db completed");
           console.log(`Applied ${applied.length} steps`);
         } else {
-          console.log("⚠ unprepare-db completed with errors");
+          console.error("⚠ unprepare-db completed with errors");
           console.log(`Applied ${applied.length} steps`);
-          console.log("Errors:");
+          console.error("Errors:");
           for (const err of errors) {
-            console.log(`  - ${err}`);
+            console.error(`  - ${err}`);
           }
           process.exitCode = 1;
         }
@@ -2089,9 +2089,9 @@ function registerMonitoringInstance(
   const debug = opts?.debug;
 
   if (debug) {
-    console.log(`\nDebug: Registering monitoring instance...`);
-    console.log(`Debug: POST ${url}`);
-    console.log(`Debug: project_name=${projectName}`);
+    console.error(`\nDebug: Registering monitoring instance...`);
+    console.error(`Debug: POST ${url}`);
+    console.error(`Debug: project_name=${projectName}`);
   }
 
   // Fire and forget - don't block the main flow
@@ -2109,18 +2109,18 @@ function registerMonitoringInstance(
       const body = await res.text().catch(() => "");
       if (!res.ok) {
         if (debug) {
-          console.log(`Debug: Monitoring registration failed: HTTP ${res.status}`);
-          console.log(`Debug: Response: ${body}`);
+          console.error(`Debug: Monitoring registration failed: HTTP ${res.status}`);
+          console.error(`Debug: Response: ${body}`);
         }
         return;
       }
       if (debug) {
-        console.log(`Debug: Monitoring registration response: ${body}`);
+        console.error(`Debug: Monitoring registration response: ${body}`);
       }
     })
     .catch((err) => {
       if (debug) {
-        console.log(`Debug: Monitoring registration error: ${err.message}`);
+        console.error(`Debug: Monitoring registration error: ${err.message}`);
       }
     });
 }
@@ -2300,8 +2300,8 @@ mon
 
     // Validate conflicting options
     if (opts.demo && opts.dbUrl) {
-      console.log("⚠ Both --demo and --db-url provided. Demo mode includes its own database.");
-      console.log("⚠ The --db-url will be ignored in demo mode.\n");
+      console.error("⚠ Both --demo and --db-url provided. Demo mode includes its own database.");
+      console.error("⚠ The --db-url will be ignored in demo mode.\n");
       opts.dbUrl = undefined;
     }
 
@@ -2317,7 +2317,7 @@ mon
     // Check if containers are already running
     const { running, containers } = checkRunningContainers();
     if (running) {
-      console.log(`⚠ Monitoring services are already running: ${containers.join(", ")}`);
+      console.error(`⚠ Monitoring services are already running: ${containers.join(", ")}`);
       console.log("Use 'postgres-ai mon restart' to restart them\n");
       return;
     }
@@ -2336,7 +2336,7 @@ mon
       } else if (opts.yes) {
         // Auto-yes mode without API key - skip API key setup
         console.log("Auto-yes mode: no API key provided, skipping API key setup");
-        console.log("⚠ Reports will be generated locally only");
+        console.error("⚠ Reports will be generated locally only");
         console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
       } else {
         const answer = await question("Do you have a Postgres AI API key? (Y/n): ");
@@ -2356,16 +2356,16 @@ mon
               break;
             }
 
-            console.log("⚠ API key cannot be empty");
+            console.error("⚠ API key cannot be empty");
             const retry = await question("Try again or skip API key setup, retry? (Y/n): ");
             if (retry.toLowerCase() === "n") {
-              console.log("⚠ Skipping API key setup - reports will be generated locally only");
+              console.error("⚠ Skipping API key setup - reports will be generated locally only");
               console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
               break;
             }
           }
         } else {
-          console.log("⚠ Skipping API key setup - reports will be generated locally only");
+          console.error("⚠ Skipping API key setup - reports will be generated locally only");
           console.log("You can add an API key later with: postgres-ai add-key <api_key>\n");
         }
       }
@@ -2425,7 +2425,7 @@ mon
       } else if (opts.yes) {
         // Auto-yes mode without database URL - skip database setup
         console.log("Auto-yes mode: no database URL provided, skipping database setup");
-        console.log("⚠ No PostgreSQL instance added");
+        console.error("⚠ No PostgreSQL instance added");
         console.log("You can add one later with: postgres-ai mon targets add\n");
       } else {
         console.log("You need to add at least one PostgreSQL instance to monitor");
@@ -2443,7 +2443,7 @@ mon
             const m = connStr.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/(.+)$/);
             if (!m) {
               console.error("✗ Invalid connection string format");
-              console.log("⚠ Continuing without adding instance\n");
+              console.error("⚠ Continuing without adding instance\n");
             } else {
               const host = m[3];
               const db = m[5];
@@ -2468,10 +2468,10 @@ mon
               }
             }
           } else {
-            console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
+            console.error("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
           }
         } else {
-          console.log("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
+          console.error("⚠ No PostgreSQL instance added - you can add one later with: postgres-ai mon targets add\n");
         }
       }
     } else {
@@ -2524,7 +2524,7 @@ mon
 
       console.log("✓ Grafana password configured\n");
     } catch (error) {
-      console.log("⚠ Could not generate Grafana password automatically");
+      console.error("⚠ Could not generate Grafana password automatically");
       console.log("Using default password: demo\n");
       grafanaPassword = "demo";
     }
@@ -2916,7 +2916,7 @@ mon
       if (downCode === 0) {
         console.log("✓ Monitoring services stopped and removed");
       } else {
-        console.log("⚠ Could not stop services (may not be running)");
+        console.error("⚠ Could not stop services (may not be running)");
       }
 
       // Remove any orphaned containers that docker compose down missed
@@ -3229,8 +3229,8 @@ auth
     const { apiBaseUrl, uiBaseUrl } = resolveBaseUrls(rootOpts, cfg);
 
     if (opts.debug) {
-      console.log(`Debug: Resolved API base URL: ${apiBaseUrl}`);
-      console.log(`Debug: Resolved UI base URL: ${uiBaseUrl}`);
+      console.error(`Debug: Resolved API base URL: ${apiBaseUrl}`);
+      console.error(`Debug: Resolved UI base URL: ${uiBaseUrl}`);
     }
 
     try {
@@ -3260,8 +3260,8 @@ auth
       const initUrl = new URL(`${apiBaseUrl}/rpc/oauth_init`);
 
       if (opts.debug) {
-        console.log(`Debug: Trying to POST to: ${initUrl.toString()}`);
-        console.log(`Debug: Request data: ${initData}`);
+        console.error(`Debug: Trying to POST to: ${initUrl.toString()}`);
+        console.error(`Debug: Request data: ${initData}`);
       }
 
       // Step 2: Initialize OAuth session on backend using fetch
@@ -3307,7 +3307,7 @@ auth
       const authUrl = `${uiBaseUrl}/cli/auth?state=${encodeURIComponent(params.state)}&code_challenge=${encodeURIComponent(params.codeChallenge)}&code_challenge_method=S256&redirect_uri=${encodeURIComponent(redirectUri)}&api_url=${encodeURIComponent(apiBaseUrl)}`;
 
       if (opts.debug) {
-        console.log(`Debug: Auth URL: ${authUrl}`);
+        console.error(`Debug: Auth URL: ${authUrl}`);
       }
 
       console.log(`\nOpening browser for authentication...`);
@@ -3731,12 +3731,12 @@ issues
     // Interpret escape sequences in content (e.g., \n -> newline)
     if (opts.debug) {
       // eslint-disable-next-line no-console
-      console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+      console.error(`Debug: Original content: ${JSON.stringify(content)}`);
     }
     content = interpretEscapes(content);
     if (opts.debug) {
       // eslint-disable-next-line no-console
-      console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+      console.error(`Debug: Interpreted content: ${JSON.stringify(content)}`);
     }
 
     const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Posting comment...");
@@ -3930,12 +3930,12 @@ issues
   .action(async (commentId: string, content: string, opts: { debug?: boolean; json?: boolean }) => {
     if (opts.debug) {
       // eslint-disable-next-line no-console
-      console.log(`Debug: Original content: ${JSON.stringify(content)}`);
+      console.error(`Debug: Original content: ${JSON.stringify(content)}`);
     }
     content = interpretEscapes(content);
     if (opts.debug) {
       // eslint-disable-next-line no-console
-      console.log(`Debug: Interpreted content: ${JSON.stringify(content)}`);
+      console.error(`Debug: Interpreted content: ${JSON.stringify(content)}`);
     }
 
     const rootOpts = program.opts<CliOptions>();

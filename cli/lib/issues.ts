@@ -130,10 +130,10 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListI
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -142,8 +142,8 @@ export async function fetchIssues(params: FetchIssuesParams): Promise<IssueListI
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -188,10 +188,10 @@ export async function fetchIssueComments(params: FetchIssueCommentsParams): Prom
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -200,8 +200,8 @@ export async function fetchIssueComments(params: FetchIssueCommentsParams): Prom
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -248,10 +248,10 @@ export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail 
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -260,8 +260,8 @@ export async function fetchIssue(params: FetchIssueParams): Promise<IssueDetail 
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -369,11 +369,11 @@ export async function createIssue(params: CreateIssueParams): Promise<CreatedIss
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: POST URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    console.log(`Debug: Request body: ${body}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: POST URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Request body: ${body}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -383,8 +383,8 @@ export async function createIssue(params: CreateIssueParams): Promise<CreatedIss
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -442,11 +442,11 @@ export async function createIssueComment(params: CreateIssueCommentParams): Prom
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: POST URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    console.log(`Debug: Request body: ${body}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: POST URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Request body: ${body}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -456,8 +456,8 @@ export async function createIssueComment(params: CreateIssueCommentParams): Prom
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -550,11 +550,11 @@ export async function updateIssue(params: UpdateIssueParams): Promise<UpdatedIss
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: POST URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    console.log(`Debug: Request body: ${body}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: POST URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Request body: ${body}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -564,8 +564,8 @@ export async function updateIssue(params: UpdateIssueParams): Promise<UpdatedIss
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -639,11 +639,11 @@ export async function updateIssueComment(params: UpdateIssueCommentParams): Prom
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: POST URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    console.log(`Debug: Request body: ${body}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: POST URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Request body: ${body}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -653,8 +653,8 @@ export async function updateIssueComment(params: UpdateIssueCommentParams): Prom
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -736,10 +736,10 @@ export async function fetchActionItem(params: FetchActionItemParams): Promise<Is
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -748,8 +748,8 @@ export async function fetchActionItem(params: FetchActionItemParams): Promise<Is
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -814,10 +814,10 @@ export async function fetchActionItems(params: FetchActionItemsParams): Promise<
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: GET URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: GET URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -826,8 +826,8 @@ export async function fetchActionItems(params: FetchActionItemsParams): Promise<
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -913,11 +913,11 @@ export async function createActionItem(params: CreateActionItemParams): Promise<
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: POST URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    console.log(`Debug: Request body: ${body}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: POST URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Request body: ${body}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -927,8 +927,8 @@ export async function createActionItem(params: CreateActionItemParams): Promise<
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   const data = await response.text();
@@ -1035,11 +1035,11 @@ export async function updateActionItem(params: UpdateActionItemParams): Promise<
 
   if (debug) {
     const debugHeaders: Record<string, string> = { ...headers, "access-token": maskSecret(apiKey) };
-    console.log(`Debug: Resolved API base URL: ${base}`);
-    console.log(`Debug: POST URL: ${url.toString()}`);
-    console.log(`Debug: Auth scheme: access-token`);
-    console.log(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
-    console.log(`Debug: Request body: ${body}`);
+    console.error(`Debug: Resolved API base URL: ${base}`);
+    console.error(`Debug: POST URL: ${url.toString()}`);
+    console.error(`Debug: Auth scheme: access-token`);
+    console.error(`Debug: Request headers: ${JSON.stringify(debugHeaders)}`);
+    console.error(`Debug: Request body: ${body}`);
   }
 
   const response = await fetch(url.toString(), {
@@ -1049,8 +1049,8 @@ export async function updateActionItem(params: UpdateActionItemParams): Promise<
   });
 
   if (debug) {
-    console.log(`Debug: Response status: ${response.status}`);
-    console.log(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+    console.error(`Debug: Response status: ${response.status}`);
+    console.error(`Debug: Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
   }
 
   if (!response.ok) {

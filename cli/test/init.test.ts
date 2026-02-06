@@ -1067,7 +1067,7 @@ describe("CLI commands", () => {
 
     // Should indicate auto-yes mode without API key
     expect(r.stdout).toMatch(/Auto-yes mode: no API key provided/);
-    expect(r.stdout).toMatch(/Reports will be generated locally only/);
+    expect(r.stderr).toMatch(/Reports will be generated locally only/);
   });
 
   test("cli: mon local-install --demo with global --api-key shows error", () => {

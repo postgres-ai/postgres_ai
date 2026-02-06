@@ -284,7 +284,7 @@ export function parseVersionNum(versionNum: string): { major: string; minor: str
   } catch (err) {
     // parseInt shouldn't throw, but handle edge cases defensively
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[parseVersionNum] Warning: Failed to parse "${versionNum}": ${errorMsg}`);
+    console.error(`[parseVersionNum] Warning: Failed to parse "${versionNum}": ${errorMsg}`);
     return { major: "", minor: "" };
   }
 }
@@ -729,7 +729,7 @@ export async function getStatsReset(client: Client, pgMajorVersion: number = 16)
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     postmasterStartupError = `Failed to query postmaster start time: ${errorMsg}`;
-    console.log(`[getStatsReset] Warning: ${postmasterStartupError}`);
+    console.error(`[getStatsReset] Warning: ${postmasterStartupError}`);
   }
   
   const statsResult: StatsReset = {
@@ -811,7 +811,7 @@ export async function getRedundantIndexes(client: Client, pgMajorVersion: number
       const errorMsg = err instanceof Error ? err.message : String(err);
       const indexName = String(transformed.index_name || "unknown");
       parseError = `Failed to parse redundant_to_json: ${errorMsg}`;
-      console.log(`[H004] Warning: ${parseError} for index "${indexName}"`);
+      console.error(`[H004] Warning: ${parseError} for index "${indexName}"`);
     }
     
     const result: RedundantIndex = {
@@ -905,7 +905,7 @@ function resolveBuildTs(): string | null {
     // package.json not found is expected in some environments (e.g., bundled) - debug only
     if (process.env.DEBUG) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      console.log(`[resolveBuildTs] Could not stat package.json, using current time: ${errorMsg}`);
+      console.error(`[resolveBuildTs] Could not stat package.json, using current time: ${errorMsg}`);
     }
     return new Date().toISOString();
   }
@@ -1103,7 +1103,7 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[D004] Error querying pg_stat_statements: ${errorMsg}`);
+    console.error(`[D004] Error querying pg_stat_statements: ${errorMsg}`);
     pgssError = errorMsg;
   }
 
@@ -1156,7 +1156,7 @@ async function generateD004(client: Client, nodeName: string): Promise<Report> {
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[D004] Error querying pg_stat_kcache: ${errorMsg}`);
+    console.error(`[D004] Error querying pg_stat_kcache: ${errorMsg}`);
     kcacheError = errorMsg;
   }
 
@@ -1324,7 +1324,10 @@ async function generateF004(client: Client, nodeName: string): Promise<Report> {
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[F004] Error estimating table bloat: ${errorMsg}`);
+    console.error(`[F004] Error estimating table bloat: ${errorMsg}`);
+    if (errorMsg.includes("postgres_ai.")) {
+      console.error(`  Hint: Run "postgresai prepare-db <connection>" to create required objects.`);
+    }
   }
 
   // Get database info
@@ -1439,7 +1442,10 @@ async function generateF005(client: Client, nodeName: string): Promise<Report> {
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[F005] Error estimating index bloat: ${errorMsg}`);
+    console.error(`[F005] Error estimating index bloat: ${errorMsg}`);
+    if (errorMsg.includes("postgres_ai.")) {
+      console.error(`  Hint: Run "postgresai prepare-db <connection>" to create required objects.`);
+    }
   }
 
   // Get database info
@@ -1564,7 +1570,7 @@ async function generateG001(client: Client, nodeName: string): Promise<Report> {
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[G001] Error calculating memory usage: ${errorMsg}`);
+    console.error(`[G001] Error calculating memory usage: ${errorMsg}`);
     memoryError = errorMsg;
   }
 
@@ -1642,7 +1648,7 @@ async function generateG003(client: Client, nodeName: string): Promise<Report> {
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.log(`[G003] Error querying deadlock stats: ${errorMsg}`);
+    console.error(`[G003] Error querying deadlock stats: ${errorMsg}`);
     deadlockError = errorMsg;
   }
 
