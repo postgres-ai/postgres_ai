@@ -13,6 +13,7 @@ import { startMcpServer } from "../lib/mcp-server";
 import { fetchIssues, fetchIssueComments, createIssueComment, fetchIssue, createIssue, updateIssue, updateIssueComment, fetchActionItem, fetchActionItems, createActionItem, updateActionItem, type ConfigChange } from "../lib/issues";
 import { fetchReports, fetchAllReports, fetchReportFiles, fetchReportFileData, renderMarkdownForTerminal, parseFlexibleDate } from "../lib/reports";
 import { resolveBaseUrls } from "../lib/util";
+import { uploadFile, downloadFile, buildMarkdownLink } from "../lib/storage";
 import { applyInitPlan, applyUninitPlan, buildInitPlan, buildUninitPlan, connectWithSslFallback, DEFAULT_MONITORING_USER, KNOWN_PROVIDERS, redactPasswordsInSql, resolveAdminConnection, resolveMonitoringPassword, validateProvider, verifyInitSetup } from "../lib/init";
 import { SupabaseClient, resolveSupabaseConfig, extractProjectRefFromUrl, applyInitPlanViaSupabase, verifyInitSetupViaSupabase, fetchPoolerDatabaseUrl, type PgCompatibleError } from "../lib/supabase";
 import * as pkce from "../lib/pkce";
@@ -412,6 +413,7 @@ interface CliOptions {
   apiKey?: string;
   apiBaseUrl?: string;
   uiBaseUrl?: string;
+  storageBaseUrl?: string;
 }
 
 /**
@@ -580,6 +582,10 @@ program
   .option(
     "--ui-base-url <url>",
     "UI base URL for browser routes (overrides PGAI_UI_BASE_URL)"
+  )
+  .option(
+    "--storage-base-url <url>",
+    "Storage base URL for file uploads (overrides PGAI_STORAGE_BASE_URL)"
   );
 
 program
@@ -594,6 +600,27 @@ program
     }
     config.writeConfig({ defaultProject: value });
     console.log(`Default project saved: ${value}`);
+  });
+
+program
+  .command("set-storage-url <url>")
+  .description("store storage base URL for file uploads")
+  .action(async (url: string) => {
+    const value = (url || "").trim();
+    if (!value) {
+      console.error("Error: url is required");
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const { normalizeBaseUrl } = await import("../lib/util");
+      const normalized = normalizeBaseUrl(value);
+      config.writeConfig({ storageBaseUrl: normalized });
+      console.log(`Storage URL saved: ${normalized}`);
+    } catch {
+      console.error(`Error: invalid URL: ${value}`);
+      process.exitCode = 1;
+    }
   });
 
 program
@@ -3960,6 +3987,93 @@ issues
       });
       spinner.stop();
       printResult(result, opts.json);
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+// File upload/download (subcommands of issues)
+const issueFiles = issues.command("files").description("upload and download files for issues");
+
+issueFiles
+  .command("upload <path>")
+  .description("upload a file to storage and get a markdown link")
+  .option("--debug", "enable debug output")
+  .option("--json", "output raw JSON")
+  .action(async (filePath: string, opts: { debug?: boolean; json?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Uploading file...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { storageBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await uploadFile({
+        apiKey,
+        storageBaseUrl,
+        filePath,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
+
+      if (opts.json) {
+        printResult(result, true);
+      } else {
+        const md = buildMarkdownLink(result.url, storageBaseUrl, result.metadata.originalName);
+        const displayUrl = result.url.startsWith("/") ? `${storageBaseUrl}${result.url}` : `${storageBaseUrl}/${result.url}`;
+        console.log(`URL: ${displayUrl}`);
+        console.log(`File: ${result.metadata.originalName}`);
+        console.log(`Size: ${result.metadata.size} bytes`);
+        console.log(`Type: ${result.metadata.mimeType}`);
+        console.log(`Markdown: ${md}`);
+      }
+    } catch (err) {
+      spinner.stop();
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+issueFiles
+  .command("download <url>")
+  .description("download a file from storage")
+  .option("-o, --output <path>", "output file path (default: derive from URL)")
+  .option("--debug", "enable debug output")
+  .action(async (fileUrl: string, opts: { output?: string; debug?: boolean }) => {
+    const spinner = createTtySpinner(process.stdout.isTTY ?? false, "Downloading file...");
+    try {
+      const rootOpts = program.opts<CliOptions>();
+      const cfg = config.readConfig();
+      const { apiKey } = getConfig(rootOpts);
+      if (!apiKey) {
+        spinner.stop();
+        console.error("API key is required. Run 'pgai auth' first or set --api-key.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const { storageBaseUrl } = resolveBaseUrls(rootOpts, cfg);
+
+      const result = await downloadFile({
+        apiKey,
+        storageBaseUrl,
+        fileUrl,
+        outputPath: opts.output,
+        debug: !!opts.debug,
+      });
+      spinner.stop();
+      console.log(`Saved: ${result.savedTo}`);
     } catch (err) {
       spinner.stop();
       const message = err instanceof Error ? err.message : String(err);

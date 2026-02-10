@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { resolve } from "path";
-import { mkdtempSync } from "fs";
+import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 
 function runCli(args: string[], env: Record<string, string> = {}) {
@@ -536,3 +536,232 @@ describe("CLI action items commands", () => {
   });
 });
 
+async function startFakeStorageServer() {
+  const requests: Array<{
+    method: string;
+    pathname: string;
+    headers: Record<string, string>;
+  }> = [];
+
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url);
+      const headers: Record<string, string> = {};
+      for (const [k, v] of req.headers.entries()) headers[k.toLowerCase()] = v;
+
+      // Consume body to avoid warnings
+      await req.arrayBuffer().catch(() => {});
+
+      requests.push({
+        method: req.method,
+        pathname: url.pathname,
+        headers,
+      });
+
+      // Upload endpoint
+      if (req.method === "POST" && url.pathname === "/upload") {
+        if (!headers["access-token"]) {
+          return new Response(
+            JSON.stringify({ code: "INVALID_API_TOKEN", message: "Missing token" }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            url: "/files/123/1707500000000_test-uuid.png",
+            metadata: {
+              originalName: "test-file.png",
+              size: 16,
+              mimeType: "image/png",
+              uploadedAt: "2025-02-09T12:00:00.000Z",
+              duration: 50,
+            },
+            requestId: "req-test-123",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Download endpoint
+      if (req.method === "GET" && url.pathname.startsWith("/files/")) {
+        if (!headers["access-token"]) {
+          return new Response(
+            JSON.stringify({ code: "INVALID_API_TOKEN", message: "Missing token" }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(Buffer.from("fake-file-content"), {
+          status: 200,
+          headers: { "Content-Type": "image/png" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    },
+  });
+
+  const storageBaseUrl = `http://${server.hostname}:${server.port}`;
+
+  return {
+    storageBaseUrl,
+    requests,
+    stop: () => server.stop(true),
+  };
+}
+
+describe("CLI issues files commands", () => {
+  test("issues files upload fails fast when API key is missing", () => {
+    const r = runCli(["issues", "files", "upload", "/tmp/test.png"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("API key is required");
+  });
+
+  test("issues files upload fails when file does not exist", () => {
+    const r = runCli(
+      ["issues", "files", "upload", "/tmp/nonexistent-file-99999.png"],
+      isolatedEnv({ PGAI_API_KEY: "test-key" })
+    );
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("File not found");
+  });
+
+  test("issues files upload succeeds and shows URL and markdown", async () => {
+    const storage = await startFakeStorageServer();
+    const tmpFile = resolve(mkdtempSync(resolve(tmpdir(), "upload-test-")), "screenshot.png");
+    writeFileSync(tmpFile, "fake-png-content");
+
+    try {
+      const r = await runCliAsync(
+        ["issues", "files", "upload", tmpFile],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_STORAGE_BASE_URL: storage.storageBaseUrl,
+        })
+      );
+
+      expect(r.status).toBe(0);
+      const out = `${r.stdout}\n${r.stderr}`;
+      expect(out).toContain("URL:");
+      expect(out).toContain("/files/123/");
+      expect(out).toContain("Markdown:");
+      expect(out).toContain("![");
+
+      const uploadReq = storage.requests.find((x) => x.pathname === "/upload");
+      expect(uploadReq).toBeTruthy();
+      expect(uploadReq!.headers["access-token"]).toBe("test-key");
+      expect(uploadReq!.method).toBe("POST");
+    } finally {
+      storage.stop();
+    }
+  });
+
+  test("issues files upload --json returns structured JSON", async () => {
+    const storage = await startFakeStorageServer();
+    const tmpFile = resolve(mkdtempSync(resolve(tmpdir(), "upload-json-test-")), "data.txt");
+    writeFileSync(tmpFile, "test-content");
+
+    try {
+      const r = await runCliAsync(
+        ["issues", "files", "upload", tmpFile, "--json"],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_STORAGE_BASE_URL: storage.storageBaseUrl,
+        })
+      );
+
+      expect(r.status).toBe(0);
+      const out = JSON.parse(r.stdout.trim());
+      expect(out.success).toBe(true);
+      expect(out.url).toContain("/files/");
+      expect(out.metadata.originalName).toBe("test-file.png");
+      expect(out.metadata.mimeType).toBe("image/png");
+    } finally {
+      storage.stop();
+    }
+  });
+
+  test("issues files download fails fast when API key is missing", () => {
+    const r = runCli(["issues", "files", "download", "/files/123/test.png"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("API key is required");
+  });
+
+  test("issues files download succeeds and saves file", async () => {
+    const storage = await startFakeStorageServer();
+    const tmpOutDir = mkdtempSync(resolve(tmpdir(), "download-test-"));
+    const outputPath = resolve(tmpOutDir, "downloaded.png");
+
+    try {
+      const r = await runCliAsync(
+        ["issues", "files", "download", "/files/123/image.png", "-o", outputPath],
+        isolatedEnv({
+          PGAI_API_KEY: "test-key",
+          PGAI_STORAGE_BASE_URL: storage.storageBaseUrl,
+        })
+      );
+
+      expect(r.status).toBe(0);
+      const out = `${r.stdout}\n${r.stderr}`;
+      expect(out).toContain("Saved:");
+      expect(out).not.toContain("Size:");
+      expect(out).not.toContain("Type:");
+
+      expect(existsSync(outputPath)).toBe(true);
+      expect(readFileSync(outputPath).toString()).toBe("fake-file-content");
+
+      const downloadReq = storage.requests.find((x) => x.pathname.startsWith("/files/"));
+      expect(downloadReq).toBeTruthy();
+      expect(downloadReq!.headers["access-token"]).toBe("test-key");
+      expect(downloadReq!.method).toBe("GET");
+    } finally {
+      storage.stop();
+    }
+  });
+
+  test("issues help shows files subcommand", () => {
+    const r = runCli(["issues", "--help"], isolatedEnv());
+    expect(r.status).toBe(0);
+    const out = `${r.stdout}\n${r.stderr}`;
+    expect(out).toContain("files");
+  });
+
+  test("issues files help shows upload and download", () => {
+    const r = runCli(["issues", "files", "--help"], isolatedEnv());
+    expect(r.status).toBe(0);
+    const out = `${r.stdout}\n${r.stderr}`;
+    expect(out).toContain("upload");
+    expect(out).toContain("download");
+  });
+});
+
+describe("CLI set-storage-url command", () => {
+  test("saves valid URL to config", () => {
+    const env = isolatedEnv();
+    const r = runCli(["set-storage-url", "https://v2.postgres.ai/storage"], env);
+    expect(r.status).toBe(0);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("Storage URL saved: https://v2.postgres.ai/storage");
+
+    // Verify persisted in config
+    const cfgPath = resolve(env.XDG_CONFIG_HOME, "postgresai", "config.json");
+    const cfg = JSON.parse(readFileSync(cfgPath, "utf-8"));
+    expect(cfg.storageBaseUrl).toBe("https://v2.postgres.ai/storage");
+  });
+
+  test("normalizes trailing slash", () => {
+    const env = isolatedEnv();
+    const r = runCli(["set-storage-url", "https://example.com/storage/"], env);
+    expect(r.status).toBe(0);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("Storage URL saved: https://example.com/storage");
+  });
+
+  test("rejects invalid URL", () => {
+    const r = runCli(["set-storage-url", "not-a-url"], isolatedEnv());
+    expect(r.status).toBe(1);
+    expect(`${r.stdout}\n${r.stderr}`).toContain("invalid URL");
+  });
+});
