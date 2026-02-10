@@ -75,6 +75,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: null,
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -92,6 +93,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: null,
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -121,6 +123,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "config-api-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -151,6 +154,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: null,
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -186,6 +190,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -214,6 +219,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -242,6 +248,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -259,6 +266,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -276,6 +284,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -306,6 +315,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -347,6 +357,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -366,6 +377,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -385,6 +397,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -419,6 +432,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -457,6 +471,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: 1,
         defaultProject: null,
         projectName: null,
@@ -474,6 +489,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: 1,
         defaultProject: null,
         projectName: null,
@@ -491,6 +507,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -508,6 +525,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: 42,
         defaultProject: null,
         projectName: null,
@@ -537,6 +555,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: 1,
         defaultProject: null,
         projectName: null,
@@ -572,6 +591,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -616,6 +636,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -635,6 +656,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -652,6 +674,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -671,6 +694,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -690,6 +714,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -726,6 +751,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -753,6 +779,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -785,6 +812,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -817,6 +845,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -851,6 +880,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -870,6 +900,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -889,6 +920,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -923,6 +955,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -957,6 +990,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -974,6 +1008,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -991,6 +1026,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1008,6 +1044,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1025,6 +1062,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1063,6 +1101,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1098,6 +1137,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1133,6 +1173,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1150,6 +1191,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1172,6 +1214,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1202,6 +1245,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1221,6 +1265,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1240,6 +1285,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1276,6 +1322,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1318,6 +1365,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1356,6 +1404,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1375,6 +1424,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1394,6 +1444,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1413,6 +1464,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1446,6 +1498,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1478,6 +1531,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1517,6 +1571,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1540,6 +1595,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1568,6 +1624,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1601,6 +1658,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1627,6 +1685,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1656,6 +1715,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1692,6 +1752,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1713,6 +1774,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1750,6 +1812,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1788,6 +1851,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1816,6 +1880,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1860,6 +1925,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1891,6 +1957,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: null,
         defaultProject: null,
         projectName: null,
@@ -1926,6 +1993,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: 1,
         defaultProject: null,
         projectName: null,
@@ -1954,6 +2022,7 @@ describe("MCP Server", () => {
       const readConfigSpy = spyOn(config, "readConfig").mockReturnValue({
         apiKey: "test-key",
         baseUrl: null,
+        storageBaseUrl: null,
         orgId: 1,
         defaultProject: null,
         projectName: null,

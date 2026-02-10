@@ -70,15 +70,18 @@ export function maskSecret(secret: string): string {
 export interface RootOptsLike {
   apiBaseUrl?: string;
   uiBaseUrl?: string;
+  storageBaseUrl?: string;
 }
 
 export interface ConfigLike {
   baseUrl?: string | null;
+  storageBaseUrl?: string | null;
 }
 
 export interface ResolvedBaseUrls {
   apiBaseUrl: string;
   uiBaseUrl: string;
+  storageBaseUrl: string;
 }
 
 /**
@@ -105,17 +108,20 @@ export function normalizeBaseUrl(value: string): string {
 export function resolveBaseUrls(
   opts?: RootOptsLike,
   cfg?: ConfigLike,
-  defaults: { apiBaseUrl?: string; uiBaseUrl?: string } = {}
+  defaults: { apiBaseUrl?: string; uiBaseUrl?: string; storageBaseUrl?: string } = {}
 ): ResolvedBaseUrls {
   const defApi = defaults.apiBaseUrl || "https://postgres.ai/api/general/";
   const defUi = defaults.uiBaseUrl || "https://console.postgres.ai";
+  const defStorage = defaults.storageBaseUrl || "https://postgres.ai/storage";
 
   const apiCandidate = (opts?.apiBaseUrl || process.env.PGAI_API_BASE_URL || cfg?.baseUrl || defApi) as string;
   const uiCandidate = (opts?.uiBaseUrl || process.env.PGAI_UI_BASE_URL || defUi) as string;
+  const storageCandidate = (opts?.storageBaseUrl || process.env.PGAI_STORAGE_BASE_URL || cfg?.storageBaseUrl || defStorage) as string;
 
   return {
     apiBaseUrl: normalizeBaseUrl(apiCandidate),
     uiBaseUrl: normalizeBaseUrl(uiCandidate),
+    storageBaseUrl: normalizeBaseUrl(storageCandidate),
   };
 }
 

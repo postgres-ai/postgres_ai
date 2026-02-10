@@ -8,6 +8,7 @@ import * as os from "os";
 export interface Config {
   apiKey: string | null;
   baseUrl: string | null;
+  storageBaseUrl: string | null;
   orgId: number | null;
   defaultProject: string | null;
   /** Docker Compose project name for monitoring stack */
@@ -48,6 +49,7 @@ export function readConfig(): Config {
   const config: Config = {
     apiKey: null,
     baseUrl: null,
+    storageBaseUrl: null,
     orgId: null,
     defaultProject: null,
     projectName: null,
@@ -61,6 +63,7 @@ export function readConfig(): Config {
       const parsed = JSON.parse(content);
       config.apiKey = parsed.apiKey ?? null;
       config.baseUrl = parsed.baseUrl ?? null;
+      config.storageBaseUrl = parsed.storageBaseUrl ?? null;
       config.orgId = parsed.orgId ?? null;
       config.defaultProject = parsed.defaultProject ?? null;
       config.projectName = parsed.projectName ?? null;
