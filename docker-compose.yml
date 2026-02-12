@@ -263,6 +263,7 @@ services:
       - "--docker_only=true"
       - "--disable_metrics=percpu,sched,tcp,udp,hugetlb,referenced_memory,cpu_topology,resctrl"
       - "--store_container_labels=false"
+    restart: unless-stopped
 
   # Node Exporter - System metrics (self-monitoring)
   self-node-exporter:
