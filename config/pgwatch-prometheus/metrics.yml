@@ -2397,7 +2397,9 @@ metrics:
             exists (select from pg_proc where proname = 'pg_stat_file') as has_pg_stat_file_func
         ),
         can_local as (
-          select (has_pg_ls_dir_func and has_pg_stat_file_func) as ok from env
+          select (has_pg_ls_dir_func and has_pg_stat_file_func
+            and has_function_privilege('pg_stat_file(text,boolean)', 'execute')
+          ) as ok from env
         ),
         -- Use query_to_xml to safely execute Aurora-specific multixact query.
         -- Aurora uses aurora_stat_file() function instead of rds_tools.pg_ls_multixactdir().
