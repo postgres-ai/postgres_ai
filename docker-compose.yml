@@ -108,7 +108,9 @@ services:
 
   # PGWatch Instance 1 - Monitoring service (Postgres sink)
   pgwatch-postgres:
-    image: cybertecpostgresql/pgwatch:3
+    image: ${PGAI_REGISTRY:-postgresai}/pgwatch:${PGAI_TAG:?PGAI_TAG is required}
+    build:
+      context: ./pgwatch
     container_name: pgwatch-postgres
     cpus: 0.35
     mem_limit: 512m
@@ -131,7 +133,9 @@ services:
 
   # PGWatch Instance 2 - Monitoring service (Prometheus sink)
   pgwatch-prometheus:
-    image: cybertecpostgresql/pgwatch:3
+    image: ${PGAI_REGISTRY:-postgresai}/pgwatch:${PGAI_TAG:?PGAI_TAG is required}
+    build:
+      context: ./pgwatch
     container_name: pgwatch-prometheus
     cpus: 1.5
     mem_limit: 1024m
