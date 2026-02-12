@@ -102,6 +102,8 @@ services:
       - "-promscrape.config=/postgres_ai_configs/prometheus/prometheus.yml"
       - "-promscrape.config.strictParse=false"
       - "-promscrape.maxScrapeSize=128000000"
+      - "-search.maxQueryDuration=30s"
+      - "-search.maxConcurrentRequests=4"
     depends_on:
       config-init:
         condition: service_completed_successfully
