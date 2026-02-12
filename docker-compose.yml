@@ -200,7 +200,7 @@ services:
     image: ${PGAI_REGISTRY:-postgresai}/monitoring-flask-backend:${PGAI_TAG:?PGAI_TAG is required}
     container_name: flask-pgss-api
     cpus: 0.1
-    mem_limit: 192m
+    mem_limit: 384m
     environment:
       - FLASK_ENV=production
       - PROMETHEUS_URL=http://sink-prometheus:9090
