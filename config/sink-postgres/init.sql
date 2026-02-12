@@ -32,6 +32,11 @@ create table if not exists public.pgss_queryid_queries (
 -- Create indexes for efficient lookups
 create index if not exists pgss_queryid_queries_dbname_time_idx on public.pgss_queryid_queries (dbname, time);
 
+-- Index for dedup trigger: without this, the BEFORE INSERT trigger does a full
+-- sequential scan per row during COPY, making bulk inserts take 20+ minutes
+-- and causing duplicate rows to pile up across overlapping COPY batches.
+create index if not exists pgss_queryid_queries_queryid_idx on public.pgss_queryid_queries ((data->>'queryid'));
+
 -- Use existing subpartitions schema
 
 
@@ -89,6 +94,11 @@ create table if not exists public.index_definitions (
 
 -- Create indexes for efficient lookups
 create index if not exists index_definitions_dbname_time_idx on public.index_definitions (dbname, time);
+
+-- Index for dedup trigger: same pattern as pgss_queryid_queries
+create index if not exists index_definitions_dedup_idx on public.index_definitions (
+  dbname, (data->>'indexrelname'), (data->>'schemaname'), (data->>'relname')
+);
 
 -- Set ownership and grant permissions to pgwatch
 alter table public.index_definitions owner to pgwatch;
