@@ -15,6 +15,7 @@ scrape_configs:
     scrape_interval: 30s      # How often to scrape PGWatch
     scrape_timeout: 25s       # Timeout for each scrape (must be < scrape_interval)
     metrics_path: /pgwatch
+    sample_limit: 5000        # Safety net: reject scrapes with >5000 samples to prevent cardinality explosion
 
   # Self-monitoring: Victoria Metrics internal metrics
   - job_name: 'victoriametrics'
