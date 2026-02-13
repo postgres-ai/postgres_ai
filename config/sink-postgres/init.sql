@@ -55,28 +55,30 @@ declare
 begin
   -- Extract queryid from the data JSONB
   queryid_value := new.data->>'queryid';
-  
+
   -- Allow NULL queryids through
   if queryid_value is null then
     return new;
   end if;
-  
-  -- Silently skip if duplicate exists
-  if exists (
-    select
-    from pgss_queryid_queries
-    where
-      dbname = new.dbname
-      and data->>'queryid' = queryid_value
-    limit 1
-  ) then
-    return null;  -- Cancels INSERT silently
+
+  -- If duplicate exists, refresh its timestamp (marks queryid as still active
+  -- in pg_stat_statements) and skip the INSERT
+  update pgss_queryid_queries
+  set time = new.time
+  where dbname = new.dbname
+    and data->>'queryid' = queryid_value;
+
+  if found then
+    return null;  -- Duplicate updated, cancel INSERT
   end if;
-  
-  return new;
+
+  return new;  -- New queryid, proceed with INSERT
 end;
 $$ language plpgsql;
 
+
+-- Allow pgwatch to update this function (Flask app applies trigger migrations at startup)
+alter function enforce_queryid_uniqueness() owner to pgwatch;
 
 create or replace trigger enforce_queryid_uniqueness_trigger
   before insert

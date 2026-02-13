@@ -187,6 +187,68 @@ POSTGRES_SINK_URL = os.environ.get('POSTGRES_SINK_URL', 'postgresql://pgwatch@si
 # Prometheus connection - use environment variable with fallback
 PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', 'http://localhost:8428')
 
+# Retention: how long to keep stale queryid entries (queryids no longer in pg_stat_statements)
+QUERYID_RETENTION_HOURS = int(os.environ.get('QUERYID_RETENTION_HOURS', '24'))
+
+# How recent a queryid must be to appear in /query_info_metrics (must be > pgwatch collection interval)
+QUERYID_ACTIVE_MINUTES = int(os.environ.get('QUERYID_ACTIVE_MINUTES', '10'))
+
+
+def _apply_trigger_migration():
+    """
+    Apply trigger migration: update queryid timestamps on duplicate instead of
+    silently skipping. This lets us distinguish active queryids (recently seen in
+    pg_stat_statements) from stale ones, enabling time-based filtering and retention.
+
+    Safe to call multiple times (CREATE OR REPLACE FUNCTION is idempotent).
+    """
+    conn = None
+    try:
+        conn = psycopg2.connect(POSTGRES_SINK_URL)
+        conn.autocommit = True
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE OR REPLACE FUNCTION enforce_queryid_uniqueness()
+                RETURNS trigger AS $$
+                DECLARE
+                  queryid_value text;
+                BEGIN
+                  queryid_value := new.data->>'queryid';
+
+                  IF queryid_value IS NULL THEN
+                    RETURN new;
+                  END IF;
+
+                  -- If duplicate exists, refresh its timestamp (marks queryid as
+                  -- still active in pg_stat_statements) and skip the INSERT
+                  UPDATE pgss_queryid_queries
+                  SET time = new.time
+                  WHERE dbname = new.dbname
+                    AND data->>'queryid' = queryid_value;
+
+                  IF FOUND THEN
+                    RETURN NULL;
+                  END IF;
+
+                  RETURN new;
+                END;
+                $$ LANGUAGE plpgsql;
+            """)
+        logger.info("Applied trigger migration: enforce_queryid_uniqueness now refreshes timestamps")
+    except Exception as e:
+        logger.warning(
+            f"Failed to apply trigger migration: {e}. "
+            "If 'must be owner' error, run with postgres superuser: "
+            "ALTER FUNCTION enforce_queryid_uniqueness() OWNER TO pgwatch;"
+        )
+    finally:
+        if conn:
+            conn.close()
+
+
+# Apply trigger migration at startup (idempotent)
+_apply_trigger_migration()
+
 # Metric name mapping for cleaner CSV output
 METRIC_NAME_MAPPING = {
     'calls': 'calls',
@@ -230,17 +292,22 @@ def get_prometheus_client():
         raise
 
 
-def get_query_texts_from_sink(db_name: str = None, truncation_mode: str = 'smart') -> dict:
+def get_query_texts_from_sink(db_name: str = None, truncation_mode: str = 'smart',
+                              max_age_hours: int = None) -> dict:
     """
     Fetch queryid-to-query text mappings from the PostgreSQL sink database.
 
     Args:
         db_name: Optional database name to filter results
         truncation_mode: 'smart' for smart truncation, 'raw' for simple truncation
+        max_age_hours: Only return queryids seen within this many hours (None = use retention window)
 
     Returns:
         Dictionary mapping queryid to query text
     """
+    if max_age_hours is None:
+        max_age_hours = QUERYID_RETENTION_HOURS
+
     query_texts = {}
 
     conn = None
@@ -257,11 +324,12 @@ def get_query_texts_from_sink(db_name: str = None, truncation_mode: str = 'smart
                     FROM public.pgss_queryid_queries
                     WHERE
                         dbname = %s
+                        AND time > now() - interval '%s hours'
                         AND data->>'queryid' IS NOT NULL
                         AND data->>'query' IS NOT NULL
                     ORDER BY data->>'queryid', time DESC
                 """
-                cursor.execute(query, (db_name,))
+                cursor.execute(query, (db_name, max_age_hours))
             else:
                 query = """
                     SELECT DISTINCT ON (data->>'queryid')
@@ -269,11 +337,12 @@ def get_query_texts_from_sink(db_name: str = None, truncation_mode: str = 'smart
                         data->>'query' as query
                     FROM public.pgss_queryid_queries
                     WHERE
-                        data->>'queryid' IS NOT NULL
+                        time > now() - interval '%s hours'
+                        AND data->>'queryid' IS NOT NULL
                         AND data->>'query' IS NOT NULL
                     ORDER BY data->>'queryid', time DESC
                 """
-                cursor.execute(query)
+                cursor.execute(query, (max_age_hours,))
 
             for row in cursor:
                 queryid = row['queryid']
@@ -1284,7 +1353,28 @@ def get_query_info_metrics():
         try:
             conn = psycopg2.connect(POSTGRES_SINK_URL)
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                # Skip db_name filter if it's empty, "All", or contains special chars
+                # Retention cleanup: delete stale entries in batches to prevent
+                # unbounded table growth from high-churn queryid sources (e.g. PostgREST)
+                try:
+                    cursor.execute("""
+                        DELETE FROM public.pgss_queryid_queries
+                        WHERE ctid IN (
+                            SELECT ctid FROM public.pgss_queryid_queries
+                            WHERE time < now() - interval '%s hours'
+                            LIMIT 10000
+                        )
+                    """, (QUERYID_RETENTION_HOURS,))
+                    deleted = cursor.rowcount
+                    conn.commit()
+                    if deleted > 0:
+                        logger.info(f"Retention cleanup: deleted {deleted} stale queryid entries")
+                except Exception as e:
+                    logger.warning(f"Retention cleanup failed: {e}")
+                    conn.rollback()
+
+                # Only export queryids recently seen in pg_stat_statements.
+                # The dedup trigger refreshes the timestamp on each collection,
+                # so active queryids have time within the last few minutes.
                 use_db_filter = db_name and db_name.lower() not in ('all', '') and not db_name.startswith('$')
                 if use_db_filter:
                     query = """
@@ -1294,11 +1384,12 @@ def get_query_info_metrics():
                         FROM public.pgss_queryid_queries
                         WHERE
                             dbname = %s
+                            AND time > now() - interval '%s minutes'
                             AND data->>'queryid' IS NOT NULL
                             AND data->>'query' IS NOT NULL
                         ORDER BY data->>'queryid', time DESC
                     """
-                    cursor.execute(query, (db_name,))
+                    cursor.execute(query, (db_name, QUERYID_ACTIVE_MINUTES))
                 else:
                     query = """
                         SELECT DISTINCT ON (data->>'queryid')
@@ -1306,11 +1397,12 @@ def get_query_info_metrics():
                             data->>'query' as query
                         FROM public.pgss_queryid_queries
                         WHERE
-                            data->>'queryid' IS NOT NULL
+                            time > now() - interval '%s minutes'
+                            AND data->>'queryid' IS NOT NULL
                             AND data->>'query' IS NOT NULL
                         ORDER BY data->>'queryid', time DESC
                     """
-                    cursor.execute(query)
+                    cursor.execute(query, (QUERYID_ACTIVE_MINUTES,))
 
                 for row in cursor:
                     queryid = row['queryid']
@@ -1355,6 +1447,8 @@ def get_query_info_metrics():
                             'full': full,
                             'queryid_only': queryid_only,
                         }
+
+                logger.info(f"Exported {len(query_data)} active queryids for metrics")
         except Exception as e:
             logger.warning(f"Failed to fetch query texts from sink database: {e}")
         finally:

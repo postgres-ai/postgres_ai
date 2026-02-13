@@ -523,7 +523,7 @@ class TestQueryInfoMetricsEndpoint:
         response = client.get('/query_info_metrics?db_name=mydb')
         assert response.status_code == 200
 
-        # Verify the query was called with db_name filter
+        # Verify the main query (last execute call) was called with db_name filter
         call_args = mock_cursor.execute.call_args
         assert call_args is not None
         query = call_args[0][0]
@@ -538,7 +538,7 @@ class TestQueryInfoMetricsEndpoint:
         response = client.get('/query_info_metrics?db_name=all')
         assert response.status_code == 200
 
-        # Verify the query was called without db_name filter
+        # Verify the main query (last execute call) was called without db_name filter
         call_args = mock_cursor.execute.call_args
         query = call_args[0][0]
         assert 'dbname = %s' not in query
@@ -552,10 +552,41 @@ class TestQueryInfoMetricsEndpoint:
         response = client.get('/query_info_metrics?db_name=$db_name')
         assert response.status_code == 200
 
-        # Verify the query was called without db_name filter
+        # Verify the main query (last execute call) was called without db_name filter
         call_args = mock_cursor.execute.call_args
         query = call_args[0][0]
         assert 'dbname = %s' not in query
+
+    @patch('app.psycopg2.connect')
+    def test_time_filter_applied(self, mock_connect, client):
+        """Test that the time filter is applied to only export active queryids."""
+        mock_cursor = mock_connect.return_value.cursor.return_value.__enter__.return_value
+        mock_cursor.__iter__ = lambda self: iter([])
+
+        response = client.get('/query_info_metrics')
+        assert response.status_code == 200
+
+        # Verify the main query includes a time filter
+        call_args = mock_cursor.execute.call_args
+        query = call_args[0][0]
+        assert "interval" in query
+        assert "minutes" in query
+
+    @patch('app.psycopg2.connect')
+    def test_retention_cleanup_runs(self, mock_connect, client):
+        """Test that retention cleanup DELETE runs before the main query."""
+        mock_cursor = mock_connect.return_value.cursor.return_value.__enter__.return_value
+        mock_cursor.__iter__ = lambda self: iter([])
+        mock_cursor.rowcount = 0
+
+        response = client.get('/query_info_metrics')
+        assert response.status_code == 200
+
+        # Verify that execute was called at least twice (cleanup + main query)
+        assert mock_cursor.execute.call_count >= 2
+        # First call should be the retention DELETE
+        first_call_query = mock_cursor.execute.call_args_list[0][0][0]
+        assert 'DELETE' in first_call_query
 
     @patch('app.psycopg2.connect')
     def test_handles_db_connection_error(self, mock_connect, client):
