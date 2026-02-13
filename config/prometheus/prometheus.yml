@@ -50,3 +50,4 @@ scrape_configs:
     scrape_interval: 300s     # 5 minutes - query texts rarely change
     scrape_timeout: 30s
     metrics_path: /query_info_metrics
+    sample_limit: 500         # Safety net: reject if flask exports too many queryids

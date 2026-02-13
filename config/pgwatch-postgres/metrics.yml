@@ -12,6 +12,7 @@ metrics:
           queryid is not null
           and dbid = (select oid from pg_database where datname = current_database())
         order by total_exec_time desc
+        limit 100
     gauges:
       - '*' 
   
