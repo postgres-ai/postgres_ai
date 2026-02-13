@@ -2,8 +2,9 @@
 # Total allocation: ~5.1 vCPUs, ~7.6 GiB RAM (with headroom for host OS).
 # CPU overcommitment is intentional - containers rarely hit limits simultaneously.
 #
-# pgwatch-prometheus gets higher CPU (1.5) to handle pg_stat_statements load,
-# which was observed spiking to 150%+ under heavy query workloads.
+# pgwatch-prometheus gets higher CPU (1.5) to handle metric collection load.
+# Note: pg_stat_statements is NOT collected here (handled by flask-pgss-api
+# via the Postgres sink) to avoid cardinality explosion in VictoriaMetrics.
 
 services:
   # Config Initializer - Copies static configs from image to volume
@@ -139,8 +140,8 @@ services:
     build:
       context: ./pgwatch
     container_name: pgwatch-prometheus
-    cpus: 1.5
-    mem_limit: 1024m
+    cpus: 0.5
+    mem_limit: 512m
     command:
       [
         "--sources=/postgres_ai_configs/pgwatch-prometheus/sources.yml",

@@ -2532,7 +2532,8 @@ presets:
       pg_stat_all_tables: 30
       pg_class: 30
       pg_stat_all_indexes: 30
-      pg_stat_statements: 30
+      # pg_stat_statements removed: handled by flask-pgss-api via Postgres sink
+      # Collecting per-queryid metrics here caused 30K+ series cardinality explosion
       pg_stat_replication: 30
       pg_stat_slru: 30
       pg_statio_all_tables: 30
