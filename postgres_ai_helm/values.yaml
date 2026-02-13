@@ -44,7 +44,9 @@ victoriaMetrics:
   image: victoriametrics/victoria-metrics:v1.105.0
   retentionPeriod: 336h
   scrapeInterval: 15s
-  extraArgs: []
+  extraArgs:
+    - -search.maxQueryDuration=30s
+    - -search.maxConcurrentRequests=16
   service:
     type: ClusterIP
     port: 8428

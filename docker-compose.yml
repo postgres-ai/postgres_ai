@@ -3,7 +3,7 @@
 # CPU overcommitment is intentional - containers rarely hit limits simultaneously.
 #
 # pgwatch-prometheus collects metrics including pg_stat_statements
-# (filtered: calls >= 5 OR exec_time >= 1000ms to control cardinality).
+# (top 100 queries by exec_time, filtered: calls >= 5 OR exec_time >= 1000ms).
 
 services:
   # Config Initializer - Copies static configs from image to volume
@@ -103,7 +103,7 @@ services:
       - "-promscrape.config.strictParse=false"
       - "-promscrape.maxScrapeSize=128000000"
       - "-search.maxQueryDuration=30s"
-      - "-search.maxConcurrentRequests=4"
+      - "-search.maxConcurrentRequests=16"
     depends_on:
       config-init:
         condition: service_completed_successfully
