@@ -1014,8 +1014,6 @@ metrics:
             join pg_database on pg_database.oid = pg_stat_statements.dbid
             where pg_database.datname = current_database()
             group by pg_database.datname, pg_stat_statements.queryid
-            order by sum(pg_stat_statements.total_exec_time) desc
-            limit 50
         )
         select
           datname as tag_datname,
@@ -1063,8 +1061,6 @@ metrics:
             join pg_database on pg_database.oid = pg_stat_statements.dbid
             where pg_database.datname = current_database()
             group by pg_database.datname, pg_stat_statements.queryid
-            order by sum(pg_stat_statements.total_exec_time) desc
-            limit 50
         )
         select
           datname as tag_datname,

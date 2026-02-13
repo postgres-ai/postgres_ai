@@ -2,8 +2,8 @@
 # Total allocation: ~5.1 vCPUs, ~7.6 GiB RAM (with headroom for host OS).
 # CPU overcommitment is intentional - containers rarely hit limits simultaneously.
 #
-# pgwatch-prometheus collects metrics including pg_stat_statements (top 50 queries
-# by exec time to control cardinality in VictoriaMetrics).
+# pgwatch-prometheus collects metrics including pg_stat_statements
+# (filtered: calls >= 5 OR exec_time >= 1000ms to control cardinality).
 
 services:
   # Config Initializer - Copies static configs from image to volume
