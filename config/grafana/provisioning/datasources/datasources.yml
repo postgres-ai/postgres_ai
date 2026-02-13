@@ -23,7 +23,7 @@ datasources:
     isDefault: true
     jsonData:
       scrapeInterval: '5s'
-      queryTimeout: '5s'
+      queryTimeout: '60s'
       timeInterval: '5s'
       httpMethod: 'POST'
 
