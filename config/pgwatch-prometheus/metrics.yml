@@ -1037,7 +1037,6 @@ metrics:
           from aggregated_statements
           where calls >= 5 or exec_time_total >= 1000
           order by exec_time_total desc
-          limit 100
       17: |
         with aggregated_statements as ( /* pgwatch_generated */
           select
@@ -1086,7 +1085,6 @@ metrics:
           from aggregated_statements
           where calls >= 5 or exec_time_total >= 1000
           order by exec_time_total desc
-          limit 100
     gauges:
       - calls
       - plans_total
